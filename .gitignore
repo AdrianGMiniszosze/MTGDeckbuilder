@@ -18,3 +18,5 @@ buildNumber.properties
 
 infra/.env
 src/main/resources/application.properties
+
+Summary and improvement.txt
