@@ -1,0 +1,941 @@
+openapi: 3.0.3
+info:
+  title: MTG Deckbuilder API
+  version: 1.0.0
+servers:
+  - url: /api
+paths:
+  /sets:
+    get:
+      summary: List all sets
+      operationId: listSets
+      tags:
+        - Sets
+      parameters:
+        - name: pageSize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pageNumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of sets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Set'
+    post:
+      summary: Create a new set
+      operationId: createSet
+      tags:
+        - Sets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Set'
+      responses:
+        '201':
+          description: Set created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Set'
+  /sets/{id}:
+    get:
+      summary: Get a set by ID
+      operationId: getSetById
+      tags:
+        - Sets
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Set details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Set'
+    put:
+      summary: Update a set
+      operationId: updateSet
+      tags:
+        - Sets
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Set'
+      responses:
+        '200':
+          description: Set updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Set'
+    delete:
+      summary: Delete a set
+      operationId: deleteSet
+      tags:
+        - Sets
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: Set deleted
+
+  /cards:
+    get:
+      summary: List all cards
+      operationId: listCards
+      tags:
+        - Cards
+      parameters:
+        - name: pagesize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+    post:
+      summary: Create a new card
+      operationId: createCard
+      tags:
+        - Cards
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Card'
+      responses:
+        '201':
+          description: Card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+  /cards/{id}:
+    get:
+      summary: Get a card by ID
+      operationId: getCardById
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Card details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+    put:
+      summary: Update a card
+      operationId: updateCard
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Card'
+      responses:
+        '200':
+          description: Card updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+    delete:
+      summary: Delete a card
+      operationId: deleteCard
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: Card deleted
+
+  /users:
+    get:
+      summary: List all users
+      operationId: listUsers
+      tags:
+        - Users
+      parameters:
+        - name: pagesize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      summary: Create a new user
+      operationId: createUser
+      tags:
+        - Users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /users/{id}:
+    get:
+      summary: Get a user by ID
+      operationId: getUserById
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    put:
+      summary: Update a user
+      operationId: updateUser
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    delete:
+      summary: Delete a user
+      operationId: deleteUser
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: User deleted
+
+  /users/{id}/decks:
+    get:
+      summary: Get all decks for a user
+      operationId: getUserDecks
+      tags:
+        - Users
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: User ID
+        - name: pagesize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of decks for the user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deck'
+  /formats:
+    get:
+      summary: List all formats
+      operationId: listFormats
+      tags:
+        - Formats
+      parameters:
+        - name: pagesize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of formats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Format'
+    post:
+      summary: Create a new format
+      operationId: createFormat
+      tags:
+        - Formats
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Format'
+      responses:
+        '201':
+          description: Format created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Format'
+  /formats/{id}:
+    get:
+      summary: Get a format by ID
+      operationId: getFormatById
+      tags:
+        - Formats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Format details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Format'
+    put:
+      summary: Update a format
+      operationId: updateFormat
+      tags:
+        - Formats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Format'
+      responses:
+        '200':
+          description: Format updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Format'
+    delete:
+      summary: Delete a format
+      operationId: deleteFormat
+      tags:
+        - Formats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: Format deleted
+
+  /decks:
+    get:
+      summary: List all decks
+      operationId: listDecks
+      tags:
+        - Decks
+      parameters:
+        - name: pagesize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of decks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Deck'
+    post:
+      summary: Create a new deck
+      operationId: createDeck
+      tags:
+        - Decks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Deck'
+      responses:
+        '201':
+          description: Deck created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+  /decks/{id}:
+    get:
+      summary: Get a deck by ID
+      operationId: getDeckById
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Deck details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+    put:
+      summary: Update a deck
+      operationId: updateDeck
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Deck'
+      responses:
+        '200':
+          description: Deck updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+    delete:
+      summary: Delete a deck
+      operationId: deleteDeck
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: Deck deleted
+
+  /tags:
+    get:
+      summary: List all tags
+      operationId: listTags
+      tags:
+        - Tags
+      parameters:
+        - name: pagesize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of tags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+    post:
+      summary: Create a new tag
+      operationId: createTag
+      tags:
+        - Tags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tag'
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+  /tags/{id}:
+    get:
+      summary: Get a tag by ID
+      operationId: getTagById
+      tags:
+        - Tags
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Tag details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+    put:
+      summary: Update a tag
+      operationId: updateTag
+      tags:
+        - Tags
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Tag'
+      responses:
+        '200':
+          description: Tag updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+    delete:
+      summary: Delete a tag
+      operationId: deleteTag
+      tags:
+        - Tags
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: Tag deleted
+
+  /card_tag:
+    get:
+      summary: List all card tag entries
+      operationId: listCardTags
+      tags:
+        - CardTags
+      parameters:
+        - name: pagesize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of card tag entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardTag'
+    post:
+      summary: Create a new card tag entry
+      operationId: createCardTag
+      tags:
+        - CardTags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardTag'
+      responses:
+        '201':
+          description: Card tag entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardTag'
+
+  /cards/{id}/tags:
+    get:
+      summary: List all tags for a card
+      operationId: listTagsForCard
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+          description: Card ID
+        - name: pagesize
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of tags for the card
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CardTag'
+
+  /cards/{id}/tags/{tag_id}:
+    put:
+      summary: Update card tag entry
+      operationId: updateCardTag
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+          description: Card ID
+        - name: tag_id
+          in: path
+          required: true
+          schema: { type: integer }
+          description: Tag ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardTag'
+      responses:
+        '200':
+          description: Card tag entry updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardTag'
+    delete:
+      summary: Delete card tag entry
+      operationId: deleteCardTag
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+          description: Card ID
+        - name: tag_id
+          in: path
+          required: true
+          schema: { type: integer }
+          description: Tag ID
+      responses:
+        '204':
+          description: Card tag entry deleted
+
+  /formats/{id}/cards:
+    get:
+      summary: List all cards for a format
+      operationId: listCardsForFormat
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: Format ID
+        - name: pagesize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Page number to retrieve
+      responses:
+        '200':
+          description: List of cards for the format
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+
+components:
+  schemas:
+    Set:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+    Keyword:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+    Card:
+      type: object
+      properties:
+        id: { type: integer }
+        card_name: { type: string }
+        mana_cost: { type: string }
+        cmc: { type: integer }
+        color_identity: { type: string }
+        type_line: { type: string, description: "Full original type line (e.g., 'Legendary Creature — Goblin Wizard')" }
+        card_type: { type: string, description: "Parsed card type (e.g., 'Creature', 'Instant')" }
+        card_subtype: { type: string, description: "Parsed subtypes as string (e.g., 'Goblin Wizard')" }
+        card_supertype: { type: string, description: "Parsed supertype (e.g., 'Legendary', 'Basic')" }
+        rarity: { type: string }
+        card_text: { type: string }
+        flavor_text: { type: string }
+        power: { type: string }
+        toughness: { type: string }
+        unlimited_copies: { type: boolean }
+        image_url: { type: string }
+        foil: { type: boolean }
+        game_changer: { type: boolean }
+        related_card: { type: integer }
+        language: { type: string }
+        embedding: { type: array, items: { type: number } }
+        archetype: { type: string }
+        card_set: { type: integer }
+        collector_number: { type: string, description: "Card's collector number in the set (e.g., '001', '264★')" }
+        promo: { type: boolean, description: "Indicates if this is a promotional version of the card" }
+        variation: { type: boolean, description: "Indicates if this is an alternate art or variant version" }
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        username: { type: string }
+        registration_date: { type: string, format: date-time }
+        hashed_password: { type: string }
+        email: { type: string }
+        country: { type: string }
+    Format:
+      type: object
+      properties:
+        id: { type: integer }
+        format_name: { type: string }
+        deck_size: { type: integer }
+    Deck:
+      type: object
+      properties:
+        id:
+          type: integer
+        deck_name:
+          type: string
+        creation_date:
+          type: string
+          format: date-time
+        last_modification:
+          type: string
+          format: date-time
+        deck_type:
+          type: string
+        description:
+          type: string
+        is_private:
+          type: boolean
+        tournament:
+          type: string
+        share_url:
+          type: string
+        parent_deck_id:
+          type: integer
+        format:
+          type: integer
+        user_id:
+          type: integer
+        deck_contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardDeck'
+    Tag:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+    CardLegality:
+      type: object
+      properties:
+        card_id: { type: integer }
+        format_id: { type: integer }
+        legality_status: { type: string }
+    CardDeck:
+      type: object
+      properties:
+        card_id:
+          type: integer
+        deck_id:
+          type: integer
+        quantity:
+          type: integer
+    CardTag:
+      type: object
+      properties:
+        card_id: { type: integer }
+        tag_id: { type: integer }
+        weight: { type: number }
+        confidence: { type: number }
+        source: { type: string }
+        model_version: { type: string }
+        created_at: { type: string, format: date-time }
+    CardKeyword:
+      type: object
+      properties:
+        card_id: { type: integer }
+        keyword_id: { type: integer }
+tags:
+  - name: Sets
+    description: "Operations related to Magic: The Gathering card sets"
+  - name: Cards
+    description: "Operations related to Magic: The Gathering cards"
+  - name: Users
+    description: "Operations related to users"
+  - name: Formats
+    description: "Operations related to game formats"
+  - name: Decks
+    description: "Operations related to decks"
+  - name: Tags
+    description: "Operations related to tags"
+  - name: CardTags
+    description: "Operations related to card-tag relationships"

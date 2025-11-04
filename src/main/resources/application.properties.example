@@ -1,0 +1,5 @@
+spring.application.name=Mtgdeckbuilder
+spring.datasource.url=jdbc:postgresql://db:5432/mtg_db
+spring.datasource.username=your_username
+spring.datasource.password=your_password
+spring.jpa.hibernate.ddl-auto=create-drop

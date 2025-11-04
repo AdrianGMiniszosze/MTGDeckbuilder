@@ -1,0 +1,32 @@
+services:
+  db:
+    image: ankane/pgvector
+    container_name: mtgdeckbuilder_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - ../src/main/resources/scripts/01-create-schema.sql:/docker-entrypoint-initdb.d/01-create-schema.sql
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build:
+      context: ../
+      dockerfile: infra/Dockerfile
+    container_name: mtgdeckbuilder_app
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+
+volumes:
+  postgres_data:
