@@ -81,6 +81,25 @@ Automatically manages stale issues and pull requests:
 - Closes stale issues/PRs after 14 additional days
 - Exempts items labeled with: `pinned`, `security`, or `enhancement`
 
+### 6. Release Management (`release.yml`)
+
+**Triggers:**
+- Tags matching `v*.*.*` pattern (e.g., `v1.0.0`, `v2.1.3`)
+
+**Purpose:**
+Automates the release process when a new version tag is pushed:
+- Builds the application
+- Creates GitHub release with generated notes
+- Attaches JAR artifacts to the release
+- Marks pre-releases (alpha, beta, rc) appropriately
+- References the corresponding Docker image
+
+**Creating a Release:**
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
 ## Dependabot Configuration
 
 The repository uses Dependabot to automatically create pull requests for dependency updates:
