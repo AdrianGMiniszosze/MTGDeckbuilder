@@ -1,0 +1,74 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build release artifacts
+        run: mvn -B clean package -DskipTests
+
+      - name: Extract release notes
+        id: extract_notes
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          
+          # Create release notes
+          cat > release_notes.md << 'EOF'
+          ## What's Changed
+          
+          This release includes:
+          - Bug fixes and improvements
+          - Updated dependencies
+          
+          For a full list of changes, see the [commit history](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }})
+          
+          ## Installation
+          
+          ### Docker
+          ```bash
+          docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+          ```
+          
+          ### JAR
+          Download the JAR file from the assets below and run:
+          ```bash
+          java -jar Mtgdeckbuilder-${{ github.ref_name }}.jar
+          ```
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          files: |
+            target/*.jar
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+
+      - name: Upload release info
+        run: |
+          echo "Release ${{ steps.extract_notes.outputs.version }} created successfully!"
+          echo "Docker image: ghcr.io/${{ github.repository }}:${{ github.ref_name }}"
