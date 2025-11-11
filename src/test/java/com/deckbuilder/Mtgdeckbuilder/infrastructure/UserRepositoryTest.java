@@ -1,6 +1,6 @@
-package com.deckbuilder.Mtgdeckbuilder.infrastructure;
+package com.deckbuilder.mtgdeckbuilder.infrastructure;
 
-import com.deckbuilder.Mtgdeckbuilder.infrastructure.model.UserEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,214 +25,214 @@ import static org.mockito.Mockito.when;
 @DisplayName("User Repository Tests")
 class UserRepositoryTest {
 
-    @Mock
-    private UserRepository userRepository;
+	@Mock
+	private UserRepository userRepository;
 
-    private UserEntity testUserEntity;
+	private UserEntity testUserEntity;
 
-    @BeforeEach
-    void setUp() {
-        testUserEntity = new UserEntity();
-        testUserEntity.setId(1L);
-        testUserEntity.setName("John Doe");
-        testUserEntity.setUsername("johndoe");
-        testUserEntity.setEmail("john@example.com");
-        testUserEntity.setHashedPassword("hashedPassword123");
-        testUserEntity.setCountry("USA");
-        testUserEntity.setRegistrationDate(LocalDateTime.now());
-    }
+	@BeforeEach
+	void setUp() {
+        this.testUserEntity = new UserEntity();
+        this.testUserEntity.setId(1L);
+        this.testUserEntity.setName("John Doe");
+        this.testUserEntity.setUsername("johndoe");
+        this.testUserEntity.setEmail("john@example.com");
+        this.testUserEntity.setHashedPassword("hashedPassword123");
+        this.testUserEntity.setCountry("USA");
+        this.testUserEntity.setRegistrationDate(LocalDateTime.now());
+	}
 
-    @Test
-    @DisplayName("Should find user by ID when it exists")
-    void shouldFindUserById_WhenExists() {
-        // Given
-        when(userRepository.findById(1L)).thenReturn(Optional.of(testUserEntity));
+	@Test
+	@DisplayName("Should find user by ID when it exists")
+	void shouldFindUserById_WhenExists() {
+		// Given
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
 
-        // When
-        Optional<UserEntity> result = userRepository.findById(1L);
+		// When
+		final Optional<UserEntity> result = this.userRepository.findById(1L);
 
-        // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isEqualTo(1L);
-        assertThat(result.get().getUsername()).isEqualTo("johndoe");
-        assertThat(result.get().getEmail()).isEqualTo("john@example.com");
-        verify(userRepository).findById(1L);
-    }
+		// Then
+		assertThat(result).isPresent();
+		assertThat(result.get().getId()).isEqualTo(1L);
+		assertThat(result.get().getUsername()).isEqualTo("johndoe");
+		assertThat(result.get().getEmail()).isEqualTo("john@example.com");
+		verify(this.userRepository).findById(1L);
+	}
 
-    @Test
-    @DisplayName("Should return empty when user ID does not exist")
-    void shouldReturnEmpty_WhenUserNotFound() {
-        // Given
-        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+	@Test
+	@DisplayName("Should return empty when user ID does not exist")
+	void shouldReturnEmpty_WhenUserNotFound() {
+		// Given
+		when(this.userRepository.findById(999L)).thenReturn(Optional.empty());
 
-        // When
-        Optional<UserEntity> result = userRepository.findById(999L);
+		// When
+		final Optional<UserEntity> result = this.userRepository.findById(999L);
 
-        // Then
-        assertThat(result).isEmpty();
-        verify(userRepository).findById(999L);
-    }
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.userRepository).findById(999L);
+	}
 
-    @Test
-    @DisplayName("Should find user by username when it exists")
-    void shouldFindUserByUsername_WhenExists() {
-        // Given
-        when(userRepository.findByUsername("johndoe")).thenReturn(Optional.of(testUserEntity));
+	@Test
+	@DisplayName("Should find user by username when it exists")
+	void shouldFindUserByUsername_WhenExists() {
+		// Given
+		when(this.userRepository.findByUsername("johndoe")).thenReturn(Optional.of(this.testUserEntity));
 
-        // When
-        Optional<UserEntity> result = userRepository.findByUsername("johndoe");
+		// When
+		final Optional<UserEntity> result = this.userRepository.findByUsername("johndoe");
 
-        // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getUsername()).isEqualTo("johndoe");
-        verify(userRepository).findByUsername("johndoe");
-    }
+		// Then
+		assertThat(result).isPresent();
+		assertThat(result.get().getUsername()).isEqualTo("johndoe");
+		verify(this.userRepository).findByUsername("johndoe");
+	}
 
-    @Test
-    @DisplayName("Should return empty when username does not exist")
-    void shouldReturnEmpty_WhenUsernameNotFound() {
-        // Given
-        when(userRepository.findByUsername("nonexistent")).thenReturn(Optional.empty());
+	@Test
+	@DisplayName("Should return empty when username does not exist")
+	void shouldReturnEmpty_WhenUsernameNotFound() {
+		// Given
+		when(this.userRepository.findByUsername("nonexistent")).thenReturn(Optional.empty());
 
-        // When
-        Optional<UserEntity> result = userRepository.findByUsername("nonexistent");
+		// When
+		final Optional<UserEntity> result = this.userRepository.findByUsername("nonexistent");
 
-        // Then
-        assertThat(result).isEmpty();
-        verify(userRepository).findByUsername("nonexistent");
-    }
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.userRepository).findByUsername("nonexistent");
+	}
 
-    @Test
-    @DisplayName("Should find user by email when it exists")
-    void shouldFindUserByEmail_WhenExists() {
-        // Given
-        when(userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(testUserEntity));
+	@Test
+	@DisplayName("Should find user by email when it exists")
+	void shouldFindUserByEmail_WhenExists() {
+		// Given
+		when(this.userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(this.testUserEntity));
 
-        // When
-        Optional<UserEntity> result = userRepository.findByEmail("john@example.com");
+		// When
+		final Optional<UserEntity> result = this.userRepository.findByEmail("john@example.com");
 
-        // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getEmail()).isEqualTo("john@example.com");
-        verify(userRepository).findByEmail("john@example.com");
-    }
+		// Then
+		assertThat(result).isPresent();
+		assertThat(result.get().getEmail()).isEqualTo("john@example.com");
+		verify(this.userRepository).findByEmail("john@example.com");
+	}
 
-    @Test
-    @DisplayName("Should return empty when email does not exist")
-    void shouldReturnEmpty_WhenEmailNotFound() {
-        // Given
-        when(userRepository.findByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
+	@Test
+	@DisplayName("Should return empty when email does not exist")
+	void shouldReturnEmpty_WhenEmailNotFound() {
+		// Given
+		when(this.userRepository.findByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
 
-        // When
-        Optional<UserEntity> result = userRepository.findByEmail("nonexistent@example.com");
+		// When
+		final Optional<UserEntity> result = this.userRepository.findByEmail("nonexistent@example.com");
 
-        // Then
-        assertThat(result).isEmpty();
-        verify(userRepository).findByEmail("nonexistent@example.com");
-    }
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.userRepository).findByEmail("nonexistent@example.com");
+	}
 
-    @Test
-    @DisplayName("Should check if user exists by username")
-    void shouldCheckIfUserExistsByUsername() {
-        // Given
-        when(userRepository.existsByUsername("johndoe")).thenReturn(true);
-        when(userRepository.existsByUsername("nonexistent")).thenReturn(false);
+	@Test
+	@DisplayName("Should check if user exists by username")
+	void shouldCheckIfUserExistsByUsername() {
+		// Given
+		when(this.userRepository.existsByUsername("johndoe")).thenReturn(true);
+		when(this.userRepository.existsByUsername("nonexistent")).thenReturn(false);
 
-        // When
-        boolean exists = userRepository.existsByUsername("johndoe");
-        boolean notExists = userRepository.existsByUsername("nonexistent");
+		// When
+		final boolean exists = this.userRepository.existsByUsername("johndoe");
+		final boolean notExists = this.userRepository.existsByUsername("nonexistent");
 
-        // Then
-        assertThat(exists).isTrue();
-        assertThat(notExists).isFalse();
-        verify(userRepository).existsByUsername("johndoe");
-        verify(userRepository).existsByUsername("nonexistent");
-    }
+		// Then
+		assertThat(exists).isTrue();
+		assertThat(notExists).isFalse();
+		verify(this.userRepository).existsByUsername("johndoe");
+		verify(this.userRepository).existsByUsername("nonexistent");
+	}
 
-    @Test
-    @DisplayName("Should check if user exists by email")
-    void shouldCheckIfUserExistsByEmail() {
-        // Given
-        when(userRepository.existsByEmail("john@example.com")).thenReturn(true);
-        when(userRepository.existsByEmail("nonexistent@example.com")).thenReturn(false);
+	@Test
+	@DisplayName("Should check if user exists by email")
+	void shouldCheckIfUserExistsByEmail() {
+		// Given
+		when(this.userRepository.existsByEmail("john@example.com")).thenReturn(true);
+		when(this.userRepository.existsByEmail("nonexistent@example.com")).thenReturn(false);
 
-        // When
-        boolean exists = userRepository.existsByEmail("john@example.com");
-        boolean notExists = userRepository.existsByEmail("nonexistent@example.com");
+		// When
+		final boolean exists = this.userRepository.existsByEmail("john@example.com");
+		final boolean notExists = this.userRepository.existsByEmail("nonexistent@example.com");
 
-        // Then
-        assertThat(exists).isTrue();
-        assertThat(notExists).isFalse();
-        verify(userRepository).existsByEmail("john@example.com");
-        verify(userRepository).existsByEmail("nonexistent@example.com");
-    }
+		// Then
+		assertThat(exists).isTrue();
+		assertThat(notExists).isFalse();
+		verify(this.userRepository).existsByEmail("john@example.com");
+		verify(this.userRepository).existsByEmail("nonexistent@example.com");
+	}
 
-    @Test
-    @DisplayName("Should find all users with pagination")
-    void shouldFindAllUsersWithPagination() {
-        // Given
-        UserEntity user2 = new UserEntity();
-        user2.setId(2L);
-        user2.setUsername("janedoe");
+	@Test
+	@DisplayName("Should find all users with pagination")
+	void shouldFindAllUsersWithPagination() {
+		// Given
+		final UserEntity user2 = new UserEntity();
+		user2.setId(2L);
+		user2.setUsername("janedoe");
 
-        Pageable pageable = PageRequest.of(0, 10);
-        Page<UserEntity> page = new PageImpl<>(Arrays.asList(testUserEntity, user2));
-        when(userRepository.findAll(pageable)).thenReturn(page);
+		final Pageable pageable = PageRequest.of(0, 10);
+		final Page<UserEntity> page = new PageImpl<>(Arrays.asList(this.testUserEntity, user2));
+		when(this.userRepository.findAll(pageable)).thenReturn(page);
 
-        // When
-        Page<UserEntity> result = userRepository.findAll(pageable);
+		// When
+		final Page<UserEntity> result = this.userRepository.findAll(pageable);
 
-        // Then
-        assertThat(result.getContent()).hasSize(2);
-        assertThat(result.getContent().get(0).getUsername()).isEqualTo("johndoe");
-        assertThat(result.getContent().get(1).getUsername()).isEqualTo("janedoe");
-        verify(userRepository).findAll(pageable);
-    }
+		// Then
+		assertThat(result.getContent()).hasSize(2);
+		assertThat(result.getContent().get(0).getUsername()).isEqualTo("johndoe");
+		assertThat(result.getContent().get(1).getUsername()).isEqualTo("janedoe");
+		verify(this.userRepository).findAll(pageable);
+	}
 
-    @Test
-    @DisplayName("Should save user entity")
-    void shouldSaveUser() {
-        // Given
-        when(userRepository.save(any(UserEntity.class))).thenReturn(testUserEntity);
+	@Test
+	@DisplayName("Should save user entity")
+	void shouldSaveUser() {
+		// Given
+		when(this.userRepository.save(any(UserEntity.class))).thenReturn(this.testUserEntity);
 
-        // When
-        UserEntity result = userRepository.save(testUserEntity);
+		// When
+		final UserEntity result = this.userRepository.save(this.testUserEntity);
 
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getId()).isEqualTo(1L);
-        assertThat(result.getUsername()).isEqualTo("johndoe");
-        verify(userRepository).save(testUserEntity);
-    }
+		// Then
+		assertThat(result).isNotNull();
+		assertThat(result.getId()).isEqualTo(1L);
+		assertThat(result.getUsername()).isEqualTo("johndoe");
+		verify(this.userRepository).save(this.testUserEntity);
+	}
 
-    @Test
-    @DisplayName("Should delete user by ID")
-    void shouldDeleteUserById() {
-        // Given
-        Long userId = 1L;
+	@Test
+	@DisplayName("Should delete user by ID")
+	void shouldDeleteUserById() {
+		// Given
+		final Long userId = 1L;
 
-        // When
-        userRepository.deleteById(userId);
+		// When
+        this.userRepository.deleteById(userId);
 
-        // Then
-        verify(userRepository).deleteById(userId);
-    }
+		// Then
+		verify(this.userRepository).deleteById(userId);
+	}
 
-    @Test
-    @DisplayName("Should check if user exists by ID")
-    void shouldCheckIfUserExists() {
-        // Given
-        when(userRepository.existsById(1L)).thenReturn(true);
-        when(userRepository.existsById(999L)).thenReturn(false);
+	@Test
+	@DisplayName("Should check if user exists by ID")
+	void shouldCheckIfUserExists() {
+		// Given
+		when(this.userRepository.existsById(1L)).thenReturn(true);
+		when(this.userRepository.existsById(999L)).thenReturn(false);
 
-        // When
-        boolean exists = userRepository.existsById(1L);
-        boolean notExists = userRepository.existsById(999L);
+		// When
+		final boolean exists = this.userRepository.existsById(1L);
+		final boolean notExists = this.userRepository.existsById(999L);
 
-        // Then
-        assertThat(exists).isTrue();
-        assertThat(notExists).isFalse();
-        verify(userRepository).existsById(1L);
-        verify(userRepository).existsById(999L);
-    }
+		// Then
+		assertThat(exists).isTrue();
+		assertThat(notExists).isFalse();
+		verify(this.userRepository).existsById(1L);
+		verify(this.userRepository).existsById(999L);
+	}
 }

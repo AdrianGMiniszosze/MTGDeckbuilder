@@ -1,6 +1,6 @@
-package com.deckbuilder.Mtgdeckbuilder.infrastructure;
+package com.deckbuilder.mtgdeckbuilder.infrastructure;
 
-import com.deckbuilder.Mtgdeckbuilder.infrastructure.model.TagEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.TagEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,143 +24,143 @@ import static org.mockito.Mockito.when;
 @DisplayName("Tag Repository Tests")
 class TagRepositoryTest {
 
-    @Mock
-    private TagRepository tagRepository;
+	@Mock
+	private TagRepository tagRepository;
 
-    private TagEntity testTagEntity;
+	private TagEntity testTagEntity;
 
-    @BeforeEach
-    void setUp() {
-        testTagEntity = new TagEntity();
-        testTagEntity.setId(1L);
-        testTagEntity.setName("Creature");
-    }
+	@BeforeEach
+	void setUp() {
+        this.testTagEntity = new TagEntity();
+        this.testTagEntity.setId(1L);
+        this.testTagEntity.setName("Creature");
+	}
 
-    @Test
-    @DisplayName("Should find tag by ID when it exists")
-    void shouldFindTagById_WhenExists() {
-        // Given
-        when(tagRepository.findById(1L)).thenReturn(Optional.of(testTagEntity));
+	@Test
+	@DisplayName("Should find tag by ID when it exists")
+	void shouldFindTagById_WhenExists() {
+		// Given
+		when(this.tagRepository.findById(1L)).thenReturn(Optional.of(this.testTagEntity));
 
-        // When
-        Optional<TagEntity> result = tagRepository.findById(1L);
+		// When
+		final Optional<TagEntity> result = this.tagRepository.findById(1L);
 
-        // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getId()).isEqualTo(1L);
-        assertThat(result.get().getName()).isEqualTo("Creature");
-        verify(tagRepository).findById(1L);
-    }
+		// Then
+		assertThat(result).isPresent();
+		assertThat(result.get().getId()).isEqualTo(1L);
+		assertThat(result.get().getName()).isEqualTo("Creature");
+		verify(this.tagRepository).findById(1L);
+	}
 
-    @Test
-    @DisplayName("Should return empty when tag ID does not exist")
-    void shouldReturnEmpty_WhenTagNotFound() {
-        // Given
-        when(tagRepository.findById(999L)).thenReturn(Optional.empty());
+	@Test
+	@DisplayName("Should return empty when tag ID does not exist")
+	void shouldReturnEmpty_WhenTagNotFound() {
+		// Given
+		when(this.tagRepository.findById(999L)).thenReturn(Optional.empty());
 
-        // When
-        Optional<TagEntity> result = tagRepository.findById(999L);
+		// When
+		final Optional<TagEntity> result = this.tagRepository.findById(999L);
 
-        // Then
-        assertThat(result).isEmpty();
-        verify(tagRepository).findById(999L);
-    }
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.tagRepository).findById(999L);
+	}
 
-    @Test
-    @DisplayName("Should find tag by name when it exists")
-    void shouldFindTagByName_WhenExists() {
-        // Given
-        when(tagRepository.findByName("Creature")).thenReturn(Optional.of(testTagEntity));
+	@Test
+	@DisplayName("Should find tag by name when it exists")
+	void shouldFindTagByName_WhenExists() {
+		// Given
+		when(this.tagRepository.findByName("Creature")).thenReturn(Optional.of(this.testTagEntity));
 
-        // When
-        Optional<TagEntity> result = tagRepository.findByName("Creature");
+		// When
+		final Optional<TagEntity> result = this.tagRepository.findByName("Creature");
 
-        // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getName()).isEqualTo("Creature");
-        verify(tagRepository).findByName("Creature");
-    }
+		// Then
+		assertThat(result).isPresent();
+		assertThat(result.get().getName()).isEqualTo("Creature");
+		verify(this.tagRepository).findByName("Creature");
+	}
 
-    @Test
-    @DisplayName("Should return empty when tag name does not exist")
-    void shouldReturnEmpty_WhenTagNameNotFound() {
-        // Given
-        when(tagRepository.findByName("NonExistent")).thenReturn(Optional.empty());
+	@Test
+	@DisplayName("Should return empty when tag name does not exist")
+	void shouldReturnEmpty_WhenTagNameNotFound() {
+		// Given
+		when(this.tagRepository.findByName("NonExistent")).thenReturn(Optional.empty());
 
-        // When
-        Optional<TagEntity> result = tagRepository.findByName("NonExistent");
+		// When
+		final Optional<TagEntity> result = this.tagRepository.findByName("NonExistent");
 
-        // Then
-        assertThat(result).isEmpty();
-        verify(tagRepository).findByName("NonExistent");
-    }
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.tagRepository).findByName("NonExistent");
+	}
 
-    @Test
-    @DisplayName("Should find all tags with pagination")
-    void shouldFindAllTagsWithPagination() {
-        // Given
-        TagEntity tag2 = new TagEntity();
-        tag2.setId(2L);
-        tag2.setName("Instant");
+	@Test
+	@DisplayName("Should find all tags with pagination")
+	void shouldFindAllTagsWithPagination() {
+		// Given
+		final TagEntity tag2 = new TagEntity();
+		tag2.setId(2L);
+		tag2.setName("Instant");
 
-        Pageable pageable = PageRequest.of(0, 10);
-        Page<TagEntity> page = new PageImpl<>(Arrays.asList(testTagEntity, tag2));
-        when(tagRepository.findAll(pageable)).thenReturn(page);
+		final Pageable pageable = PageRequest.of(0, 10);
+		final Page<TagEntity> page = new PageImpl<>(Arrays.asList(this.testTagEntity, tag2));
+		when(this.tagRepository.findAll(pageable)).thenReturn(page);
 
-        // When
-        Page<TagEntity> result = tagRepository.findAll(pageable);
+		// When
+		final Page<TagEntity> result = this.tagRepository.findAll(pageable);
 
-        // Then
-        assertThat(result.getContent()).hasSize(2);
-        assertThat(result.getContent().get(0).getName()).isEqualTo("Creature");
-        assertThat(result.getContent().get(1).getName()).isEqualTo("Instant");
-        verify(tagRepository).findAll(pageable);
-    }
+		// Then
+		assertThat(result.getContent()).hasSize(2);
+		assertThat(result.getContent().get(0).getName()).isEqualTo("Creature");
+		assertThat(result.getContent().get(1).getName()).isEqualTo("Instant");
+		verify(this.tagRepository).findAll(pageable);
+	}
 
-    @Test
-    @DisplayName("Should save tag entity")
-    void shouldSaveTag() {
-        // Given
-        when(tagRepository.save(any(TagEntity.class))).thenReturn(testTagEntity);
+	@Test
+	@DisplayName("Should save tag entity")
+	void shouldSaveTag() {
+		// Given
+		when(this.tagRepository.save(any(TagEntity.class))).thenReturn(this.testTagEntity);
 
-        // When
-        TagEntity result = tagRepository.save(testTagEntity);
+		// When
+		final TagEntity result = this.tagRepository.save(this.testTagEntity);
 
-        // Then
-        assertThat(result).isNotNull();
-        assertThat(result.getId()).isEqualTo(1L);
-        assertThat(result.getName()).isEqualTo("Creature");
-        verify(tagRepository).save(testTagEntity);
-    }
+		// Then
+		assertThat(result).isNotNull();
+		assertThat(result.getId()).isEqualTo(1L);
+		assertThat(result.getName()).isEqualTo("Creature");
+		verify(this.tagRepository).save(this.testTagEntity);
+	}
 
-    @Test
-    @DisplayName("Should delete tag by ID")
-    void shouldDeleteTagById() {
-        // Given
-        Long tagId = 1L;
+	@Test
+	@DisplayName("Should delete tag by ID")
+	void shouldDeleteTagById() {
+		// Given
+		final Long tagId = 1L;
 
-        // When
-        tagRepository.deleteById(tagId);
+		// When
+        this.tagRepository.deleteById(tagId);
 
-        // Then
-        verify(tagRepository).deleteById(tagId);
-    }
+		// Then
+		verify(this.tagRepository).deleteById(tagId);
+	}
 
-    @Test
-    @DisplayName("Should check if tag exists by ID")
-    void shouldCheckIfTagExists() {
-        // Given
-        when(tagRepository.existsById(1L)).thenReturn(true);
-        when(tagRepository.existsById(999L)).thenReturn(false);
+	@Test
+	@DisplayName("Should check if tag exists by ID")
+	void shouldCheckIfTagExists() {
+		// Given
+		when(this.tagRepository.existsById(1L)).thenReturn(true);
+		when(this.tagRepository.existsById(999L)).thenReturn(false);
 
-        // When
-        boolean exists = tagRepository.existsById(1L);
-        boolean notExists = tagRepository.existsById(999L);
+		// When
+		final boolean exists = this.tagRepository.existsById(1L);
+		final boolean notExists = this.tagRepository.existsById(999L);
 
-        // Then
-        assertThat(exists).isTrue();
-        assertThat(notExists).isFalse();
-        verify(tagRepository).existsById(1L);
-        verify(tagRepository).existsById(999L);
-    }
+		// Then
+		assertThat(exists).isTrue();
+		assertThat(notExists).isFalse();
+		verify(this.tagRepository).existsById(1L);
+		verify(this.tagRepository).existsById(999L);
+	}
 }

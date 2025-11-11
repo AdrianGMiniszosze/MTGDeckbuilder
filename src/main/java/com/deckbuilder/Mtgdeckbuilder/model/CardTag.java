@@ -1,4 +1,4 @@
-package com.deckbuilder.Mtgdeckbuilder.model;
+package com.deckbuilder.mtgdeckbuilder.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -12,11 +12,11 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CardTag {
-    private Long cardId;
-    private Long tagId;
-    private Double weight;
-    private Double confidence;
-    private String source;
-    private String modelVersion;
-    private LocalDateTime createdAt;
+	private Long cardId;
+	private Long tagId;
+	private Double weight;
+	private Double confidence;
+	private String source;
+	private String modelVersion;
+	private LocalDateTime createdAt;
 }

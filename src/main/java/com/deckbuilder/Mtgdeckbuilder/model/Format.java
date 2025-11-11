@@ -1,9 +1,10 @@
-package com.deckbuilder.Mtgdeckbuilder.model;
+package com.deckbuilder.mtgdeckbuilder.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.util.List;
 
 @Data
@@ -11,12 +12,12 @@ import java.util.List;
 @AllArgsConstructor
 @Builder(toBuilder = true)
 public class Format {
-    private Long id;
-    private String name;
-    private String description;
-    private Integer minDeckSize;
-    private Integer maxDeckSize;
-    private Integer maxSideboardSize;
-    private List<String> bannedCards;
-    private List<String> restrictedCards;
+	private Long id;
+	private String name;
+	private String description;
+	private Integer minDeckSize;
+	private Integer maxDeckSize;
+	private Integer maxSideboardSize;
+	private List<String> bannedCards;
+	private List<String> restrictedCards;
 }
