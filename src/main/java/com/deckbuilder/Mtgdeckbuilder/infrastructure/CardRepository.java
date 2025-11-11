@@ -33,4 +33,5 @@ public interface CardRepository extends JpaRepository<CardEntity, Long> {
 
 	List<CardEntity> findByNameAndCardSet(String name, Long cardSet);
 
+	List<CardEntity> findSimilarByEmbedding(String string, int maxResults);
 }

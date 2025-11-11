@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -42,11 +44,11 @@ class DeckControllerTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
+		this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
 				.deckType("main").isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
 
-        this.testDeckDTO = DeckDTO.builder().id(1).deck_name("Test Deck").description("A test deck").user_id(1).format(1)
-				.deck_type("main").is_private(false).creation_date(LocalDateTime.now())
+		this.testDeckDTO = DeckDTO.builder().id(1).deck_name("Test Deck").description("A test deck").user_id(1)
+				.format(1).deck_type(DeckDTO.Deck_type.MAIN).is_private(false).creation_date(LocalDateTime.now())
 				.last_modification(LocalDateTime.now()).build();
 	}
 
@@ -55,7 +57,8 @@ class DeckControllerTest {
 	void shouldListAllDecks_WithDefaultPagination() {
 		// Given
 		final Deck deck2 = this.testDeck.toBuilder().id(2L).name("Deck 2").build();
-		final DeckDTO deckDTO2 = DeckDTO.builder().id(2).deck_name("Deck 2").user_id(1).format(1).build();
+		final DeckDTO deckDTO2 = DeckDTO.builder().id(2).deck_name("Deck 2").user_id(1).format(1)
+				.deck_type(DeckDTO.Deck_type.MAIN).build();
 
 		when(this.deckService.getAll(10, 0)).thenReturn(Arrays.asList(this.testDeck, deck2));
 		when(this.deckMapper.toDecksDTO(anyList())).thenReturn(Arrays.asList(this.testDeckDTO, deckDTO2));
@@ -105,17 +108,12 @@ class DeckControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should return 404 when deck not found by ID")
+	@DisplayName("Should throw exception when deck not found by ID")
 	void shouldReturn404_WhenDeckNotFound() {
-		// Given
-		when(this.deckService.findById(999L)).thenReturn(Optional.empty());
+		// When/Then
+		assertThatThrownBy(() -> this.deckController.getDeckById(999)).isInstanceOf(DeckNotFoundException.class)
+				.hasMessageContaining("Deck not found with id: 999");
 
-		// When
-		final ResponseEntity<DeckDTO> response = this.deckController.getDeckById(999);
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isNull();
 		verify(this.deckService).findById(999L);
 	}
 
@@ -123,14 +121,15 @@ class DeckControllerTest {
 	@DisplayName("Should create new deck and return 201")
 	void shouldCreateDeck() {
 		// Given
-		final DeckDTO newDeckDTO = DeckDTO.builder().deck_name("New Deck").description("A new deck").user_id(1).format(1)
-				.build();
+		final DeckDTO newDeckDTO = DeckDTO.builder().deck_name("New Deck").description("A new deck").user_id(1)
+				.format(1).deck_type(DeckDTO.Deck_type.MAIN).build();
 
 		final Deck newDeck = this.testDeck.toBuilder().id(null).name("New Deck").build();
 		final Deck createdDeck = this.testDeck.toBuilder().id(2L).name("New Deck").build();
 
-		final DeckDTO createdDeckDTO = DeckDTO.builder().id(2).deck_name("New Deck").description("A new deck").user_id(1)
-				.format(1).creation_date(LocalDateTime.now()).last_modification(LocalDateTime.now()).build();
+		final DeckDTO createdDeckDTO = DeckDTO.builder().id(2).deck_name("New Deck").description("A new deck")
+				.user_id(1).format(1).deck_type(DeckDTO.Deck_type.MAIN).creation_date(LocalDateTime.now())
+				.last_modification(LocalDateTime.now()).build();
 
 		when(this.deckMapper.toDeck(newDeckDTO)).thenReturn(newDeck);
 		when(this.deckService.create(any(Deck.class))).thenReturn(createdDeck);
@@ -152,13 +151,13 @@ class DeckControllerTest {
 	void shouldUpdateDeck_WhenExists() {
 		// Given
 		final DeckDTO updatedDTO = DeckDTO.builder().id(1).deck_name("Updated Deck").description("Updated description")
-				.user_id(1).format(1).build();
+				.user_id(1).format(1).deck_type(DeckDTO.Deck_type.MAIN).build();
 
 		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
 		final Deck savedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
 
 		final DeckDTO savedDTO = DeckDTO.builder().id(1).deck_name("Updated Deck").description("Updated description")
-				.user_id(1).format(1).last_modification(LocalDateTime.now()).build();
+				.user_id(1).format(1).deck_type(DeckDTO.Deck_type.MAIN).last_modification(LocalDateTime.now()).build();
 
 		when(this.deckMapper.toDeck(updatedDTO)).thenReturn(updatedDeck);
 		when(this.deckService.update(eq(1L), any(Deck.class))).thenReturn(savedDeck);
@@ -190,17 +189,12 @@ class DeckControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should return 404 when deleting non-existent deck")
+	@DisplayName("Should throw exception when deleting non-existent deck")
 	void shouldReturn404_WhenDeletingNonExistentDeck() {
-		// Given
-		when(this.deckService.deleteById(999L)).thenReturn(false);
+		// When/Then
+		assertThatThrownBy(() -> this.deckController.deleteDeck(999)).isInstanceOf(DeckNotFoundException.class)
+				.hasMessageContaining("Deck not found with id: 999");
 
-		// When
-		final ResponseEntity<Void> response = this.deckController.deleteDeck(999);
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isNull();
 		verify(this.deckService).deleteById(999L);
 	}
 }

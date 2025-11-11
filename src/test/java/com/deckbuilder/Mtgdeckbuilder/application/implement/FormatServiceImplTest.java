@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.CardEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.FormatEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
@@ -59,19 +60,19 @@ class FormatServiceImplTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testFormat = Format.builder().id(1L).name("Standard").description("Standard format").minDeckSize(60)
+		this.testFormat = Format.builder().id(1L).name("Standard").description("Standard format").minDeckSize(60)
 				.maxDeckSize(60).maxSideboardSize(15).bannedCards(Arrays.asList("123", "456"))
 				.restrictedCards(List.of("789")).build();
 
-        this.testFormatEntity = new FormatEntity();
-        this.testFormatEntity.setId(1L);
-        this.testFormatEntity.setName("Standard");
-        this.testFormatEntity.setDescription("Standard format");
-        this.testFormatEntity.setMinDeckSize(60);
-        this.testFormatEntity.setMaxDeckSize(60);
-        this.testFormatEntity.setMaxSideboardSize(15);
-        this.testFormatEntity.setBannedCards(Arrays.asList("123", "456"));
-        this.testFormatEntity.setRestrictedCards(List.of("789"));
+		this.testFormatEntity = new FormatEntity();
+		this.testFormatEntity.setId(1L);
+		this.testFormatEntity.setName("Standard");
+		this.testFormatEntity.setDescription("Standard format");
+		this.testFormatEntity.setMinDeckSize(60);
+		this.testFormatEntity.setMaxDeckSize(60);
+		this.testFormatEntity.setMaxSideboardSize(15);
+		this.testFormatEntity.setBannedCards(Arrays.asList("123", "456"));
+		this.testFormatEntity.setRestrictedCards(List.of("789"));
 	}
 
 	@Test
@@ -202,8 +203,8 @@ class FormatServiceImplTest {
 		when(this.formatRepository.findById(999L)).thenReturn(Optional.empty());
 
 		// When/Then
-		assertThatThrownBy(() -> this.formatService.update(999L, this.testFormat)).isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("Format not found with id: 999");
+		assertThatThrownBy(() -> this.formatService.update(999L, this.testFormat))
+				.isInstanceOf(FormatNotFoundException.class).hasMessageContaining("Format not found with id: 999");
 
 		verify(this.formatRepository).findById(999L);
 		verify(this.formatRepository, never()).save(any());
@@ -291,17 +292,18 @@ class FormatServiceImplTest {
 		final Long deckId = 1L;
 		final Long formatId = 1L;
 
-		final CardInDeckEntity mainCard1 = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(4).section("main")
-				.build();
+		final CardInDeckEntity mainCard1 = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(4)
+				.section("main").build();
 
-		final CardInDeckEntity mainCard2 = CardInDeckEntity.builder().cardId(101L).deckId(deckId).quantity(20).section("main")
-				.build();
+		final CardInDeckEntity mainCard2 = CardInDeckEntity.builder().cardId(101L).deckId(deckId).quantity(20)
+				.section("main").build();
 
 		final CardInDeckEntity sideboardCard = CardInDeckEntity.builder().cardId(102L).deckId(deckId).quantity(10)
 				.section("sideboard").build();
 
 		when(this.formatRepository.existsById(formatId)).thenReturn(true);
-		when(this.cardInDeckRepository.findByDeckId(deckId)).thenReturn(Arrays.asList(mainCard1, mainCard2, sideboardCard));
+		when(this.cardInDeckRepository.findByDeckId(deckId))
+				.thenReturn(Arrays.asList(mainCard1, mainCard2, sideboardCard));
 		when(this.formatRepository.findById(formatId)).thenReturn(Optional.of(this.testFormatEntity));
 
 		// When (24 cards in main, 10 in sideboard - all legal)
@@ -320,8 +322,8 @@ class FormatServiceImplTest {
 		final Long deckId = 1L;
 		final Long formatId = 1L;
 
-		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(30).section("main")
-				.build();
+		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(30)
+				.section("main").build();
 
 		when(this.formatRepository.existsById(formatId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckId(deckId)).thenReturn(Collections.singletonList(mainCard));
@@ -341,8 +343,8 @@ class FormatServiceImplTest {
 		final Long deckId = 1L;
 		final Long formatId = 1L;
 
-		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(70).section("main")
-				.build();
+		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(70)
+				.section("main").build();
 
 		when(this.formatRepository.existsById(formatId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckId(deckId)).thenReturn(Collections.singletonList(mainCard));
@@ -362,8 +364,8 @@ class FormatServiceImplTest {
 		final Long deckId = 1L;
 		final Long formatId = 1L;
 
-		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(60).section("main")
-				.build();
+		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(60)
+				.section("main").build();
 
 		final CardInDeckEntity sideboardCard = CardInDeckEntity.builder().cardId(101L).deckId(deckId).quantity(20)
 				.section("sideboard").build();
@@ -389,8 +391,8 @@ class FormatServiceImplTest {
 		final CardInDeckEntity bannedCard = CardInDeckEntity.builder().cardId(123L) // Banned card from test setup
 				.deckId(deckId).quantity(4).section("main").build();
 
-		final CardInDeckEntity legalCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(56).section("main")
-				.build();
+		final CardInDeckEntity legalCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(56)
+				.section("main").build();
 
 		when(this.formatRepository.existsById(formatId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckId(deckId)).thenReturn(Arrays.asList(bannedCard, legalCard));
@@ -427,8 +429,8 @@ class FormatServiceImplTest {
 		final Long deckId = 1L;
 		final Long formatId = 1L;
 
-		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(60).section("main")
-				.build();
+		final CardInDeckEntity mainCard = CardInDeckEntity.builder().cardId(100L).deckId(deckId).quantity(60)
+				.section("main").build();
 
 		final CardInDeckEntity maybeboardCard = CardInDeckEntity.builder().cardId(123L) // Banned card but in maybeboard
 				.deckId(deckId).quantity(4).section("maybeboard").build();
@@ -528,7 +530,7 @@ class FormatServiceImplTest {
 
 		// When/Then
 		assertThatThrownBy(() -> this.formatService.findCardsByFormatId(999L, 10, 0))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Format not found with id: 999");
+				.isInstanceOf(FormatNotFoundException.class).hasMessageContaining("Format not found with id: 999");
 
 		verify(this.formatRepository).findById(999L);
 		verifyNoInteractions(this.cardRepository, this.cardEntityMapper);

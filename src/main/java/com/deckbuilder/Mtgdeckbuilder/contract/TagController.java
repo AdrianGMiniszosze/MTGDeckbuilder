@@ -4,6 +4,7 @@ import com.deckbuilder.apigenerator.openapi.api.TagsApi;
 import com.deckbuilder.apigenerator.openapi.api.model.TagDTO;
 import com.deckbuilder.mtgdeckbuilder.application.TagService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.TagMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.TagNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,8 +27,9 @@ public class TagController implements TagsApi {
 
 	@Override
 	public ResponseEntity<TagDTO> getTagById(Integer id) {
-		return this.tagService.findById(id.longValue()).map(tag -> ResponseEntity.ok(this.tagMapper.toTagDTO(tag)))
-				.orElse(ResponseEntity.notFound().build());
+		final var tag = this.tagService.findById(id.longValue())
+				.orElseThrow(() -> new TagNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.tagMapper.toTagDTO(tag));
 	}
 
 	@Override
@@ -46,7 +48,7 @@ public class TagController implements TagsApi {
 
 	@Override
 	public ResponseEntity<Void> deleteTag(Integer id) {
-        this.tagService.deleteById(id.longValue());
+		this.tagService.deleteById(id.longValue());
 		return ResponseEntity.noContent().build();
 	}
 }

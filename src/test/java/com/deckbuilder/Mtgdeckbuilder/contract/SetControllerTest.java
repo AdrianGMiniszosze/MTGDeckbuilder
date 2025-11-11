@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 import com.deckbuilder.apigenerator.openapi.api.model.SetDTO;
 import com.deckbuilder.mtgdeckbuilder.application.SetService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.SetMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.SetNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,11 +44,11 @@ class SetControllerTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testSet = new Set();
-        this.testSet.setId(1L);
-        this.testSet.setName("Core Set 2021");
+		this.testSet = new Set();
+		this.testSet.setId(1L);
+		this.testSet.setName("Core Set 2021");
 
-        this.testSetDTO = SetDTO.builder().id(1).name("Core Set 2021").build();
+		this.testSetDTO = SetDTO.builder().id(1).name("Core Set 2021").build();
 	}
 
 	@Test
@@ -94,17 +96,15 @@ class SetControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should return 404 when set not found")
+	@DisplayName("Should throw exception when set not found")
 	void shouldReturn404_WhenSetNotFound() {
 		// Given
 		when(this.setService.findById(999L)).thenReturn(Optional.empty());
 
-		// When
-		final ResponseEntity<SetDTO> response = this.setController.getSetById(999);
+		// When/Then
+		assertThatThrownBy(() -> this.setController.getSetById(999)).isInstanceOf(SetNotFoundException.class)
+				.hasMessageContaining("Set not found with id: 999");
 
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isNull();
 		verify(this.setService).findById(999L);
 	}
 

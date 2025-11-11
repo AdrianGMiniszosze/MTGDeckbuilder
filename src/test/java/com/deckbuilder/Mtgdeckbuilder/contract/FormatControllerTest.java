@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 import com.deckbuilder.apigenerator.openapi.api.model.FormatDTO;
 import com.deckbuilder.mtgdeckbuilder.application.FormatService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.FormatMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Format;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +20,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
@@ -41,11 +43,11 @@ class FormatControllerTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testFormat = Format.builder().id(1L).name("Standard").description("Standard format").minDeckSize(60)
+		this.testFormat = Format.builder().id(1L).name("Standard").description("Standard format").minDeckSize(60)
 				.maxDeckSize(60).maxSideboardSize(15).bannedCards(Arrays.asList("123", "456"))
 				.restrictedCards(List.of("789")).build();
 
-        this.testFormatDTO = FormatDTO.builder().id(1).format_name("Standard").deck_size(60).build();
+		this.testFormatDTO = FormatDTO.builder().id(1).format_name("Standard").deck_size(60).build();
 	}
 
 	@Test
@@ -88,17 +90,13 @@ class FormatControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should return 404 when format not found by ID")
+	@DisplayName("Should throw exception when format not found by ID")
 	void shouldReturn404_WhenFormatNotFound() {
-		// Given
-		when(this.formatService.findById(999L)).thenReturn(Optional.empty());
 
-		// When
-		final ResponseEntity<FormatDTO> response = this.formatController.getFormatById(999);
+		// When/Then
+		assertThatThrownBy(() -> this.formatController.getFormatById(999)).isInstanceOf(FormatNotFoundException.class)
+				.hasMessageContaining("Format not found with id: 999");
 
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isNull();
 		verify(this.formatService).findById(999L);
 	}
 
@@ -169,17 +167,13 @@ class FormatControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should return 404 when deleting non-existent format")
+	@DisplayName("Should throw exception when deleting non-existent format")
 	void shouldReturn404_WhenDeletingNonExistentFormat() {
-		// Given
-		when(this.formatService.deleteById(999L)).thenReturn(false);
 
-		// When
-		final ResponseEntity<Void> response = this.formatController.deleteFormat(999);
+		// When/Then
+		assertThatThrownBy(() -> this.formatController.deleteFormat(999)).isInstanceOf(FormatNotFoundException.class)
+				.hasMessageContaining("Format not found with id: 999");
 
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isNull();
 		verify(this.formatService).deleteById(999L);
 	}
 }

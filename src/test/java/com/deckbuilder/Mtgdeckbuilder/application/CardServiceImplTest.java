@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.application;
 
 import com.deckbuilder.mtgdeckbuilder.application.implement.CardServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.config.PaginationConfig;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.CardEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
@@ -36,6 +37,9 @@ class CardServiceImplTest {
 	@Mock
 	private CardEntityMapper cardEntityMapper;
 
+	@Mock
+	private PaginationConfig paginationConfig;
+
 	@InjectMocks
 	private CardServiceImpl cardService;
 
@@ -44,26 +48,26 @@ class CardServiceImplTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testCard = Card.builder().id(1L).name("Lightning Bolt").manaCost("{R}").cmc(1).colorIdentity("R")
+		this.testCard = Card.builder().id(1L).name("Lightning Bolt").manaCost("{R}").cmc(1).colorIdentity("R")
 				.typeLine("Instant").cardType("Instant").oracleText("Lightning Bolt deals 3 damage to any target.")
 				.rarity("Common").power(null).toughness(null).imageUrl("http://example.com/lightning-bolt.jpg")
 				.foil(false).unlimitedCopies(false).gameChanger(false).language("en").build();
 
-        this.testCardEntity = new CardEntity();
-        this.testCardEntity.setId(1L);
-        this.testCardEntity.setName("Lightning Bolt");
-        this.testCardEntity.setManaCost("{R}");
-        this.testCardEntity.setCmc(1);
-        this.testCardEntity.setColorIdentity("R");
-        this.testCardEntity.setTypeLine("Instant");
-        this.testCardEntity.setCardType("Instant");
-        this.testCardEntity.setOracleText("Lightning Bolt deals 3 damage to any target.");
-        this.testCardEntity.setRarity("Common");
-        this.testCardEntity.setImageUrl("http://example.com/lightning-bolt.jpg");
-        this.testCardEntity.setFoil(false);
-        this.testCardEntity.setUnlimitedCopies(false);
-        this.testCardEntity.setGameChanger(false);
-        this.testCardEntity.setLanguage("en");
+		this.testCardEntity = new CardEntity();
+		this.testCardEntity.setId(1L);
+		this.testCardEntity.setName("Lightning Bolt");
+		this.testCardEntity.setManaCost("{R}");
+		this.testCardEntity.setCmc(1);
+		this.testCardEntity.setColorIdentity("R");
+		this.testCardEntity.setTypeLine("Instant");
+		this.testCardEntity.setCardType("Instant");
+		this.testCardEntity.setOracleText("Lightning Bolt deals 3 damage to any target.");
+		this.testCardEntity.setRarity("Common");
+		this.testCardEntity.setImageUrl("http://example.com/lightning-bolt.jpg");
+		this.testCardEntity.setFoil(false);
+		this.testCardEntity.setUnlimitedCopies(false);
+		this.testCardEntity.setGameChanger(false);
+		this.testCardEntity.setLanguage("en");
 	}
 
 	@Test
@@ -79,6 +83,11 @@ class CardServiceImplTest {
 		final Card card2 = Card.builder().id(2L).name("Counterspell").manaCost("{U}{U}").typeLine("Instant").build();
 
 		final Page<CardEntity> entityPage = new PageImpl<>(Arrays.asList(this.testCardEntity, entity2));
+
+		// Mock pagination config
+		when(this.paginationConfig.validatePageSize(10)).thenReturn(10);
+		when(this.paginationConfig.validatePageNumber(0)).thenReturn(0);
+
 		when(this.cardRepository.findAll(any(Pageable.class))).thenReturn(entityPage);
 		when(this.cardEntityMapper.toModel(this.testCardEntity)).thenReturn(this.testCard);
 		when(this.cardEntityMapper.toModel(entity2)).thenReturn(card2);
@@ -164,7 +173,8 @@ class CardServiceImplTest {
 	@DisplayName("Should update existing card")
 	void shouldUpdateExistingCard() {
 		// Given
-		final Card updatedCard = Card.builder().name("Lightning Bolt Updated").manaCost("{R}").typeLine("Instant").build();
+		final Card updatedCard = Card.builder().name("Lightning Bolt Updated").manaCost("{R}").typeLine("Instant")
+				.build();
 		final CardEntity updatedEntity = new CardEntity();
 		updatedEntity.setName("Lightning Bolt Updated");
 		updatedEntity.setManaCost("{R}");
@@ -179,7 +189,7 @@ class CardServiceImplTest {
 		final Card savedCard = Card.builder().id(1L).name("Lightning Bolt Updated").manaCost("{R}").typeLine("Instant")
 				.build();
 
-		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.testCardEntity));
+		when(this.cardRepository.existsById(1L)).thenReturn(true);
 		when(this.cardEntityMapper.toEntity(updatedCard)).thenReturn(updatedEntity);
 		when(this.cardRepository.save(any(CardEntity.class))).thenReturn(savedEntity);
 		when(this.cardEntityMapper.toModel(savedEntity)).thenReturn(savedCard);
@@ -191,7 +201,7 @@ class CardServiceImplTest {
 		assertThat(result).isPresent();
 		assertThat(result.get().getId()).isEqualTo(1L);
 		assertThat(result.get().getName()).isEqualTo("Lightning Bolt Updated");
-		verify(this.cardRepository, times(1)).findById(1L);
+		verify(this.cardRepository, times(1)).existsById(1L);
 		verify(this.cardRepository, times(1)).save(any(CardEntity.class));
 	}
 
@@ -200,14 +210,14 @@ class CardServiceImplTest {
 	void shouldReturnEmptyWhenUpdatingNonExistentCard() {
 		// Given
 		final Card updatedCard = Card.builder().name("Non-existent Card").build();
-		when(this.cardRepository.findById(999L)).thenReturn(Optional.empty());
+		when(this.cardRepository.existsById(999L)).thenReturn(false);
 
 		// When
 		final Optional<Card> result = this.cardService.updateCard(999L, updatedCard);
 
 		// Then
 		assertThat(result).isEmpty();
-		verify(this.cardRepository, times(1)).findById(999L);
+		verify(this.cardRepository, times(1)).existsById(999L);
 		verify(this.cardRepository, never()).save(any(CardEntity.class));
 	}
 
@@ -219,7 +229,7 @@ class CardServiceImplTest {
 		doNothing().when(this.cardRepository).deleteById(cardId);
 
 		// When
-        this.cardService.deleteCard(cardId);
+		this.cardService.deleteCard(cardId);
 
 		// Then
 		verify(this.cardRepository, times(1)).deleteById(cardId);
@@ -230,6 +240,11 @@ class CardServiceImplTest {
 	void shouldSearchCardsByName() {
 		// Given
 		final Page<CardEntity> entityPage = new PageImpl<>(List.of(this.testCardEntity));
+
+		// Mock pagination config
+		when(this.paginationConfig.validatePageSize(10)).thenReturn(10);
+		when(this.paginationConfig.validatePageNumber(0)).thenReturn(0);
+
 		when(this.cardRepository.searchByName(eq("Lightning"), any(Pageable.class))).thenReturn(entityPage);
 		when(this.cardEntityMapper.toModel(this.testCardEntity)).thenReturn(this.testCard);
 

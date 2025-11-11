@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 import com.deckbuilder.apigenerator.openapi.api.model.TagDTO;
 import com.deckbuilder.mtgdeckbuilder.application.TagService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.TagMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.TagNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Tag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +21,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,11 +44,11 @@ class TagControllerTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testTag = new Tag();
-        this.testTag.setId(1L);
-        this.testTag.setName("Creature");
+		this.testTag = new Tag();
+		this.testTag.setId(1L);
+		this.testTag.setName("Creature");
 
-        this.testTagDTO = TagDTO.builder().id(1).name("Creature").build();
+		this.testTagDTO = TagDTO.builder().id(1).name("Creature").build();
 	}
 
 	@Test
@@ -94,17 +96,15 @@ class TagControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should return 404 when tag not found")
+	@DisplayName("Should throw exception when tag not found")
 	void shouldReturn404_WhenTagNotFound() {
 		// Given
 		when(this.tagService.findById(999L)).thenReturn(Optional.empty());
 
-		// When
-		final ResponseEntity<TagDTO> response = this.tagController.getTagById(999);
+		// When/Then
+		assertThatThrownBy(() -> this.tagController.getTagById(999)).isInstanceOf(TagNotFoundException.class)
+				.hasMessageContaining("Tag not found with id: 999");
 
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isNull();
 		verify(this.tagService).findById(999L);
 	}
 

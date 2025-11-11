@@ -8,6 +8,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardTagId;
 import com.deckbuilder.mtgdeckbuilder.model.CardTag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,12 +21,14 @@ public class CardTagServiceImpl implements CardTagService {
 	private final CardTagEntityMapper cardTagEntityMapper;
 
 	@Override
-	public List<CardTag> findByCardId(Long cardId, int pageSize, int pageNumber) {
-		// Pagination parameters are ignored since card tags are a small set
+	public List<CardTag> findByCardId(Long cardId) {
+		// Card tags for a single card are typically a small set, so no pagination
+		// needed
 		return this.cardTagEntityMapper.toModelList(this.cardTagRepository.findByCardId(cardId));
 	}
 
 	@Override
+	@Transactional
 	public Optional<CardTag> updateCardTag(Long cardId, Long tagId, CardTag cardTag) {
 		final CardTagId id = new CardTagId(cardId, tagId);
 		return this.cardTagRepository.findById(id).map(existingEntity -> {
@@ -40,8 +43,9 @@ public class CardTagServiceImpl implements CardTagService {
 	}
 
 	@Override
+	@Transactional
 	public void deleteCardTag(Long cardId, Long tagId) {
 		final CardTagId id = new CardTagId(cardId, tagId);
-        this.cardTagRepository.deleteById(id);
+		this.cardTagRepository.deleteById(id);
 	}
 }

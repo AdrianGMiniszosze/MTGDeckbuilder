@@ -7,6 +7,7 @@ import com.deckbuilder.mtgdeckbuilder.application.CardService;
 import com.deckbuilder.mtgdeckbuilder.application.CardTagService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardTagMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,15 +28,17 @@ public class CardController implements CardsApi {
 
 	@Override
 	public ResponseEntity<List<CardDTO>> listCards(Integer pagesize, Integer pagenumber) {
-		final var cards = this.cardService.getAllCards(pagesize != null ? pagesize : 10, pagenumber != null ? pagenumber : 0);
+		final var cards = this.cardService.getAllCards(pagesize != null ? pagesize : 10,
+				pagenumber != null ? pagenumber : 0);
 		final var cardDtos = cards.stream().map(this.cardMapper::toDto).collect(Collectors.toList());
 		return ResponseEntity.ok(cardDtos);
 	}
 
 	@Override
 	public ResponseEntity<CardDTO> getCardById(Integer id) {
-		return this.cardService.getCardById(id.longValue()).map(card -> ResponseEntity.ok(this.cardMapper.toDto(card)))
-				.orElse(ResponseEntity.notFound().build());
+		final Card card = this.cardService.getCardById(id.longValue())
+				.orElseThrow(() -> new CardNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.cardMapper.toDto(card));
 	}
 
 	@Override
@@ -48,35 +51,34 @@ public class CardController implements CardsApi {
 	@Override
 	public ResponseEntity<CardDTO> updateCard(Integer id, @Valid CardDTO cardDTO) {
 		final Card card = this.cardMapper.toEntity(cardDTO);
-		return this.cardService.updateCard(id.longValue(), card)
-				.map(updatedCard -> ResponseEntity.ok(this.cardMapper.toDto(updatedCard)))
-				.orElse(ResponseEntity.notFound().build());
+		final Card updatedCard = this.cardService.updateCard(id.longValue(), card)
+				.orElseThrow(() -> new CardNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.cardMapper.toDto(updatedCard));
 	}
 
 	@Override
 	public ResponseEntity<Void> deleteCard(Integer id) {
-        this.cardService.deleteCard(id.longValue());
+		this.cardService.deleteCard(id.longValue());
 		return ResponseEntity.noContent().build();
 	}
 
 	@Override
-	public ResponseEntity<List<CardTagDTO>> listTagsForCard(Integer id, Integer pagesize, Integer pagenumber) {
-		final var cardTags = this.cardTagService.findByCardId(id.longValue(), pagesize != null ? pagesize : 10,
-				pagenumber != null ? pagenumber : 0);
+	public ResponseEntity<List<CardTagDTO>> listTagsForCard(Integer id) {
+		final var cardTags = this.cardTagService.findByCardId(id.longValue());
 		return ResponseEntity.ok(this.cardTagMapper.toCardTagDTOs(cardTags));
 	}
 
 	@Override
 	public ResponseEntity<CardTagDTO> updateCardTag(Integer id, Integer tagId, @Valid CardTagDTO cardTagDTO) {
 		final var cardTag = this.cardTagMapper.toCardTag(cardTagDTO);
-		return this.cardTagService.updateCardTag(id.longValue(), tagId.longValue(), cardTag)
-				.map(updated -> ResponseEntity.ok(this.cardTagMapper.toCardTagDTO(updated)))
-				.orElse(ResponseEntity.notFound().build());
+		final var updated = this.cardTagService.updateCardTag(id.longValue(), tagId.longValue(), cardTag)
+				.orElseThrow(() -> new CardNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.cardTagMapper.toCardTagDTO(updated));
 	}
 
 	@Override
 	public ResponseEntity<Void> deleteCardTag(Integer id, Integer tagId) {
-        this.cardTagService.deleteCardTag(id.longValue(), tagId.longValue());
+		this.cardTagService.deleteCardTag(id.longValue(), tagId.longValue());
 		return ResponseEntity.noContent().build();
 	}
 }

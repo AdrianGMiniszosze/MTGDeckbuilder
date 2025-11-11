@@ -4,6 +4,7 @@ import com.deckbuilder.apigenerator.openapi.api.DecksApi;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,14 +21,16 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<List<DeckDTO>> listDecks(Integer pagesize, Integer pagenumber) {
-		final var decks = this.deckService.getAll(pagesize != null ? pagesize : 10, pagenumber != null ? pagenumber : 0);
+		final var decks = this.deckService.getAll(pagesize != null ? pagesize : 10,
+				pagenumber != null ? pagenumber : 0);
 		return ResponseEntity.ok(this.deckMapper.toDecksDTO(decks));
 	}
 
 	@Override
 	public ResponseEntity<DeckDTO> getDeckById(Integer id) {
-		return this.deckService.findById(id.longValue()).map(deck -> ResponseEntity.ok(this.deckMapper.toDeckDTO(deck)))
-				.orElse(ResponseEntity.notFound().build());
+		final var deck = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.deckMapper.toDeckDTO(deck));
 	}
 
 	@Override
@@ -47,6 +50,9 @@ public class DeckController implements DecksApi {
 	@Override
 	public ResponseEntity<Void> deleteDeck(Integer id) {
 		final var deleted = this.deckService.deleteById(id.longValue());
-		return deleted ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+		if (!deleted) {
+			throw new DeckNotFoundException(id.longValue());
+		}
+		return ResponseEntity.noContent().build();
 	}
 }

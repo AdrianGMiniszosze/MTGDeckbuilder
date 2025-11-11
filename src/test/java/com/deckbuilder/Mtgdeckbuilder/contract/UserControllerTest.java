@@ -5,6 +5,7 @@ import com.deckbuilder.apigenerator.openapi.api.model.UserDTO;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.UserMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,13 +50,14 @@ class UserControllerTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testUser = new User();
-        this.testUser.setId(1L);
-        this.testUser.setName("John Doe");
-        this.testUser.setUsername("johndoe");
-        this.testUser.setEmail("john@example.com");
+		this.testUser = new User();
+		this.testUser.setId(1L);
+		this.testUser.setName("John Doe");
+		this.testUser.setUsername("johndoe");
+		this.testUser.setEmail("john@example.com");
 
-        this.testUserDTO = UserDTO.builder().id(1).name("John Doe").username("johndoe").email("john@example.com").build();
+		this.testUserDTO = UserDTO.builder().id(1).name("John Doe").username("johndoe").email("john@example.com")
+				.country("USA").build();
 	}
 
 	@Test
@@ -65,7 +68,8 @@ class UserControllerTest {
 		user2.setId(2L);
 		user2.setUsername("janedoe");
 
-		final UserDTO userDTO2 = UserDTO.builder().id(2).username("janedoe").build();
+		final UserDTO userDTO2 = UserDTO.builder().id(2).name("Jane Doe").username("janedoe").email("jane@example.com")
+				.country("USA").build();
 
 		final List<User> users = Arrays.asList(this.testUser, user2);
 		final List<UserDTO> userDTOs = Arrays.asList(this.testUserDTO, userDTO2);
@@ -79,7 +83,7 @@ class UserControllerTest {
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(2);
-		assertThat(response.getBody().get(0).getUsername()).isEqualTo("johndoe");
+		assertThat(response.getBody().getFirst().getUsername()).isEqualTo("johndoe");
 		verify(this.userService).findAll(10, 0);
 	}
 
@@ -102,17 +106,12 @@ class UserControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should return 404 when user not found")
+	@DisplayName("Should throw exception when user not found")
 	void shouldReturn404_WhenUserNotFound() {
-		// Given
-		when(this.userService.findById(999L)).thenReturn(Optional.empty());
+		// When/Then
+		assertThatThrownBy(() -> this.userController.getUserById(999)).isInstanceOf(UserNotFoundException.class)
+				.hasMessageContaining("User not found with id: 999");
 
-		// When
-		final ResponseEntity<UserDTO> response = this.userController.getUserById(999);
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-		assertThat(response.getBody()).isNull();
 		verify(this.userService).findById(999L);
 	}
 
@@ -176,9 +175,11 @@ class UserControllerTest {
 		deck2.setId(2L);
 		deck2.setName("Red Aggro");
 
-		final DeckDTO deckDTO1 = DeckDTO.builder().id(1).deck_name("Blue Control").build();
+		final DeckDTO deckDTO1 = DeckDTO.builder().id(1).deck_name("Blue Control").user_id(1)
+				.deck_type(DeckDTO.Deck_type.MAIN).build();
 
-		final DeckDTO deckDTO2 = DeckDTO.builder().id(2).deck_name("Red Aggro").build();
+		final DeckDTO deckDTO2 = DeckDTO.builder().id(2).deck_name("Red Aggro").user_id(1)
+				.deck_type(DeckDTO.Deck_type.MAIN).build();
 
 		when(this.userService.getUserDecks(1L, 10, 0)).thenReturn(Arrays.asList(deck1, deck2));
 		when(this.deckMapper.toDecksDTO(anyList())).thenReturn(Arrays.asList(deckDTO1, deckDTO2));
@@ -216,7 +217,8 @@ class UserControllerTest {
 		final Deck deck = new Deck();
 		deck.setId(1L);
 
-		final DeckDTO deckDTO = DeckDTO.builder().id(1).build();
+		final DeckDTO deckDTO = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1)
+				.deck_type(DeckDTO.Deck_type.MAIN).build();
 
 		when(this.userService.getUserDecks(1L, 10, 0)).thenReturn(List.of(deck));
 		when(this.deckMapper.toDecksDTO(anyList())).thenReturn(Collections.singletonList(deckDTO));

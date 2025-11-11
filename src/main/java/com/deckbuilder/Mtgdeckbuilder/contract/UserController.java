@@ -6,6 +6,7 @@ import com.deckbuilder.apigenerator.openapi.api.model.UserDTO;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.UserMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,14 +24,16 @@ public class UserController implements UsersApi {
 
 	@Override
 	public ResponseEntity<List<UserDTO>> listUsers(Integer pagesize, Integer pagenumber) {
-		final var users = this.userService.findAll(pagesize != null ? pagesize : 10, pagenumber != null ? pagenumber : 0);
+		final var users = this.userService.findAll(pagesize != null ? pagesize : 10,
+				pagenumber != null ? pagenumber : 0);
 		return ResponseEntity.ok(this.userMapper.toUserDTOs(users));
 	}
 
 	@Override
 	public ResponseEntity<UserDTO> getUserById(Integer id) {
-		return this.userService.findById(id.longValue()).map(user -> ResponseEntity.ok(this.userMapper.toUserDTO(user)))
-				.orElse(ResponseEntity.notFound().build());
+		final var user = this.userService.findById(id.longValue())
+				.orElseThrow(() -> new UserNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.userMapper.toUserDTO(user));
 	}
 
 	@Override
@@ -49,7 +52,7 @@ public class UserController implements UsersApi {
 
 	@Override
 	public ResponseEntity<Void> deleteUser(Integer id) {
-        this.userService.deleteById(id.longValue());
+		this.userService.deleteById(id.longValue());
 		return ResponseEntity.noContent().build();
 	}
 

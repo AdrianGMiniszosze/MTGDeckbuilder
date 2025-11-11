@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.SetService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.SetRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.SetNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.SetEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.SetEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Set;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -35,6 +37,7 @@ public class SetServiceImpl implements SetService {
 	}
 
 	@Override
+	@Transactional
 	public Set create(Set set) {
 		SetEntity entity = this.setEntityMapper.toEntity(set);
 		entity = this.setRepository.save(entity);
@@ -42,9 +45,10 @@ public class SetServiceImpl implements SetService {
 	}
 
 	@Override
+	@Transactional
 	public Set update(Long id, Set set) {
 		if (!this.setRepository.existsById(id)) {
-			throw new IllegalArgumentException("Set not found with id: " + id);
+			throw new SetNotFoundException(id);
 		}
 		SetEntity entity = this.setEntityMapper.toEntity(set);
 		entity.setId(id);
@@ -53,7 +57,8 @@ public class SetServiceImpl implements SetService {
 	}
 
 	@Override
+	@Transactional
 	public void deleteById(Long id) {
-        this.setRepository.deleteById(id);
+		this.setRepository.deleteById(id);
 	}
 }
