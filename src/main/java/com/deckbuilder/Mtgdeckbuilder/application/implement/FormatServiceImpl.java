@@ -4,6 +4,7 @@ import com.deckbuilder.mtgdeckbuilder.application.FormatService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.CardEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.FormatEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +24,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
+@Transactional
 public class FormatServiceImpl implements FormatService {
 	private final FormatRepository formatRepository;
 	private final FormatEntityMapper formatEntityMapper;
@@ -60,6 +63,7 @@ public class FormatServiceImpl implements FormatService {
 	}
 
 	@Override
+	@Transactional
 	public Format create(Format format) {
 		FormatEntity entity = this.formatEntityMapper.toEntity(format);
 		entity = this.formatRepository.save(entity);
@@ -67,10 +71,11 @@ public class FormatServiceImpl implements FormatService {
 	}
 
 	@Override
+	@Transactional
 	public Format update(Long id, Format format) {
 		final Optional<FormatEntity> existingFormat = this.formatRepository.findById(id);
 		if (existingFormat.isEmpty()) {
-			throw new IllegalArgumentException("Format not found with id: " + id);
+			throw new FormatNotFoundException(id);
 		}
 		FormatEntity entity = this.formatEntityMapper.toEntity(format);
 		entity.setId(id);
@@ -79,18 +84,19 @@ public class FormatServiceImpl implements FormatService {
 	}
 
 	@Override
+	@Transactional
 	public boolean deleteById(Long id) {
 		if (!this.formatRepository.existsById(id)) {
 			return false;
 		}
-        this.formatRepository.deleteById(id);
+		this.formatRepository.deleteById(id);
 		return true;
 	}
 
 	public List<Card> findCardsByFormatId(Long formatId, int pageSize, int pageNumber) {
 		final Optional<FormatEntity> format = this.formatRepository.findById(formatId);
 		if (format.isEmpty()) {
-			throw new IllegalArgumentException("Format not found with id: " + formatId);
+			throw new FormatNotFoundException(formatId);
 		}
 
 		final Pageable pageable = PageRequest.of(pageNumber, pageSize);
@@ -102,12 +108,10 @@ public class FormatServiceImpl implements FormatService {
 	@Override
 	public boolean isCardLegal(Long cardId, Long formatId) {
 		final Optional<FormatEntity> format = this.formatRepository.findById(formatId);
-		if (format.isEmpty()) {
-			return false;
-		}
+		return format.map(formatEntity -> formatEntity.getBannedCards().stream()
+				.noneMatch(bannedCard -> bannedCard.equals(cardId.toString()))).orElse(false);
 
 		// Check if card is in the banned list
-		return format.get().getBannedCards().stream().noneMatch(bannedCard -> bannedCard.equals(cardId.toString()));
 	}
 
 	@Override

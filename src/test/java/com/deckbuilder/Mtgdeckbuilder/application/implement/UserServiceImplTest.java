@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
@@ -50,22 +51,22 @@ class UserServiceImplTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testUserEntity = new UserEntity();
-        this.testUserEntity.setId(1L);
-        this.testUserEntity.setName("John Doe");
-        this.testUserEntity.setUsername("johndoe");
-        this.testUserEntity.setEmail("john@example.com");
-        this.testUserEntity.setHashedPassword("hashedPassword123");
-        this.testUserEntity.setCountry("USA");
-        this.testUserEntity.setRegistrationDate(LocalDateTime.now());
+		this.testUserEntity = new UserEntity();
+		this.testUserEntity.setId(1L);
+		this.testUserEntity.setName("John Doe");
+		this.testUserEntity.setUsername("johndoe");
+		this.testUserEntity.setEmail("john@example.com");
+		this.testUserEntity.setHashedPassword("hashedPassword123");
+		this.testUserEntity.setCountry("USA");
+		this.testUserEntity.setRegistrationDate(LocalDateTime.now());
 
-        this.testUser = new User();
-        this.testUser.setId(1L);
-        this.testUser.setName("John Doe");
-        this.testUser.setUsername("johndoe");
-        this.testUser.setEmail("john@example.com");
-        this.testUser.setHashedPassword("hashedPassword123");
-        this.testUser.setCountry("USA");
+		this.testUser = new User();
+		this.testUser.setId(1L);
+		this.testUser.setName("John Doe");
+		this.testUser.setUsername("johndoe");
+		this.testUser.setEmail("john@example.com");
+		this.testUser.setHashedPassword("hashedPassword123");
+		this.testUser.setCountry("USA");
 	}
 
 	@Test
@@ -263,7 +264,7 @@ class UserServiceImplTest {
 		when(this.userRepository.existsById(999L)).thenReturn(false);
 
 		// When/Then
-		assertThatThrownBy(() -> this.userService.update(999L, this.testUser)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> this.userService.update(999L, this.testUser)).isInstanceOf(UserNotFoundException.class)
 				.hasMessageContaining("User not found with id: 999");
 
 		verify(this.userRepository).existsById(999L);
@@ -277,7 +278,7 @@ class UserServiceImplTest {
 		final Long userId = 1L;
 
 		// When
-        this.userService.deleteById(userId);
+		this.userService.deleteById(userId);
 
 		// Then
 		verify(this.userRepository).deleteById(userId);

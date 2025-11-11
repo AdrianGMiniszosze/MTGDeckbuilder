@@ -1,6 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.infrastructure.SetRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.SetNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.SetEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.SetEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Set;
@@ -43,13 +44,13 @@ class SetServiceImplTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testSetEntity = new SetEntity();
-        this.testSetEntity.setId(1L);
-        this.testSetEntity.setName("Core Set 2021");
+		this.testSetEntity = new SetEntity();
+		this.testSetEntity.setId(1L);
+		this.testSetEntity.setName("Core Set 2021");
 
-        this.testSet = new Set();
-        this.testSet.setId(1L);
-        this.testSet.setName("Core Set 2021");
+		this.testSet = new Set();
+		this.testSet.setId(1L);
+		this.testSet.setName("Core Set 2021");
 	}
 
 	@Test
@@ -187,7 +188,7 @@ class SetServiceImplTest {
 		when(this.setRepository.existsById(999L)).thenReturn(false);
 
 		// When/Then
-		assertThatThrownBy(() -> this.setService.update(999L, this.testSet)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> this.setService.update(999L, this.testSet)).isInstanceOf(SetNotFoundException.class)
 				.hasMessageContaining("Set not found with id: 999");
 
 		verify(this.setRepository).existsById(999L);
@@ -201,7 +202,7 @@ class SetServiceImplTest {
 		final Long setId = 1L;
 
 		// When
-        this.setService.deleteById(setId);
+		this.setService.deleteById(setId);
 
 		// Then
 		verify(this.setRepository).deleteById(setId);

@@ -1,6 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.infrastructure.TagRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.TagNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.TagEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.TagEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Tag;
@@ -44,13 +45,13 @@ class TagServiceImplTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testTagEntity = new TagEntity();
-        this.testTagEntity.setId(1L);
-        this.testTagEntity.setName("Creature");
+		this.testTagEntity = new TagEntity();
+		this.testTagEntity.setId(1L);
+		this.testTagEntity.setName("Creature");
 
-        this.testTag = new Tag();
-        this.testTag.setId(1L);
-        this.testTag.setName("Creature");
+		this.testTag = new Tag();
+		this.testTag.setId(1L);
+		this.testTag.setName("Creature");
 	}
 
 	@Test
@@ -188,7 +189,7 @@ class TagServiceImplTest {
 		when(this.tagRepository.existsById(999L)).thenReturn(false);
 
 		// When/Then
-		assertThatThrownBy(() -> this.tagService.update(999L, this.testTag)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> this.tagService.update(999L, this.testTag)).isInstanceOf(TagNotFoundException.class)
 				.hasMessageContaining("Tag not found with id: 999");
 
 		verify(this.tagRepository).existsById(999L);
@@ -202,7 +203,7 @@ class TagServiceImplTest {
 		final Long tagId = 1L;
 
 		// When
-        this.tagService.deleteById(tagId);
+		this.tagService.deleteById(tagId);
 
 		// Then
 		verify(this.tagRepository).deleteById(tagId);

@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
@@ -11,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,6 +44,7 @@ public class UserServiceImpl implements UserService {
 	}
 
 	@Override
+	@Transactional
 	public User create(User user) {
 		UserEntity entity = this.userEntityMapper.toEntity(user);
 		entity = this.userRepository.save(entity);
@@ -49,9 +52,10 @@ public class UserServiceImpl implements UserService {
 	}
 
 	@Override
+	@Transactional
 	public User update(Long id, User user) {
 		if (!this.userRepository.existsById(id)) {
-			throw new IllegalArgumentException("User not found with id: " + id);
+			throw new UserNotFoundException(id);
 		}
 		UserEntity entity = this.userEntityMapper.toEntity(user);
 		entity.setId(id);
@@ -60,8 +64,9 @@ public class UserServiceImpl implements UserService {
 	}
 
 	@Override
+	@Transactional
 	public void deleteById(Long id) {
-        this.userRepository.deleteById(id);
+		this.userRepository.deleteById(id);
 	}
 
 	public boolean existsByUsername(String username) {

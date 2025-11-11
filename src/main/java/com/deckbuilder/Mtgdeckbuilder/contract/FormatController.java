@@ -6,6 +6,7 @@ import com.deckbuilder.apigenerator.openapi.api.model.FormatDTO;
 import com.deckbuilder.mtgdeckbuilder.application.FormatService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.FormatMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,8 +29,9 @@ public class FormatController implements FormatsApi {
 
 	@Override
 	public ResponseEntity<FormatDTO> getFormatById(Integer id) {
-		return this.formatService.findById(id.longValue()).map(format -> ResponseEntity.ok(this.formatMapper.toDto(format)))
-				.orElse(ResponseEntity.notFound().build());
+		final var format = this.formatService.findById(id.longValue())
+				.orElseThrow(() -> new FormatNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.formatMapper.toDto(format));
 	}
 
 	@Override
@@ -49,7 +51,10 @@ public class FormatController implements FormatsApi {
 	@Override
 	public ResponseEntity<Void> deleteFormat(Integer id) {
 		final boolean deleted = this.formatService.deleteById(id.longValue());
-		return deleted ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
+		if (!deleted) {
+			throw new FormatNotFoundException(id.longValue());
+		}
+		return ResponseEntity.noContent().build();
 	}
 
 	@Override

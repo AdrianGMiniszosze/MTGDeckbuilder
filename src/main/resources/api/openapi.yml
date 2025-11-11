@@ -2,8 +2,10 @@ openapi: 3.0.3
 info:
   title: MTG Deckbuilder API
   version: 1.0.0
+  description: RESTful API for managing Magic The Gathering card collections and decks
 servers:
-  - url: /api
+  - url: /api/v1
+    description: Version 1 - Current stable API
 paths:
   /sets:
     get:
@@ -15,13 +17,20 @@ paths:
         - name: pageSize
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
           description: Number of items per page
         - name: pageNumber
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Page number to retrieve (0-indexed)
       responses:
         '200':
           description: List of sets
@@ -59,7 +68,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Set details
@@ -67,6 +78,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Set'
+        '404':
+          description: Set not found
     put:
       summary: Update a set
       operationId: updateSet
@@ -76,7 +89,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -90,6 +105,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Set'
+        '404':
+          description: Set not found
     delete:
       summary: Delete a set
       operationId: deleteSet
@@ -99,10 +116,14 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '204':
           description: Set deleted
+        '404':
+          description: Set not found
 
   /cards:
     get:
@@ -114,13 +135,20 @@ paths:
         - name: pagesize
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
           description: Number of items per page
         - name: pagenumber
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Page number to retrieve (0-indexed)
       responses:
         '200':
           description: List of cards
@@ -148,6 +176,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Card'
+        '400':
+          description: Invalid input
   /cards/{id}:
     get:
       summary: Get a card by ID
@@ -158,7 +188,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Card details
@@ -166,6 +198,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Card'
+        '404':
+          description: Card not found
     put:
       summary: Update a card
       operationId: updateCard
@@ -175,7 +209,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -189,6 +225,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Card'
+        '404':
+          description: Card not found
     delete:
       summary: Delete a card
       operationId: deleteCard
@@ -198,10 +236,14 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '204':
           description: Card deleted
+        '404':
+          description: Card not found
 
   /users:
     get:
@@ -213,13 +255,18 @@ paths:
         - name: pagesize
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
         - name: pagenumber
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of users
@@ -257,7 +304,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: User details
@@ -274,7 +323,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -297,7 +348,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '204':
           description: User deleted
@@ -314,21 +367,22 @@ paths:
           required: true
           schema:
             type: integer
-          description: User ID
+            minimum: 1
         - name: pagesize
           in: query
           required: false
           schema:
             type: integer
             minimum: 1
-          description: Number of items per page
+            maximum: 100
+            default: 20
         - name: pagenumber
           in: query
           required: false
           schema:
             type: integer
-            minimum: 1
-          description: Page number to retrieve
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of decks for the user
@@ -338,6 +392,7 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Deck'
+
   /formats:
     get:
       summary: List all formats
@@ -348,13 +403,18 @@ paths:
         - name: pagesize
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
         - name: pagenumber
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of formats
@@ -392,7 +452,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Format details
@@ -409,7 +471,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -432,7 +496,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '204':
           description: Format deleted
@@ -447,13 +513,18 @@ paths:
         - name: pagesize
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
         - name: pagenumber
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of decks
@@ -491,7 +562,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Deck details
@@ -508,7 +581,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -531,7 +606,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '204':
           description: Deck deleted
@@ -546,13 +623,18 @@ paths:
         - name: pagesize
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
         - name: pagenumber
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of tags
@@ -590,7 +672,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Tag details
@@ -607,7 +691,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -630,7 +716,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '204':
           description: Tag deleted
@@ -645,13 +733,18 @@ paths:
         - name: pagesize
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
         - name: pagenumber
           in: query
           required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of card tag entries
@@ -690,18 +783,9 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
-          description: Card ID
-        - name: pagesize
-          in: query
-          required: false
-          schema: { type: integer, minimum: 1 }
-          description: Number of items per page
-        - name: pagenumber
-          in: query
-          required: false
-          schema: { type: integer, minimum: 1 }
-          description: Page number to retrieve
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: List of tags for the card
@@ -722,13 +806,15 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
-          description: Card ID
+          schema:
+            type: integer
+            minimum: 1
         - name: tag_id
           in: path
           required: true
-          schema: { type: integer }
-          description: Tag ID
+          schema:
+            type: integer
+            minimum: 1
       requestBody:
         required: true
         content:
@@ -751,13 +837,15 @@ paths:
         - name: id
           in: path
           required: true
-          schema: { type: integer }
-          description: Card ID
+          schema:
+            type: integer
+            minimum: 1
         - name: tag_id
           in: path
           required: true
-          schema: { type: integer }
-          description: Tag ID
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '204':
           description: Card tag entry deleted
@@ -774,21 +862,22 @@ paths:
           required: true
           schema:
             type: integer
-          description: Format ID
+            minimum: 1
         - name: pagesize
           in: query
           required: false
           schema:
             type: integer
             minimum: 1
-          description: Number of items per page
+            maximum: 100
+            default: 20
         - name: pagenumber
           in: query
           required: false
           schema:
             type: integer
-            minimum: 1
-          description: Page number to retrieve
+            minimum: 0
+            default: 0
       responses:
         '200':
           description: List of cards for the format
@@ -803,127 +892,403 @@ components:
   schemas:
     Set:
       type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
-    Keyword:
-      type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
-    Card:
-      type: object
-      properties:
-        id: { type: integer }
-        card_name: { type: string }
-        mana_cost: { type: string }
-        cmc: { type: integer }
-        color_identity: { type: string }
-        type_line: { type: string, description: "Full original type line (e.g., 'Legendary Creature — Goblin Wizard')" }
-        card_type: { type: string, description: "Parsed card type (e.g., 'Creature', 'Instant')" }
-        card_subtype: { type: string, description: "Parsed subtypes as string (e.g., 'Goblin Wizard')" }
-        card_supertype: { type: string, description: "Parsed supertype (e.g., 'Legendary', 'Basic')" }
-        rarity: { type: string }
-        card_text: { type: string }
-        flavor_text: { type: string }
-        power: { type: string }
-        toughness: { type: string }
-        unlimited_copies: { type: boolean }
-        image_url: { type: string }
-        foil: { type: boolean }
-        game_changer: { type: boolean }
-        related_card: { type: integer }
-        language: { type: string }
-        embedding: { type: array, items: { type: number } }
-        archetype: { type: string }
-        card_set: { type: integer }
-        collector_number: { type: string, description: "Card's collector number in the set (e.g., '001', '264★')" }
-        promo: { type: boolean, description: "Indicates if this is a promotional version of the card" }
-        variation: { type: boolean, description: "Indicates if this is an alternate art or variant version" }
-    User:
-      type: object
-      properties:
-        id: { type: integer }
-        name: { type: string }
-        username: { type: string }
-        registration_date: { type: string, format: date-time }
-        hashed_password: { type: string }
-        email: { type: string }
-        country: { type: string }
-    Format:
-      type: object
-      properties:
-        id: { type: integer }
-        format_name: { type: string }
-        deck_size: { type: integer }
-    Deck:
-      type: object
+      required:
+        - name
       properties:
         id:
           type: integer
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Dominaria United"
+
+    Keyword:
+      type: object
+      required:
+        - name
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "Flying"
+
+    Card:
+      type: object
+      required:
+        - card_name
+        - mana_cost
+        - cmc
+        - color_identity
+        - type_line
+        - card_type
+        - rarity
+        - card_text
+        - image_url
+        - language
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        card_name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          example: "Lightning Bolt"
+        mana_cost:
+          type: string
+          minLength: 0
+          maxLength: 50
+          example: "{R}"
+        cmc:
+          type: integer
+          minimum: 0
+          maximum: 20
+          example: 1
+        color_identity:
+          type: string
+          minLength: 0
+          maxLength: 10
+          pattern: '^[WUBRG]*$'
+          example: "R"
+        type_line:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: "Full original type line (e.g., 'Legendary Creature — Goblin Wizard')"
+          example: "Instant"
+        card_type:
+          type: string
+          minLength: 1
+          maxLength: 50
+          description: "Parsed card type (e.g., 'Creature', 'Instant')"
+          example: "Instant"
+        card_subtype:
+          type: string
+          maxLength: 100
+          description: "Parsed subtypes as string (e.g., 'Goblin Wizard')"
+        card_supertype:
+          type: string
+          maxLength: 50
+          description: "Parsed supertype (e.g., 'Legendary', 'Basic')"
+        rarity:
+          type: string
+          enum: [common, uncommon, rare, mythic, special]
+          example: "uncommon"
+        card_text:
+          type: string
+          maxLength: 500
+          example: "Lightning Bolt deals 3 damage to any target."
+        flavor_text:
+          type: string
+          maxLength: 500
+        power:
+          type: string
+          maxLength: 10
+          pattern: '^[0-9*+\\-X]+$'
+        toughness:
+          type: string
+          maxLength: 10
+          pattern: '^[0-9*+\\-X]+$'
+        unlimited_copies:
+          type: boolean
+          default: false
+        image_url:
+          type: string
+          format: uri
+          maxLength: 500
+          example: "https://example.com/cards/lightning_bolt.jpg"
+        foil:
+          type: boolean
+          default: false
+        game_changer:
+          type: boolean
+          default: false
+        related_card:
+          type: integer
+          minimum: 1
+        language:
+          type: string
+          minLength: 2
+          maxLength: 10
+          pattern: '^[a-z]{2}$'
+          default: "en"
+          example: "en"
+        embedding:
+          type: array
+          items:
+            type: number
+          minItems: 999
+          maxItems: 999
+        archetype:
+          type: string
+          maxLength: 50
+        card_set:
+          type: integer
+          minimum: 1
+        collector_number:
+          type: string
+          maxLength: 20
+          description: "Card's collector number in the set (e.g., '001', '264★')"
+          example: "001"
+        promo:
+          type: boolean
+          default: false
+          description: "Indicates if this is a promotional version of the card"
+        variation:
+          type: boolean
+          default: false
+          description: "Indicates if this is an alternate art or variant version"
+
+    User:
+      type: object
+      required:
+        - name
+        - username
+        - email
+        - country
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "John Doe"
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          pattern: '^[a-zA-Z0-9_-]+$'
+          example: "johndoe123"
+        registration_date:
+          type: string
+          format: date-time
+          readOnly: true
+        hashed_password:
+          type: string
+          writeOnly: true
+          minLength: 8
+          maxLength: 255
+        email:
+          type: string
+          format: email
+          maxLength: 100
+          example: "johndoe@example.com"
+        country:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: "USA"
+
+    Format:
+      type: object
+      required:
+        - format_name
+        - deck_size
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        format_name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "Standard"
+        deck_size:
+          type: integer
+          minimum: 1
+          maximum: 250
+          example: 60
+
+    Deck:
+      type: object
+      required:
+        - deck_name
+        - deck_type
+        - user_id
+      properties:
+        id:
+          type: integer
+          readOnly: true
         deck_name:
           type: string
+          minLength: 1
+          maxLength: 100
+          example: "My Mill Deck"
         creation_date:
           type: string
           format: date-time
+          readOnly: true
         last_modification:
           type: string
           format: date-time
+          readOnly: true
         deck_type:
           type: string
+          enum: [main, sideboard, maybeboard]
+          default: main
+          example: "main"
         description:
           type: string
+          maxLength: 999
         is_private:
           type: boolean
+          default: true
         tournament:
           type: string
+          maxLength: 100
         share_url:
           type: string
+          format: uri
+          maxLength: 200
+          readOnly: true
         parent_deck_id:
           type: integer
+          minimum: 1
         format:
           type: integer
+          minimum: 1
         user_id:
           type: integer
+          minimum: 1
         deck_contents:
           type: array
           items:
             $ref: '#/components/schemas/CardDeck'
+          maxItems: 250
+
     Tag:
       type: object
+      required:
+        - name
       properties:
-        id: { type: integer }
-        name: { type: string }
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: "Mill"
+
     CardLegality:
       type: object
-      properties:
-        card_id: { type: integer }
-        format_id: { type: integer }
-        legality_status: { type: string }
-    CardDeck:
-      type: object
+      required:
+        - card_id
+        - format_id
+        - legality_status
       properties:
         card_id:
           type: integer
+          minimum: 1
+        format_id:
+          type: integer
+          minimum: 1
+        legality_status:
+          type: string
+          enum: [legal, banned, restricted, not_legal]
+          example: "legal"
+
+    CardDeck:
+      type: object
+      required:
+        - card_id
+        - deck_id
+        - quantity
+      properties:
+        card_id:
+          type: integer
+          minimum: 1
         deck_id:
           type: integer
+          minimum: 1
         quantity:
           type: integer
+          minimum: 1
+          maximum: 99
+          example: 4
+
     CardTag:
       type: object
+      required:
+        - card_id
+        - tag_id
+        - weight
+        - confidence
+        - source
       properties:
-        card_id: { type: integer }
-        tag_id: { type: integer }
-        weight: { type: number }
-        confidence: { type: number }
-        source: { type: string }
-        model_version: { type: string }
-        created_at: { type: string, format: date-time }
+        card_id:
+          type: integer
+          minimum: 1
+        tag_id:
+          type: integer
+          minimum: 1
+        weight:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 10.0
+          example: 1.0
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.95
+        source:
+          type: string
+          enum: [manual, ai_text, ai_vision, heuristic, admin]
+          example: "ai_text"
+        model_version:
+          type: string
+          maxLength: 50
+          example: "gpt-4-turbo"
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+
     CardKeyword:
       type: object
+      required:
+        - card_id
+        - keyword_id
       properties:
-        card_id: { type: integer }
-        keyword_id: { type: integer }
+        card_id:
+          type: integer
+          minimum: 1
+        keyword_id:
+          type: integer
+          minimum: 1
+
+  parameters:
+    PageSize:
+      name: pagesize
+      in: query
+      required: false
+      description: Number of items per page (1-100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    PageNumber:
+      name: pagenumber
+      in: query
+      required: false
+      description: Page number to retrieve (0-indexed, must be non-negative)
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
 tags:
   - name: Sets
     description: "Operations related to Magic: The Gathering card sets"
@@ -939,3 +1304,4 @@ tags:
     description: "Operations related to tags"
   - name: CardTags
     description: "Operations related to card-tag relationships"
+

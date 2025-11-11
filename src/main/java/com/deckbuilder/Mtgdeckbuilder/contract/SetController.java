@@ -4,6 +4,7 @@ import com.deckbuilder.apigenerator.openapi.api.SetsApi;
 import com.deckbuilder.apigenerator.openapi.api.model.SetDTO;
 import com.deckbuilder.mtgdeckbuilder.application.SetService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.SetMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.SetNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,8 +27,9 @@ public class SetController implements SetsApi {
 
 	@Override
 	public ResponseEntity<SetDTO> getSetById(Integer id) {
-		return this.setService.findById(id.longValue()).map(set -> ResponseEntity.ok(this.setMapper.toSetDTO(set)))
-				.orElse(ResponseEntity.notFound().build());
+		final var set = this.setService.findById(id.longValue())
+				.orElseThrow(() -> new SetNotFoundException(id.longValue()));
+		return ResponseEntity.ok(this.setMapper.toSetDTO(set));
 	}
 
 	@Override
@@ -46,7 +48,7 @@ public class SetController implements SetsApi {
 
 	@Override
 	public ResponseEntity<Void> deleteSet(Integer id) {
-        this.setService.deleteById(id.longValue());
+		this.setService.deleteById(id.longValue());
 		return ResponseEntity.noContent().build();
 	}
 }

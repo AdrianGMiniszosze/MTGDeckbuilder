@@ -41,16 +41,16 @@ class CardTagServiceImplTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testCardTag = CardTag.builder().cardId(1L).tagId(10L).weight(1.0).confidence(1.0).source("scryfall_import")
+		this.testCardTag = CardTag.builder().cardId(1L).tagId(10L).weight(1.0).confidence(1.0).source("scryfall_import")
 				.modelVersion("v1.0").createdAt(LocalDateTime.now()).build();
 
-        this.testCardTag2 = CardTag.builder().cardId(1L).tagId(11L).weight(1.0).confidence(0.95).source("scryfall_import")
-				.modelVersion("v1.0").createdAt(LocalDateTime.now()).build();
-
-        this.testCardTagEntity = CardTagEntity.builder().cardId(1L).tagId(10L).weight(1.0).confidence(1.0)
+		this.testCardTag2 = CardTag.builder().cardId(1L).tagId(11L).weight(1.0).confidence(0.95)
 				.source("scryfall_import").modelVersion("v1.0").createdAt(LocalDateTime.now()).build();
 
-        this.testCardTagEntity2 = CardTagEntity.builder().cardId(1L).tagId(11L).weight(1.0).confidence(0.95)
+		this.testCardTagEntity = CardTagEntity.builder().cardId(1L).tagId(10L).weight(1.0).confidence(1.0)
+				.source("scryfall_import").modelVersion("v1.0").createdAt(LocalDateTime.now()).build();
+
+		this.testCardTagEntity2 = CardTagEntity.builder().cardId(1L).tagId(11L).weight(1.0).confidence(0.95)
 				.source("scryfall_import").modelVersion("v1.0").createdAt(LocalDateTime.now()).build();
 	}
 
@@ -58,11 +58,13 @@ class CardTagServiceImplTest {
 	@DisplayName("Should find all tags for a card")
 	void shouldFindAllTagsByCardId() {
 		// Given
-		when(this.cardTagRepository.findByCardId(1L)).thenReturn(Arrays.asList(this.testCardTagEntity, this.testCardTagEntity2));
-		when(this.cardTagEntityMapper.toModelList(anyList())).thenReturn(Arrays.asList(this.testCardTag, this.testCardTag2));
+		when(this.cardTagRepository.findByCardId(1L))
+				.thenReturn(Arrays.asList(this.testCardTagEntity, this.testCardTagEntity2));
+		when(this.cardTagEntityMapper.toModelList(anyList()))
+				.thenReturn(Arrays.asList(this.testCardTag, this.testCardTag2));
 
 		// When
-		final List<CardTag> result = this.cardTagService.findByCardId(1L, 10, 1);
+		final List<CardTag> result = this.cardTagService.findByCardId(1L);
 
 		// Then
 		assertThat(result).hasSize(2);
@@ -80,7 +82,7 @@ class CardTagServiceImplTest {
 		when(this.cardTagEntityMapper.toModelList(anyList())).thenReturn(List.of());
 
 		// When
-		final List<CardTag> result = this.cardTagService.findByCardId(999L, 10, 1);
+		final List<CardTag> result = this.cardTagService.findByCardId(999L);
 
 		// Then
 		assertThat(result).isEmpty();
@@ -89,31 +91,16 @@ class CardTagServiceImplTest {
 	}
 
 	@Test
-	@DisplayName("Should ignore pagination parameters for small result sets")
-	void shouldIgnorePaginationParameters() {
-		// Given
-		when(this.cardTagRepository.findByCardId(1L)).thenReturn(Arrays.asList(this.testCardTagEntity, this.testCardTagEntity2));
-		when(this.cardTagEntityMapper.toModelList(anyList())).thenReturn(Arrays.asList(this.testCardTag, this.testCardTag2));
-
-		// When - Call with different pagination params
-		final List<CardTag> result1 = this.cardTagService.findByCardId(1L, 5, 1);
-		final List<CardTag> result2 = this.cardTagService.findByCardId(1L, 100, 5);
-
-		// Then - Both should return same results (pagination ignored)
-		assertThat(result1).hasSize(2);
-		assertThat(result2).hasSize(2);
-		verify(this.cardTagRepository, times(2)).findByCardId(1L);
-	}
-
-	@Test
 	@DisplayName("Should return tags with different confidence levels")
 	void shouldReturnTagsWithDifferentConfidenceLevels() {
 		// Given
-		when(this.cardTagRepository.findByCardId(1L)).thenReturn(Arrays.asList(this.testCardTagEntity, this.testCardTagEntity2));
-		when(this.cardTagEntityMapper.toModelList(anyList())).thenReturn(Arrays.asList(this.testCardTag, this.testCardTag2));
+		when(this.cardTagRepository.findByCardId(1L))
+				.thenReturn(Arrays.asList(this.testCardTagEntity, this.testCardTagEntity2));
+		when(this.cardTagEntityMapper.toModelList(anyList()))
+				.thenReturn(Arrays.asList(this.testCardTag, this.testCardTag2));
 
 		// When
-		final List<CardTag> result = this.cardTagService.findByCardId(1L, 10, 1);
+		final List<CardTag> result = this.cardTagService.findByCardId(1L);
 
 		// Then
 		assertThat(result).hasSize(2);
@@ -130,7 +117,7 @@ class CardTagServiceImplTest {
 		when(this.cardTagEntityMapper.toModelList(anyList())).thenReturn(Collections.singletonList(this.testCardTag));
 
 		// When
-		final List<CardTag> result = this.cardTagService.findByCardId(1L, 10, 1);
+		final List<CardTag> result = this.cardTagService.findByCardId(1L);
 
 		// Then
 		assertThat(result).hasSize(1);
@@ -145,15 +132,16 @@ class CardTagServiceImplTest {
 		final CardTagEntity tag3 = CardTagEntity.builder().cardId(1L).tagId(12L).weight(1.0).confidence(0.85)
 				.source("ml_model").modelVersion("v2.0").createdAt(LocalDateTime.now()).build();
 
-		final CardTag modelTag3 = CardTag.builder().cardId(1L).tagId(12L).weight(1.0).confidence(0.85).source("ml_model")
-				.modelVersion("v2.0").createdAt(LocalDateTime.now()).build();
+		final CardTag modelTag3 = CardTag.builder().cardId(1L).tagId(12L).weight(1.0).confidence(0.85)
+				.source("ml_model").modelVersion("v2.0").createdAt(LocalDateTime.now()).build();
 
-		when(this.cardTagRepository.findByCardId(1L)).thenReturn(Arrays.asList(this.testCardTagEntity, this.testCardTagEntity2, tag3));
+		when(this.cardTagRepository.findByCardId(1L))
+				.thenReturn(Arrays.asList(this.testCardTagEntity, this.testCardTagEntity2, tag3));
 		when(this.cardTagEntityMapper.toModelList(anyList()))
 				.thenReturn(Arrays.asList(this.testCardTag, this.testCardTag2, modelTag3));
 
 		// When
-		final List<CardTag> result = this.cardTagService.findByCardId(1L, 10, 1);
+		final List<CardTag> result = this.cardTagService.findByCardId(1L);
 
 		// Then
 		assertThat(result).hasSize(3);
@@ -171,7 +159,7 @@ class CardTagServiceImplTest {
 		when(this.cardTagEntityMapper.toModelList(entities)).thenReturn(Collections.singletonList(this.testCardTag));
 
 		// When
-        this.cardTagService.findByCardId(1L, 10, 1);
+		this.cardTagService.findByCardId(1L);
 
 		// Then
 		verify(this.cardTagEntityMapper, times(1)).toModelList(entities);

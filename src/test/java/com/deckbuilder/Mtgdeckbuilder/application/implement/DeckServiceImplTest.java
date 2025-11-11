@@ -2,6 +2,8 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
@@ -50,21 +52,22 @@ class DeckServiceImplTest {
 
 	@BeforeEach
 	void setUp() {
-        this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
+		this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
 				.deckType("main").isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
 
-        this.testDeckEntity = new DeckEntity();
-        this.testDeckEntity.setId(1L);
-        this.testDeckEntity.setName("Test Deck");
-        this.testDeckEntity.setDescription("A test deck");
-        this.testDeckEntity.setUserId(1L);
-        this.testDeckEntity.setFormatId(1L);
-        this.testDeckEntity.setDeckType("main");
-        this.testDeckEntity.setIsPrivate(false);
-        this.testDeckEntity.setCreated(LocalDateTime.now());
-        this.testDeckEntity.setModified(LocalDateTime.now());
+		this.testDeckEntity = new DeckEntity();
+		this.testDeckEntity.setId(1L);
+		this.testDeckEntity.setName("Test Deck");
+		this.testDeckEntity.setDescription("A test deck");
+		this.testDeckEntity.setUserId(1L);
+		this.testDeckEntity.setFormatId(1L);
+		this.testDeckEntity.setDeckType("main");
+		this.testDeckEntity.setIsPrivate(false);
+		this.testDeckEntity.setCreated(LocalDateTime.now());
+		this.testDeckEntity.setModified(LocalDateTime.now());
 
-        this.testCardInDeck = CardInDeckEntity.builder().id(1L).deckId(1L).cardId(100L).quantity(2).section("main").build();
+		this.testCardInDeck = CardInDeckEntity.builder().id(1L).deckId(1L).cardId(100L).quantity(2).section("main")
+				.build();
 	}
 
 	@Test
@@ -198,7 +201,7 @@ class DeckServiceImplTest {
 		when(this.deckRepository.existsById(999L)).thenReturn(false);
 
 		// When/Then
-		assertThatThrownBy(() -> this.deckService.update(999L, this.testDeck)).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> this.deckService.update(999L, this.testDeck)).isInstanceOf(DeckNotFoundException.class)
 				.hasMessageContaining("Deck not found with id: 999");
 
 		verify(this.deckRepository).existsById(999L);
@@ -274,8 +277,8 @@ class DeckServiceImplTest {
 		final int addQuantity = 2;
 		final String section = "main";
 
-		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId).quantity(2)
-				.section(section).build();
+		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId)
+				.quantity(2).section(section).build();
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, section))
@@ -305,7 +308,8 @@ class DeckServiceImplTest {
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 
 		// Main section
-		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, "main")).thenReturn(Optional.empty());
+		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, "main"))
+				.thenReturn(Optional.empty());
 		when(this.cardInDeckRepository.save(any(CardInDeckEntity.class))).thenReturn(this.testCardInDeck);
 
 		// Sideboard section
@@ -332,7 +336,7 @@ class DeckServiceImplTest {
 
 		// When/Then
 		assertThatThrownBy(() -> this.deckService.addCard(999L, 100L, 4, "main"))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Deck not found with id: 999");
+				.isInstanceOf(DeckNotFoundException.class).hasMessageContaining("Deck not found with id: 999");
 
 		verify(this.deckRepository).existsById(999L);
 		verify(this.cardInDeckRepository, never()).save(any());
@@ -345,11 +349,13 @@ class DeckServiceImplTest {
 		when(this.deckRepository.existsById(1L)).thenReturn(true);
 
 		// When/Then - Zero quantity
-		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, 0, "main")).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, 0, "main"))
+				.isInstanceOf(InvalidDeckCompositionException.class)
 				.hasMessageContaining("Quantity must be greater than 0");
 
 		// When/Then - Negative quantity
-		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, -5, "main")).isInstanceOf(IllegalArgumentException.class)
+		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, -5, "main"))
+				.isInstanceOf(InvalidDeckCompositionException.class)
 				.hasMessageContaining("Quantity must be greater than 0");
 
 		verify(this.cardInDeckRepository, never()).save(any());
@@ -363,11 +369,11 @@ class DeckServiceImplTest {
 
 		// When/Then - Invalid section
 		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, 4, "invalid"))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Invalid section");
+				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Invalid section");
 
 		// When/Then - Null section
-		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, 4, null)).isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("Invalid section");
+		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, 4, null))
+				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Invalid section");
 
 		verify(this.cardInDeckRepository, never()).save(any());
 	}
@@ -405,8 +411,8 @@ class DeckServiceImplTest {
 		final int removeQuantity = 1;
 		final String section = "main";
 
-		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId).quantity(4)
-				.section(section).build();
+		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId)
+				.quantity(4).section(section).build();
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, section))
@@ -434,8 +440,8 @@ class DeckServiceImplTest {
 		final int removeQuantity = 4;
 		final String section = "main";
 
-		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId).quantity(4)
-				.section(section).build();
+		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId)
+				.quantity(4).section(section).build();
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, section))
@@ -462,8 +468,8 @@ class DeckServiceImplTest {
 		final int removeQuantity = 10;
 		final String section = "main";
 
-		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId).quantity(4)
-				.section(section).build();
+		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(deckId).cardId(cardId)
+				.quantity(4).section(section).build();
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, section))
@@ -488,7 +494,7 @@ class DeckServiceImplTest {
 
 		// When/Then
 		assertThatThrownBy(() -> this.deckService.removeCard(999L, 100L, 1, "main"))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Deck not found with id: 999");
+				.isInstanceOf(DeckNotFoundException.class).hasMessageContaining("Deck not found with id: 999");
 
 		verify(this.deckRepository).existsById(999L);
 		verify(this.cardInDeckRepository, never()).deleteByDeckIdAndCardIdAndSection(any(), any(), any());
@@ -508,7 +514,8 @@ class DeckServiceImplTest {
 
 		// When/Then
 		assertThatThrownBy(() -> this.deckService.removeCard(deckId, cardId, 1, section))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Card not found in deck section");
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Card not found in deck section");
 
 		verify(this.cardInDeckRepository, never()).deleteByDeckIdAndCardIdAndSection(any(), any(), any());
 	}
@@ -521,11 +528,13 @@ class DeckServiceImplTest {
 
 		// When/Then - Zero quantity
 		assertThatThrownBy(() -> this.deckService.removeCard(1L, 100L, 0, "main"))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Quantity must be greater than 0");
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Quantity must be greater than 0");
 
 		// When/Then - Negative quantity
 		assertThatThrownBy(() -> this.deckService.removeCard(1L, 100L, -5, "main"))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Quantity must be greater than 0");
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Quantity must be greater than 0");
 
 		verify(this.cardInDeckRepository, never()).deleteByDeckIdAndCardIdAndSection(any(), any(), any());
 	}
@@ -538,7 +547,7 @@ class DeckServiceImplTest {
 
 		// When/Then
 		assertThatThrownBy(() -> this.deckService.removeCard(1L, 100L, 1, "invalid"))
-				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Invalid section");
+				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Invalid section");
 
 		verify(this.cardInDeckRepository, never()).deleteByDeckIdAndCardIdAndSection(any(), any(), any());
 	}
@@ -561,7 +570,7 @@ class DeckServiceImplTest {
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 
 		// When
-        this.deckService.removeCard(deckId, cardId, 4, "main");
+		this.deckService.removeCard(deckId, cardId, 4, "main");
 
 		// Then - Should only delete from main, not from sideboard
 		verify(this.cardInDeckRepository).deleteByDeckIdAndCardIdAndSection(deckId, cardId, "main");
