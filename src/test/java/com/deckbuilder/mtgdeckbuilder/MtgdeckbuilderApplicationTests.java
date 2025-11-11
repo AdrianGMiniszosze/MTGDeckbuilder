@@ -1,4 +1,4 @@
-package com.deckbuilder.Mtgdeckbuilder;
+package com.deckbuilder.mtgdeckbuilder;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

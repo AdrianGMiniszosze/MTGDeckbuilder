@@ -1,4 +1,4 @@
-package com.deckbuilder.Mtgdeckbuilder.infrastructure.model;
+package com.deckbuilder.mtgdeckbuilder.infrastructure.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,6 +13,6 @@ import java.io.Serializable;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CardTagId implements Serializable {
-    private Long cardId;
-    private Long tagId;
+	private Long cardId;
+	private Long tagId;
 }
