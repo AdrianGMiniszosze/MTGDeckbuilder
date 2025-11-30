@@ -1,4 +1,4 @@
-package com.deckbuilder.Mtgdeckbuilder;
+package com.deckbuilder.mtgdeckbuilder;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

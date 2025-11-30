@@ -1,13 +1,14 @@
-package com.deckbuilder.Mtgdeckbuilder.contract;
+package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.model.CardDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CardTagDTO;
-import com.deckbuilder.Mtgdeckbuilder.application.CardService;
-import com.deckbuilder.Mtgdeckbuilder.application.CardTagService;
-import com.deckbuilder.Mtgdeckbuilder.contract.mapper.CardMapper;
-import com.deckbuilder.Mtgdeckbuilder.contract.mapper.CardTagMapper;
-import com.deckbuilder.Mtgdeckbuilder.model.Card;
-import com.deckbuilder.Mtgdeckbuilder.model.CardTag;
+import com.deckbuilder.mtgdeckbuilder.application.CardService;
+import com.deckbuilder.mtgdeckbuilder.application.CardTagService;
+import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardMapper;
+import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardTagMapper;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.model.Card;
+import com.deckbuilder.mtgdeckbuilder.model.CardTag;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,319 +24,299 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Card Controller Tests")
 class CardControllerTest {
 
-    @Mock
-    private CardService cardService;
+	@Mock
+	private CardService cardService;
 
-    @Mock
-    private CardTagService cardTagService;
+	@Mock
+	private CardTagService cardTagService;
 
-    @Mock
-    private CardMapper cardMapper;
+	@Mock
+	private CardMapper cardMapper;
 
-    @Mock
-    private CardTagMapper cardTagMapper;
+	@Mock
+	private CardTagMapper cardTagMapper;
 
-    @InjectMocks
-    private CardController cardController;
+	@InjectMocks
+	private CardController cardController;
 
-    private Card testCard;
-    private CardDTO testCardDTO;
+	private Card testCard;
+	private CardDTO testCardDTO;
 
-    @BeforeEach
-    void setUp() {
-        testCard = Card.builder()
-                .id(1L)
-                .name("Lightning Bolt")
-                .manaCost("{R}")
-                .typeLine("Instant")
-                .oracleText("Lightning Bolt deals 3 damage to any target.")
-                .rarity("Common")
-                .build();
+	@BeforeEach
+	void setUp() {
+		this.testCard = Card.builder().id(1L).name("Lightning Bolt").manaCost("{R}").typeLine("Instant")
+				.oracleText("Lightning Bolt deals 3 damage to any target.").rarity("Common").build();
 
-        testCardDTO = CardDTO.builder()
-                .id(1)
-                .card_name("Lightning Bolt")
-                .mana_cost("{R}")
-                .card_type("Instant")
-                .card_text("Lightning Bolt deals 3 damage to any target.")
-                .rarity("Common")
-                .build();
-    }
+		this.testCardDTO = CardDTO.builder().id(1).card_name("Lightning Bolt").mana_cost("{R}").cmc(1)
+				.color_identity("R").type_line("Instant").card_type("Instant").rarity(CardDTO.Rarity.COMMON)
+				.card_text("Lightning Bolt deals 3 damage to any target.").image_url("https://example.com/card.jpg")
+				.language("en").build();
+	}
 
-    @Test
-    @DisplayName("Should list all cards")
-    void shouldListAllCards() {
-        // Given
-        Card card2 = Card.builder().id(2L).name("Counterspell").build();
-        CardDTO cardDTO2 = CardDTO.builder()
-                .id(2)
-                .card_name("Counterspell")
-                .build();
+	@Test
+	@DisplayName("Should list all cards")
+	void shouldListAllCards() {
+		// Given
+		final Card card2 = Card.builder().id(2L).name("Counterspell").build();
+		final CardDTO cardDTO2 = CardDTO.builder().id(2).card_name("Counterspell").mana_cost("{U}{U}").cmc(2)
+				.color_identity("U").type_line("Instant").card_type("Instant").rarity(CardDTO.Rarity.UNCOMMON)
+				.card_text("Counter target spell.").image_url("https://example.com/counterspell.jpg").language("en")
+				.build();
 
-        when(cardService.getAllCards(10, 0)).thenReturn(Arrays.asList(testCard, card2));
-        when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
-        when(cardMapper.toDto(card2)).thenReturn(cardDTO2);
+		when(this.cardService.getAllCards(10, 0)).thenReturn(Arrays.asList(this.testCard, card2));
+		when(this.cardMapper.toDto(this.testCard)).thenReturn(this.testCardDTO);
+		when(this.cardMapper.toDto(card2)).thenReturn(cardDTO2);
 
-        // When
-        ResponseEntity<List<CardDTO>> response = cardController.listCards(10, 0);
+		// When
+		final ResponseEntity<List<CardDTO>> response = this.cardController.listCards(10, 0);
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).hasSize(2);
-        assertThat(response.getBody().get(0).getCard_name()).isEqualTo("Lightning Bolt");
-        assertThat(response.getBody().get(1).getCard_name()).isEqualTo("Counterspell");
-        verify(cardService, times(1)).getAllCards(10, 0);
-        verify(cardMapper, times(2)).toDto(any(Card.class));
-    }
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).hasSize(2);
+		assertThat(response.getBody().get(0).getCard_name()).isEqualTo("Lightning Bolt");
+		assertThat(response.getBody().get(1).getCard_name()).isEqualTo("Counterspell");
+		verify(this.cardService, times(1)).getAllCards(10, 0);
+		verify(this.cardMapper, times(2)).toDto(any(Card.class));
+	}
 
-    @Test
-    @DisplayName("Should list cards with default pagination")
-    void shouldListCardsWithDefaultPagination() {
-        // Given
-        when(cardService.getAllCards(10, 0)).thenReturn(List.of(testCard));
-        when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+	@Test
+	@DisplayName("Should list cards with default pagination")
+	void shouldListCardsWithDefaultPagination() {
+		// Given
+		when(this.cardService.getAllCards(10, 0)).thenReturn(List.of(this.testCard));
+		when(this.cardMapper.toDto(this.testCard)).thenReturn(this.testCardDTO);
 
-        // When
-        ResponseEntity<List<CardDTO>> response = cardController.listCards(null, null);
+		// When
+		final ResponseEntity<List<CardDTO>> response = this.cardController.listCards(null, null);
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(cardService, times(1)).getAllCards(10, 0);
-    }
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		verify(this.cardService, times(1)).getAllCards(10, 0);
+	}
 
-    @Test
-    @DisplayName("Should get card by ID when exists")
-    void shouldGetCardByIdWhenExists() {
-        // Given
-        when(cardService.getCardById(1L)).thenReturn(Optional.of(testCard));
-        when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+	@Test
+	@DisplayName("Should get card by ID when exists")
+	void shouldGetCardByIdWhenExists() {
+		// Given
+		when(this.cardService.getCardById(1L)).thenReturn(Optional.of(this.testCard));
+		when(this.cardMapper.toDto(this.testCard)).thenReturn(this.testCardDTO);
 
-        // When
-        ResponseEntity<CardDTO> response = cardController.getCardById(1);
+		// When
+		final ResponseEntity<CardDTO> response = this.cardController.getCardById(1);
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getCard_name()).isEqualTo("Lightning Bolt");
-        verify(cardService, times(1)).getCardById(1L);
-        verify(cardMapper, times(1)).toDto(testCard);
-    }
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getCard_name()).isEqualTo("Lightning Bolt");
+		verify(this.cardService, times(1)).getCardById(1L);
+		verify(this.cardMapper, times(1)).toDto(this.testCard);
+	}
 
-    @Test
-    @DisplayName("Should return 404 when card not found")
-    void shouldReturn404WhenCardNotFound() {
-        // Given
-        when(cardService.getCardById(999L)).thenReturn(Optional.empty());
+	@Test
+	@DisplayName("Should throw exception when card not found")
+	void shouldReturn404WhenCardNotFound() {
 
-        // When
-        ResponseEntity<CardDTO> response = cardController.getCardById(999);
+		// When/Then
+		assertThatThrownBy(() -> this.cardController.getCardById(999)).isInstanceOf(CardNotFoundException.class)
+				.hasMessageContaining("Card not found with id: 999");
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(response.getBody()).isNull();
-        verify(cardService, times(1)).getCardById(999L);
-        verify(cardMapper, never()).toDto(any(Card.class));
-    }
+		verify(this.cardService, times(1)).getCardById(999L);
+		verify(this.cardMapper, never()).toDto(any(Card.class));
+	}
 
-    @Test
-    @DisplayName("Should create card")
-    void shouldCreateCard() {
-        // Given
-        Card newCard = Card.builder().name("New Card").build();
-        Card createdCard = Card.builder().id(3L).name("New Card").build();
-        CardDTO newCardDTO = CardDTO.builder().card_name("New Card").build();
-        CardDTO createdCardDTO = CardDTO.builder()
-                .id(3)
-                .card_name("New Card")
-                .build();
+	@Test
+	@DisplayName("Should create card")
+	void shouldCreateCard() {
+		// Given
+		final Card newCard = Card.builder().name("New Card").build();
+		final Card createdCard = Card.builder().id(3L).name("New Card").build();
 
-        when(cardMapper.toEntity(newCardDTO)).thenReturn(newCard);
-        when(cardService.createCard(newCard)).thenReturn(createdCard);
-        when(cardMapper.toDto(createdCard)).thenReturn(createdCardDTO);
+		final CardDTO newCardDTO = CardDTO.builder().card_name("New Card").mana_cost("{1}").cmc(1).color_identity("")
+				.type_line("Artifact").card_type("Artifact").rarity(CardDTO.Rarity.COMMON).card_text("Test artifact")
+				.image_url("https://example.com/new.jpg").language("en").build();
 
-        // When
-        ResponseEntity<CardDTO> response = cardController.createCard(newCardDTO);
+		final CardDTO createdCardDTO = CardDTO.builder().id(3).card_name("New Card").mana_cost("{1}").cmc(1)
+				.color_identity("").type_line("Artifact").card_type("Artifact").rarity(CardDTO.Rarity.COMMON)
+				.card_text("Test artifact").image_url("https://example.com/new.jpg").language("en").build();
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getId()).isEqualTo(3);
-        assertThat(response.getBody().getCard_name()).isEqualTo("New Card");
-        verify(cardMapper, times(1)).toEntity(newCardDTO);
-        verify(cardService, times(1)).createCard(newCard);
-        verify(cardMapper, times(1)).toDto(createdCard);
-    }
+		when(this.cardMapper.toEntity(newCardDTO)).thenReturn(newCard);
+		when(this.cardService.createCard(newCard)).thenReturn(createdCard);
+		when(this.cardMapper.toDto(createdCard)).thenReturn(createdCardDTO);
 
-    @Test
-    @DisplayName("Should update card when exists")
-    void shouldUpdateCardWhenExists() {
-        // Given
-        CardDTO updatedDTO = CardDTO.builder()
-                .id(1)
-                .card_name("Lightning Bolt Updated")
-                .build();
-        
-        Card updatedCard = Card.builder().name("Lightning Bolt Updated").build();
-        Card savedCard = Card.builder().id(1L).name("Lightning Bolt Updated").build();
-        CardDTO savedDTO = CardDTO.builder()
-                .id(1)
-                .card_name("Lightning Bolt Updated")
-                .build();
+		// When
+		final ResponseEntity<CardDTO> response = this.cardController.createCard(newCardDTO);
 
-        when(cardMapper.toEntity(updatedDTO)).thenReturn(updatedCard);
-        when(cardService.updateCard(1L, updatedCard)).thenReturn(Optional.of(savedCard));
-        when(cardMapper.toDto(savedCard)).thenReturn(savedDTO);
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getId()).isEqualTo(3);
+		assertThat(response.getBody().getCard_name()).isEqualTo("New Card");
+		verify(this.cardMapper, times(1)).toEntity(newCardDTO);
+		verify(this.cardService, times(1)).createCard(newCard);
+		verify(this.cardMapper, times(1)).toDto(createdCard);
+	}
 
-        // When
-        ResponseEntity<CardDTO> response = cardController.updateCard(1, updatedDTO);
+	@Test
+	@DisplayName("Should update card when exists")
+	void shouldUpdateCardWhenExists() {
+		// Given
+		final CardDTO updatedDTO = CardDTO.builder().id(1).card_name("Lightning Bolt Updated").mana_cost("{R}").cmc(1)
+				.color_identity("R").type_line("Instant").card_type("Instant").rarity(CardDTO.Rarity.UNCOMMON)
+				.card_text("Updated text").image_url("https://example.com/updated.jpg").language("en").build();
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).isNotNull();
-        assertThat(response.getBody().getCard_name()).isEqualTo("Lightning Bolt Updated");
-        verify(cardMapper, times(1)).toEntity(updatedDTO);
-        verify(cardService, times(1)).updateCard(1L, updatedCard);
-        verify(cardMapper, times(1)).toDto(savedCard);
-    }
+		final Card updatedCard = Card.builder().name("Lightning Bolt Updated").build();
+		final Card savedCard = Card.builder().id(1L).name("Lightning Bolt Updated").build();
 
-    @Test
-    @DisplayName("Should return 404 when updating non-existent card")
-    void shouldReturn404WhenUpdatingNonExistentCard() {
-        // Given
-        CardDTO updatedDTO = CardDTO.builder().card_name("Non-existent").build();
-        Card card = Card.builder().name("Non-existent").build();
+		final CardDTO savedDTO = CardDTO.builder().id(1).card_name("Lightning Bolt Updated").mana_cost("{R}").cmc(1)
+				.color_identity("R").type_line("Instant").card_type("Instant").rarity(CardDTO.Rarity.UNCOMMON)
+				.card_text("Updated text").image_url("https://example.com/updated.jpg").language("en").build();
 
-        when(cardMapper.toEntity(updatedDTO)).thenReturn(card);
-        when(cardService.updateCard(999L, card)).thenReturn(Optional.empty());
+		when(this.cardMapper.toEntity(updatedDTO)).thenReturn(updatedCard);
+		when(this.cardService.updateCard(1L, updatedCard)).thenReturn(Optional.of(savedCard));
+		when(this.cardMapper.toDto(savedCard)).thenReturn(savedDTO);
 
-        // When
-        ResponseEntity<CardDTO> response = cardController.updateCard(999, updatedDTO);
+		// When
+		final ResponseEntity<CardDTO> response = this.cardController.updateCard(1, updatedDTO);
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(response.getBody()).isNull();
-        verify(cardService, times(1)).updateCard(999L, card);
-        verify(cardMapper, never()).toDto(any(Card.class));
-    }
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getCard_name()).isEqualTo("Lightning Bolt Updated");
+		verify(this.cardMapper, times(1)).toEntity(updatedDTO);
+		verify(this.cardService, times(1)).updateCard(1L, updatedCard);
+		verify(this.cardMapper, times(1)).toDto(savedCard);
+	}
 
-    @Test
-    @DisplayName("Should delete card")
-    void shouldDeleteCard() {
-        // Given
-        doNothing().when(cardService).deleteCard(1L);
+	@Test
+	@DisplayName("Should throw exception when updating non-existent card")
+	void shouldReturn404WhenUpdatingNonExistentCard() {
+		// Given
+		final CardDTO updatedDTO = CardDTO.builder().card_name("Non-existent").mana_cost("{1}").cmc(1)
+				.color_identity("").type_line("Artifact").card_type("Artifact").rarity(CardDTO.Rarity.COMMON)
+				.card_text("Test").image_url("https://example.com/test.jpg").language("en").build();
 
-        // When
-        ResponseEntity<Void> response = cardController.deleteCard(1);
+		final Card card = Card.builder().name("Non-existent").build();
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-        assertThat(response.getBody()).isNull();
-        verify(cardService, times(1)).deleteCard(1L);
-    }
+		when(this.cardMapper.toEntity(updatedDTO)).thenReturn(card);
+		when(this.cardService.updateCard(999L, card)).thenReturn(Optional.empty());
 
-    @Test
-    @DisplayName("Should list tags for card")
-    void shouldListTagsForCard() {
-        // Given
-        CardTag tag1 = CardTag.builder()
-                .cardId(1L)
-                .tagId(1L)
-                .weight(0.9)
-                .build();
-        CardTag tag2 = CardTag.builder()
-                .cardId(1L)
-                .tagId(2L)
-                .weight(0.8)
-                .build();
-        List<CardTag> tags = Arrays.asList(tag1, tag2);
+		// When/Then
+		assertThatThrownBy(() -> this.cardController.updateCard(999, updatedDTO))
+				.isInstanceOf(CardNotFoundException.class).hasMessageContaining("Card not found with id: 999");
 
-        CardTagDTO tagDTO1 = CardTagDTO.builder()
-                .card_id(1)
-                .tag_id(1)
-                .build();
-        CardTagDTO tagDTO2 = CardTagDTO.builder()
-                .card_id(1)
-                .tag_id(2)
-                .build();
-        List<CardTagDTO> tagDTOs = Arrays.asList(tagDTO1, tagDTO2);
+		// Then
+		verify(this.cardService, times(1)).updateCard(999L, card);
+		verify(this.cardMapper, never()).toDto(any(Card.class));
+	}
 
-        when(cardTagService.findByCardId(1L, 10, 0)).thenReturn(tags);
-        when(cardTagMapper.toCardTagDTOs(tags)).thenReturn(tagDTOs);
+	@Test
+	@DisplayName("Should delete card")
+	void shouldDeleteCard() {
+		// Given
+		doNothing().when(this.cardService).deleteCard(1L);
 
-        // When
-        ResponseEntity<List<CardTagDTO>> response = cardController.listTagsForCard(1, 10, 0);
+		// When
+		final ResponseEntity<Void> response = this.cardController.deleteCard(1);
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody()).hasSize(2);
-        verify(cardTagService, times(1)).findByCardId(1L, 10, 0);
-        verify(cardTagMapper, times(1)).toCardTagDTOs(tags);
-    }
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+		assertThat(response.getBody()).isNull();
+		verify(this.cardService, times(1)).deleteCard(1L);
+	}
 
-    @Test
-    @DisplayName("Should update card tag when exists")
-    void shouldUpdateCardTagWhenExists() {
-        // Given
-        CardTagDTO tagDTO = CardTagDTO.builder()
-                .card_id(1)
-                .tag_id(1)
-                .build();
-        
-        CardTag tag = CardTag.builder().cardId(1L).tagId(1L).build();
-        CardTag updatedTag = CardTag.builder().cardId(1L).tagId(1L).weight(0.95).build();
-        CardTagDTO updatedDTO = CardTagDTO.builder()
-                .card_id(1)
-                .tag_id(1)
-                .build();
+	@Test
+	@DisplayName("Should list tags for card")
+	void shouldListTagsForCard() {
+		// Given
+		final CardTag tag1 = CardTag.builder().cardId(1L).tagId(1L).weight(0.9).build();
+		final CardTag tag2 = CardTag.builder().cardId(1L).tagId(2L).weight(0.8).build();
+		final List<CardTag> tags = Arrays.asList(tag1, tag2);
 
-        when(cardTagMapper.toCardTag(tagDTO)).thenReturn(tag);
-        when(cardTagService.updateCardTag(1L, 1L, tag)).thenReturn(Optional.of(updatedTag));
-        when(cardTagMapper.toCardTagDTO(updatedTag)).thenReturn(updatedDTO);
+		final CardTagDTO tagDTO1 = CardTagDTO.builder().card_id(1).tag_id(1).weight(0.9f).confidence(0.95f)
+				.source(CardTagDTO.Source.MANUAL).build();
 
-        // When
-        ResponseEntity<CardTagDTO> response = cardController.updateCardTag(1, 1, tagDTO);
+		final CardTagDTO tagDTO2 = CardTagDTO.builder().card_id(1).tag_id(2).weight(0.8f).confidence(0.90f)
+				.source(CardTagDTO.Source.MANUAL).build();
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        verify(cardTagService, times(1)).updateCardTag(1L, 1L, tag);
-    }
+		final List<CardTagDTO> tagDTOs = Arrays.asList(tagDTO1, tagDTO2);
 
-    @Test
-    @DisplayName("Should return 404 when updating non-existent card tag")
-    void shouldReturn404WhenUpdatingNonExistentCardTag() {
-        // Given
-        CardTagDTO tagDTO = CardTagDTO.builder().build();
-        CardTag tag = CardTag.builder().build();
+		when(this.cardTagService.findByCardId(1L)).thenReturn(tags);
+		when(this.cardTagMapper.toCardTagDTOs(tags)).thenReturn(tagDTOs);
 
-        when(cardTagMapper.toCardTag(tagDTO)).thenReturn(tag);
-        when(cardTagService.updateCardTag(999L, 999L, tag)).thenReturn(Optional.empty());
+		// When
+		final ResponseEntity<List<CardTagDTO>> response = this.cardController.listTagsForCard(1);
 
-        // When
-        ResponseEntity<CardTagDTO> response = cardController.updateCardTag(999, 999, tagDTO);
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).hasSize(2);
+		verify(this.cardTagService, times(1)).findByCardId(1L);
+		verify(this.cardTagMapper, times(1)).toCardTagDTOs(tags);
+	}
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        verify(cardTagService, times(1)).updateCardTag(999L, 999L, tag);
-    }
+	@Test
+	@DisplayName("Should update card tag when exists")
+	void shouldUpdateCardTagWhenExists() {
+		// Given
+		final CardTagDTO tagDTO = CardTagDTO.builder().card_id(1).tag_id(1).weight(0.95f).confidence(0.99f)
+				.source(CardTagDTO.Source.AI_TEXT).build();
 
-    @Test
-    @DisplayName("Should delete card tag")
-    void shouldDeleteCardTag() {
-        // Given
-        doNothing().when(cardTagService).deleteCardTag(1L, 1L);
+		final CardTag tag = CardTag.builder().cardId(1L).tagId(1L).build();
+		final CardTag updatedTag = CardTag.builder().cardId(1L).tagId(1L).weight(0.95).build();
 
-        // When
-        ResponseEntity<Void> response = cardController.deleteCardTag(1, 1);
+		final CardTagDTO updatedDTO = CardTagDTO.builder().card_id(1).tag_id(1).weight(0.95f).confidence(0.99f)
+				.source(CardTagDTO.Source.AI_TEXT).build();
 
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-        verify(cardTagService, times(1)).deleteCardTag(1L, 1L);
-    }
+		when(this.cardTagMapper.toCardTag(tagDTO)).thenReturn(tag);
+		when(this.cardTagService.updateCardTag(1L, 1L, tag)).thenReturn(Optional.of(updatedTag));
+		when(this.cardTagMapper.toCardTagDTO(updatedTag)).thenReturn(updatedDTO);
+
+		// When
+		final ResponseEntity<CardTagDTO> response = this.cardController.updateCardTag(1, 1, tagDTO);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		verify(this.cardTagService, times(1)).updateCardTag(1L, 1L, tag);
+	}
+
+	@Test
+	@DisplayName("Should throw exception when updating non-existent card tag")
+	void shouldReturn404WhenUpdatingNonExistentCardTag() {
+		// Given
+		final CardTagDTO tagDTO = CardTagDTO.builder().card_id(999).tag_id(999).weight(0.5f).confidence(0.5f)
+				.source(CardTagDTO.Source.MANUAL).build();
+
+		final CardTag tag = CardTag.builder().build();
+
+		when(this.cardTagMapper.toCardTag(tagDTO)).thenReturn(tag);
+		when(this.cardTagService.updateCardTag(999L, 999L, tag)).thenReturn(Optional.empty());
+
+		// When/Then
+		assertThatThrownBy(() -> this.cardController.updateCardTag(999, 999, tagDTO))
+				.isInstanceOf(CardNotFoundException.class).hasMessageContaining("Card not found with id: 999");
+
+		// Then
+		verify(this.cardTagService, times(1)).updateCardTag(999L, 999L, tag);
+	}
+
+	@Test
+	@DisplayName("Should delete card tag")
+	void shouldDeleteCardTag() {
+		// Given
+		doNothing().when(this.cardTagService).deleteCardTag(1L, 1L);
+
+		// When
+		final ResponseEntity<Void> response = this.cardController.deleteCardTag(1, 1);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+		verify(this.cardTagService, times(1)).deleteCardTag(1L, 1L);
+	}
 }
