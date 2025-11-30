@@ -1,4 +1,4 @@
-package com.deckbuilder.Mtgdeckbuilder.infrastructure.model;
+package com.deckbuilder.mtgdeckbuilder.infrastructure.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -9,10 +9,10 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 public class TagEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-    
-    @Column(nullable = false, unique = true)
-    private String name;
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long id;
+
+	@Column(nullable = false, unique = true)
+	private String name;
 }
