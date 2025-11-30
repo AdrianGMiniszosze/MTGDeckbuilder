@@ -17,6 +17,5 @@ buildNumber.properties
 .classpath
 
 infra/.env
-src/main/resources/application.properties
 
 Summary and improvement.txt

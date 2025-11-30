@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.DecksApi;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
@@ -20,17 +21,17 @@ public class DeckController implements DecksApi {
 	private final DeckMapper deckMapper;
 
 	@Override
-	public ResponseEntity<List<DeckDTO>> listDecks(Integer pagesize, Integer pagenumber) {
+	public ResponseEntity<List<CompleteDeckDTO>> listDecks(Integer pagesize, Integer pagenumber) {
 		final var decks = this.deckService.getAll(pagesize != null ? pagesize : 10,
 				pagenumber != null ? pagenumber : 0);
-		return ResponseEntity.ok(this.deckMapper.toDecksDTO(decks));
+		return ResponseEntity.ok(this.deckMapper.toCompleteDecksDTO(decks));
 	}
 
 	@Override
-	public ResponseEntity<DeckDTO> getDeckById(Integer id) {
+	public ResponseEntity<CompleteDeckDTO> getDeckById(Integer id) {
 		final var deck = this.deckService.findById(id.longValue())
-				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
-		return ResponseEntity.ok(this.deckMapper.toDeckDTO(deck));
+				.orElseThrow();
+		return ResponseEntity.ok(this.deckMapper.toCompleteDeckDTO(deck));
 	}
 
 	@Override

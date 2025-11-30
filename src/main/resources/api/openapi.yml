@@ -385,13 +385,13 @@ paths:
             default: 0
       responses:
         '200':
-          description: List of decks for the user
+          description: List of complete decks for the user with sideboard and maybeboard
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Deck'
+                  $ref: '#/components/schemas/CompleteDeck'
 
   /formats:
     get:
@@ -527,13 +527,13 @@ paths:
             default: 0
       responses:
         '200':
-          description: List of decks
+          description: List of complete decks with sideboard and maybeboard
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Deck'
+                  $ref: '#/components/schemas/CompleteDeck'
     post:
       summary: Create a new deck
       operationId: createDeck
@@ -567,11 +567,13 @@ paths:
             minimum: 1
       responses:
         '200':
-          description: Deck details
+          description: Complete deck with sideboard and maybeboard
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Deck'
+                $ref: '#/components/schemas/CompleteDeck'
+        '404':
+          description: Deck not found
     put:
       summary: Update a deck
       operationId: updateDeck
@@ -1164,6 +1166,69 @@ components:
             $ref: '#/components/schemas/CardDeck'
           maxItems: 250
 
+    CompleteDeck:
+      type: object
+      required:
+        - id
+        - user_id
+        - deck_name
+        - main_board
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user_id:
+          type: integer
+          minimum: 1
+        deck_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "My Complete Deck"
+        main_board:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardDeck'
+          maxItems: 250
+        side_board:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardDeck'
+          maxItems: 250
+        maybe_board:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardDeck'
+          maxItems: 250
+        creation_date:
+          type: string
+          format: date-time
+          readOnly: true
+        last_modification:
+          type: string
+          format: date-time
+          readOnly: true
+        description:
+          type: string
+          maxLength: 999
+        is_private:
+          type: boolean
+          default: true
+        tournament:
+          type: string
+          maxLength: 100
+        share_url:
+          type: string
+          format: uri
+          maxLength: 200
+          readOnly: true
+        parent_deck_id:
+          type: integer
+          minimum: 1
+        format:
+          type: integer
+          minimum: 1
+
     Tag:
       type: object
       required:
@@ -1304,4 +1369,3 @@ tags:
     description: "Operations related to tags"
   - name: CardTags
     description: "Operations related to card-tag relationships"
-
