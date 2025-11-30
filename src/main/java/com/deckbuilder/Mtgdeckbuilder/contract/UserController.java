@@ -1,7 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.UsersApi;
-import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.UserDTO;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
@@ -57,9 +57,9 @@ public class UserController implements UsersApi {
 	}
 
 	@Override
-	public ResponseEntity<List<DeckDTO>> getUserDecks(Integer id, Integer pagesize, Integer pagenumber) {
+	public ResponseEntity<List<CompleteDeckDTO>> getUserDecks(Integer id, Integer pagesize, Integer pagenumber) {
 		final var decks = this.userService.getUserDecks(id.longValue(), pagesize != null ? pagesize : 10,
 				pagenumber != null ? pagenumber : 0);
-		return ResponseEntity.ok(this.deckMapper.toDecksDTO(decks));
+		return ResponseEntity.ok(this.deckMapper.toCompleteDecksDTO(decks));
 	}
 }

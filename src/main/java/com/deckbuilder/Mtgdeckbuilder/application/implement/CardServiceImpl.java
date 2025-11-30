@@ -121,4 +121,23 @@ public class CardServiceImpl implements CardService {
 		// TODO: Implement similar card search using the vector of the given card
 		throw new UnsupportedOperationException("Not implemented yet");
 	}
+
+	@Override
+	public List<Card> findByCollectorNumber(String collectorNumber) {
+		log.debug("Finding cards by collector number: {}", collectorNumber);
+		final List<CardEntity> entities = this.cardRepository.findByCollectorNumber(collectorNumber);
+		final List<Card> cards = entities.stream().map(this.cardEntityMapper::toModel).toList();
+		log.debug("Found {} cards with collector number: {}", cards.size(), collectorNumber);
+		return cards;
+	}
+
+	@Override
+	public List<Card> findByNameAndSet(String name, Long setId) {
+		log.debug("Finding cards by name: {} and set: {}", name, setId);
+		final List<CardEntity> entities = this.cardRepository.findByNameAndCardSet(name, setId);
+		final List<Card> cards = entities.stream().map(this.cardEntityMapper::toModel).toList();
+		log.debug("Found {} cards with name: {} in set: {}", cards.size(), name, setId);
+		return cards;
+	}
+
 }

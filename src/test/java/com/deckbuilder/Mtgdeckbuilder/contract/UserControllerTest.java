@@ -1,6 +1,6 @@
 package com.deckbuilder.mtgdeckbuilder.contract;
 
-import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.UserDTO;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
@@ -175,17 +175,15 @@ class UserControllerTest {
 		deck2.setId(2L);
 		deck2.setName("Red Aggro");
 
-		final DeckDTO deckDTO1 = DeckDTO.builder().id(1).deck_name("Blue Control").user_id(1)
-				.deck_type(DeckDTO.Deck_type.MAIN).build();
+		final CompleteDeckDTO deckDTO1 = CompleteDeckDTO.builder().id(1).deck_name("Blue Control").user_id(1).build();
 
-		final DeckDTO deckDTO2 = DeckDTO.builder().id(2).deck_name("Red Aggro").user_id(1)
-				.deck_type(DeckDTO.Deck_type.MAIN).build();
+		final CompleteDeckDTO deckDTO2 = CompleteDeckDTO.builder().id(2).deck_name("Red Aggro").user_id(1).build();
 
 		when(this.userService.getUserDecks(1L, 10, 0)).thenReturn(Arrays.asList(deck1, deck2));
-		when(this.deckMapper.toDecksDTO(anyList())).thenReturn(Arrays.asList(deckDTO1, deckDTO2));
+		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Arrays.asList(deckDTO1, deckDTO2));
 
 		// When
-		final ResponseEntity<List<DeckDTO>> response = this.userController.getUserDecks(1, 10, 0);
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.userController.getUserDecks(1, 10, 0);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -217,14 +215,13 @@ class UserControllerTest {
 		final Deck deck = new Deck();
 		deck.setId(1L);
 
-		final DeckDTO deckDTO = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1)
-				.deck_type(DeckDTO.Deck_type.MAIN).build();
+		final CompleteDeckDTO deckDTO = CompleteDeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).build();
 
 		when(this.userService.getUserDecks(1L, 10, 0)).thenReturn(List.of(deck));
-		when(this.deckMapper.toDecksDTO(anyList())).thenReturn(Collections.singletonList(deckDTO));
+		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(deckDTO));
 
 		// When
-		final ResponseEntity<List<DeckDTO>> response = this.userController.getUserDecks(1, null, null);
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.userController.getUserDecks(1, null, null);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);

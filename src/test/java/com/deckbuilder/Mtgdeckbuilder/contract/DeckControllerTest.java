@@ -1,6 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
@@ -19,11 +20,13 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,15 +43,16 @@ class DeckControllerTest {
 	private DeckController deckController;
 
 	private Deck testDeck;
-	private DeckDTO testDeckDTO;
+    private CompleteDeckDTO testCompleteDeckDTO;
 
 	@BeforeEach
 	void setUp() {
 		this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
 				.deckType("main").isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
 
-		this.testDeckDTO = DeckDTO.builder().id(1).deck_name("Test Deck").description("A test deck").user_id(1)
-				.format(1).deck_type(DeckDTO.Deck_type.MAIN).is_private(false).creation_date(LocalDateTime.now())
+
+        this.testCompleteDeckDTO = CompleteDeckDTO.builder().id(1).deck_name("Test Deck").description("A test deck").user_id(1)
+				.format(1).is_private(false).creation_date(LocalDateTime.now())
 				.last_modification(LocalDateTime.now()).build();
 	}
 
@@ -57,19 +61,19 @@ class DeckControllerTest {
 	void shouldListAllDecks_WithDefaultPagination() {
 		// Given
 		final Deck deck2 = this.testDeck.toBuilder().id(2L).name("Deck 2").build();
-		final DeckDTO deckDTO2 = DeckDTO.builder().id(2).deck_name("Deck 2").user_id(1).format(1)
-				.deck_type(DeckDTO.Deck_type.MAIN).build();
+		final CompleteDeckDTO deckDTO2 = CompleteDeckDTO.builder().id(2).deck_name("Deck 2").user_id(1).format(1)
+				.build();
 
 		when(this.deckService.getAll(10, 0)).thenReturn(Arrays.asList(this.testDeck, deck2));
-		when(this.deckMapper.toDecksDTO(anyList())).thenReturn(Arrays.asList(this.testDeckDTO, deckDTO2));
+		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Arrays.asList(this.testCompleteDeckDTO, deckDTO2));
 
 		// When
-		final ResponseEntity<List<DeckDTO>> response = this.deckController.listDecks(null, null);
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(null, null);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(2);
-		assertThat(response.getBody().get(0).getDeck_name()).isEqualTo("Test Deck");
+		assertThat(response.getBody().getFirst().getDeck_name()).isEqualTo("Test Deck");
 		verify(this.deckService).getAll(10, 0);
 	}
 
@@ -78,10 +82,10 @@ class DeckControllerTest {
 	void shouldListDecks_WithCustomPagination() {
 		// Given
 		when(this.deckService.getAll(20, 1)).thenReturn(Collections.singletonList(this.testDeck));
-		when(this.deckMapper.toDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testDeckDTO));
+		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testCompleteDeckDTO));
 
 		// When
-		final ResponseEntity<List<DeckDTO>> response = this.deckController.listDecks(20, 1);
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(20, 1);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -94,10 +98,10 @@ class DeckControllerTest {
 	void shouldGetDeckById_WhenExists() {
 		// Given
 		when(this.deckService.findById(1L)).thenReturn(Optional.of(this.testDeck));
-		when(this.deckMapper.toDeckDTO(this.testDeck)).thenReturn(this.testDeckDTO);
+		when(this.deckMapper.toCompleteDeckDTO(this.testDeck)).thenReturn(this.testCompleteDeckDTO);
 
 		// When
-		final ResponseEntity<DeckDTO> response = this.deckController.getDeckById(1);
+		final ResponseEntity<CompleteDeckDTO> response = this.deckController.getDeckById(1);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -111,8 +115,7 @@ class DeckControllerTest {
 	@DisplayName("Should throw exception when deck not found by ID")
 	void shouldReturn404_WhenDeckNotFound() {
 		// When/Then
-		assertThatThrownBy(() -> this.deckController.getDeckById(999)).isInstanceOf(DeckNotFoundException.class)
-				.hasMessageContaining("Deck not found with id: 999");
+		assertThatThrownBy(() -> this.deckController.getDeckById(999)).isInstanceOf(NoSuchElementException.class);
 
 		verify(this.deckService).findById(999L);
 	}

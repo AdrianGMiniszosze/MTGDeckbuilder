@@ -60,30 +60,6 @@ public interface CardMapper {
 	@Mapping(target = "colorIdentityColors", ignore = true)
 	Card toEntity(CardDTO cardDTO);
 
-	@Mapping(target = "name", source = "card_name")
-	@Mapping(target = "typeLine", source = "type_line")
-	@Mapping(target = "cardType", source = "card_type")
-	@Mapping(target = "cardSupertype", source = "card_supertype")
-	@Mapping(target = "oracleText", source = "card_text")
-	@Mapping(target = "cardSet", source = "card_set")
-	@Mapping(target = "imageUrl", source = "image_url")
-	@Mapping(target = "manaCost", source = "mana_cost")
-	@Mapping(target = "flavorText", source = "flavor_text")
-	@Mapping(target = "embedding", source = "embedding")
-	@Mapping(target = "relatedCard", source = "related_card")
-	@Mapping(target = "power", source = "power")
-	@Mapping(target = "toughness", source = "toughness")
-	@Mapping(target = "colorIdentity", source = "color_identity")
-	@Mapping(target = "language", source = "language")
-	@Mapping(target = "rarity", source = "rarity")
-	@Mapping(target = "unlimitedCopies", source = "unlimited_copies")
-	@Mapping(target = "gameChanger", source = "game_changer")
-	@Mapping(target = "collectorNumber", source = "collector_number")
-	@Mapping(target = "promo", source = "promo")
-	@Mapping(target = "variation", source = "variation")
-	@Mapping(target = "colors", ignore = true)
-	@Mapping(target = "keywords", ignore = true)
-	@Mapping(target = "subtypes", ignore = true)
-	@Mapping(target = "colorIdentityColors", ignore = true)
-	void updateEntity(CardDTO cardDTO, @MappingTarget Card card);
+	// List mapping methods
+	java.util.List<CardDTO> toDtoList(java.util.List<Card> cards);
 }

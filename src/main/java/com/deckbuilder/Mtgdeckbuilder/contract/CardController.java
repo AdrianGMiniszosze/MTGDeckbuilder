@@ -13,10 +13,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequiredArgsConstructor
@@ -30,7 +29,7 @@ public class CardController implements CardsApi {
 	public ResponseEntity<List<CardDTO>> listCards(Integer pagesize, Integer pagenumber) {
 		final var cards = this.cardService.getAllCards(pagesize != null ? pagesize : 10,
 				pagenumber != null ? pagenumber : 0);
-		final var cardDtos = cards.stream().map(this.cardMapper::toDto).collect(Collectors.toList());
+		final var cardDtos = cards.stream().map(this.cardMapper::toDto).toList();
 		return ResponseEntity.ok(cardDtos);
 	}
 
@@ -80,5 +79,22 @@ public class CardController implements CardsApi {
 	public ResponseEntity<Void> deleteCardTag(Integer id, Integer tagId) {
 		this.cardTagService.deleteCardTag(id.longValue(), tagId.longValue());
 		return ResponseEntity.noContent().build();
+	}
+
+	// Variant-specific endpoints
+	@GetMapping("/collector/{collectorNumber}")
+	public ResponseEntity<List<CardDTO>> getCardsByCollectorNumber(@PathVariable String collectorNumber) {
+		final List<Card> cards = this.cardService.findByCollectorNumber(collectorNumber);
+		final List<CardDTO> cardDTOs = this.cardMapper.toDtoList(cards);
+		return ResponseEntity.ok(cardDTOs);
+	}
+
+	@GetMapping("/variants")
+	public ResponseEntity<List<CardDTO>> getCardVariants(
+			@RequestParam String cardName,
+			@RequestParam Integer setId) {
+		final List<Card> variants = this.cardService.findByNameAndSet(cardName, setId.longValue());
+		final List<CardDTO> variantDTOs = this.cardMapper.toDtoList(variants);
+		return ResponseEntity.ok(variantDTOs);
 	}
 }

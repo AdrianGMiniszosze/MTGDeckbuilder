@@ -33,5 +33,7 @@ public interface CardRepository extends JpaRepository<CardEntity, Long> {
 
 	List<CardEntity> findByNameAndCardSet(String name, Long cardSet);
 
-	List<CardEntity> findSimilarByEmbedding(String string, int maxResults);
+	// TODO: Implement with proper pgvector query when vector search is needed
+	// For now, this method should not be used as it requires pgvector extension
+	// List<CardEntity> findSimilarByEmbedding(Double[] embedding, int maxResults);
 }
