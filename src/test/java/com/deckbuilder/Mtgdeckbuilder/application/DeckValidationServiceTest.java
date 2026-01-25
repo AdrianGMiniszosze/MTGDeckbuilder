@@ -1,279 +1,250 @@
 package com.deckbuilder.mtgdeckbuilder.application;
 
-import com.deckbuilder.mtgdeckbuilder.model.Card;
-import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.application.implement.DeckValidationServiceImpl;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Arrays;
-import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("Deck Validation Logic Tests")
+@DisplayName("Deck Validation Service Tests")
 class DeckValidationServiceTest {
-	// Note: This tests deck validation functionality that should be part of FormatService
-	// These tests validate deck construction rules, format legality, and card quantity limits
 
-	@Mock
-	private FormatService formatService;
+    @Mock
+    private DeckRepository deckRepository;
 
-	@Mock
-	private CardService cardService;
+    @Mock
+    private CardRepository cardRepository;
 
+    @Mock
+    private FormatRepository formatRepository;
 
-    private Card lightningBolt;
-	private Card forest;
-	private Card blackLotus;
-	private Deck testDeck;
+    @Mock
+    private CardLegalityRepository cardLegalityRepository;
 
-	@BeforeEach
-	void setUp() {
-        // Test cards
-		this.lightningBolt = Card.builder()
-				.id(1L)
-				.name("Lightning Bolt")
-				.typeLine("Instant")
-				.cardType("Instant")
-				.build();
+    @Mock
+    private CardInDeckRepository cardInDeckRepository;
 
-		this.forest = Card.builder()
-				.id(2L)
-				.name("Forest")
-				.typeLine("Basic Land — Forest")
-				.cardType("Land")
-				.cardSupertype("Basic")
-				.build();
+    @InjectMocks
+    private DeckValidationServiceImpl deckValidationService;
 
-		this.blackLotus = Card.builder()
-				.id(3L)
-				.name("Black Lotus")
-				.typeLine("Artifact")
-				.cardType("Artifact")
-				.build();
+    private DeckEntity testDeck;
+    private CardEntity regularCard;
+    private CardEntity basicLand;
+    private CardEntity bannedCard;
+    private FormatEntity standardFormat;
+    private CardLegalityEntity bannedLegality;
 
-		// Test deck with some cards
-		this.testDeck = Deck.builder()
-				.id(1L)
-				.name("Test Deck")
-				.formatId(1L) // Standard
-				.cards(Arrays.asList(
-						createCardInDeck(1L, 4, "main"), // 4x Lightning Bolt
-						createCardInDeck(2L, 20, "main") // 20x Forest
-				))
-				.build();
-	}
+    @BeforeEach
+    void setUp() {
+        // Test deck
+        testDeck = new DeckEntity();
+        testDeck.setId(1L);
+        testDeck.setFormatId(1L);
 
-	private Deck.CardInDeck createCardInDeck(Long cardId, int quantity, String section) {
-		return Deck.CardInDeck.builder()
-				.cardId(cardId)
-				.quantity(quantity)
-				.section(section)
-				.build();
-	}
+        // Regular card (Lightning Bolt)
+        regularCard = new CardEntity();
+        regularCard.setId(1L);
+        regularCard.setName("Lightning Bolt");
+        regularCard.setCardType("Instant");
+        regularCard.setCardSupertype(null);
+        regularCard.setUnlimitedCopies(false);
 
-	// ========================================
-	// Critical Missing: Deck Building Tests
-	// ========================================
+        // Basic land (Mountain)
+        basicLand = new CardEntity();
+        basicLand.setId(2L);
+        basicLand.setName("Mountain");
+        basicLand.setCardType("Land");
+        basicLand.setCardSupertype("Basic");
+        basicLand.setUnlimitedCopies(false);
 
-	@Test
-	@DisplayName("Should validate deck size for format")
-	void shouldValidateDeckSizeForFormat() {
-		// Given - 24 cards is below Standard minimum of 60
-		when(this.formatService.isDeckLegal(1L, 1L)).thenReturn(false);
+        // Banned card
+        bannedCard = new CardEntity();
+        bannedCard.setId(3L);
+        bannedCard.setName("Black Lotus");
+        bannedCard.setCardType("Artifact");
+        bannedCard.setCardSupertype(null);
+        bannedCard.setUnlimitedCopies(false);
 
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(this.testDeck.getId(), 1L);
+        // Restricted card
+        CardEntity restrictedCard = new CardEntity();
+        restrictedCard.setId(4L);
+        restrictedCard.setName("Ancestral Recall");
+        restrictedCard.setCardType("Instant");
+        restrictedCard.setCardSupertype(null);
+        restrictedCard.setUnlimitedCopies(false);
 
-		// Then
-		assertThat(isValid).isFalse(); // 24 cards < 60 minimum
-	}
+        // Formats
+        standardFormat = FormatEntity.builder()
+            .id(1L)
+            .name("Standard")
+            .maxDeckSize(60)
+            .maxSideboardSize(15)
+            .build();
 
-	@Test
-	@DisplayName("Should enforce 4-of rule in Standard")
-	void shouldEnforce4OfRuleInStandard() {
-		// Given - Deck with 5 copies should be invalid
-		final Deck invalidDeck = Deck.builder()
-				.id(2L)
-				.formatId(1L)
-				.cards(List.of(createCardInDeck(1L, 5, "main"))) // 5x Lightning Bolt (invalid)
-				.build();
+        FormatEntity commanderFormat = FormatEntity.builder()
+                .id(2L)
+                .name("Commander")
+                .maxDeckSize(100)
+                .maxSideboardSize(0)
+                .build();
 
-		when(this.formatService.isDeckLegal(2L, 1L)).thenReturn(false);
+        // Card legalities
+        bannedLegality = new CardLegalityEntity();
+        bannedLegality.setCardId(3L);
+        bannedLegality.setFormatId(1L);
+        bannedLegality.setLegalityStatus("banned");
 
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(invalidDeck.getId(), 1L);
+        CardLegalityEntity restrictedLegality = new CardLegalityEntity();
+        restrictedLegality.setCardId(4L);
+        restrictedLegality.setFormatId(1L);
+        restrictedLegality.setLegalityStatus("restricted");
+    }
 
-		// Then
-		assertThat(isValid).isFalse(); // More than 4 copies
-	}
+    @Test
+    @DisplayName("Should inject service correctly")
+    void shouldInjectServiceCorrectly() {
+        assertThat(deckValidationService).isNotNull();
+    }
 
-	@Test
-	@DisplayName("Should allow unlimited basic lands")
-	void shouldAllowUnlimitedBasicLands() {
-		// Given
-		final Deck basicLandDeck = Deck.builder()
-				.formatId(1L)
-				.cards(List.of(createCardInDeck(2L, 40, "main"))) // 40x Forest
-				.build();
+    @Test
+    @DisplayName("Should allow valid card addition")
+    void shouldAllowValidCardAddition() {
+        // Given
+        when(deckRepository.findById(1L)).thenReturn(Optional.of(testDeck));
+        when(cardRepository.findById(1L)).thenReturn(Optional.of(regularCard));
+        when(cardLegalityRepository.findByCardIdAndFormatId(1L, 1L)).thenReturn(Optional.empty());
+        when(formatRepository.findById(1L)).thenReturn(Optional.of(standardFormat));
+        when(cardInDeckRepository.sumQuantityByDeckIdAndSection(1L, "main")).thenReturn(0);
 
-		when(this.formatService.isDeckLegal(3L, 1L)).thenReturn(true);
+        // When & Then - Should not throw exception
+        deckValidationService.validateCardAddition(1L, 1L, 4, "main", false);
 
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(basicLandDeck.getId(), 1L);
+        // Verify interactions - After optimization, in validateCardAddition only:
+        // 1. cardRepository.findById called once in validateCardAddition
+        // 2. cardLegalityRepository.findByCardIdAndFormatId called once (optimized!)
+        // 3. formatRepository.findById called once in private getMaxAllowedQuantity
+        verify(deckRepository).findById(1L);
+        verify(cardRepository, times(1)).findById(1L);
+        verify(cardLegalityRepository, times(1)).findByCardIdAndFormatId(1L, 1L);
+    }
 
-		// Then
-		assertThat(isValid).isTrue(); // Basic lands can exceed 4-of rule
-	}
+    @Test
+    @DisplayName("Should skip validation for maybeboard")
+    void shouldSkipValidationForMaybeboard() {
+        // When & Then - Should not throw exception or call any repositories
+        deckValidationService.validateCardAddition(1L, 1L, 100, "maybeboard", false);
 
-	@Test
-	@DisplayName("Should enforce singleton rule in Commander")
-	void shouldEnforceSingletonRuleInCommander() {
-		// Given - Commander deck with 2x Lightning Bolt (invalid)
-		final Deck commanderDeck = Deck.builder()
-				.id(4L)
-				.formatId(2L)
-				.cards(List.of(createCardInDeck(1L, 2, "main"))) // 2x Lightning Bolt (invalid in Commander)
-				.build();
+        // Verify no validation calls were made
+        verifyNoInteractions(deckRepository, cardRepository, cardLegalityRepository, formatRepository);
+    }
 
-		when(this.formatService.isDeckLegal(4L, 2L)).thenReturn(false);
+    @Test
+    @DisplayName("Should throw exception for banned card")
+    void shouldThrowExceptionForBannedCard() {
+        // Given
+        when(deckRepository.findById(1L)).thenReturn(Optional.of(testDeck));
+        when(cardRepository.findById(3L)).thenReturn(Optional.of(bannedCard));
+        when(cardLegalityRepository.findByCardIdAndFormatId(3L, 1L)).thenReturn(Optional.of(bannedLegality));
+        when(formatRepository.findById(1L)).thenReturn(Optional.of(standardFormat));
 
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(commanderDeck.getId(), 2L);
+        // When & Then
+        assertThatThrownBy(() -> deckValidationService.validateCardAddition(1L, 3L, 1, "main", false))
+            .isInstanceOf(InvalidDeckCompositionException.class)
+            .hasMessageContaining("banned");
 
-		// Then
-		assertThat(isValid).isFalse(); // Commander allows only 1 copy of non-basic lands
-	}
+        // Verify interactions - for banned cards, it fails early so cardRepository.findById is only called once
+        verify(deckRepository).findById(1L);
+        verify(cardRepository).findById(3L);
+        verify(cardLegalityRepository).findByCardIdAndFormatId(3L, 1L);
+    }
 
-	@Test
-	@DisplayName("Should check card legality in format")
-	void shouldCheckCardLegalityInFormat() {
-		// Given - Black Lotus is banned in Standard
-		when(this.formatService.isCardLegal(3L, 1L)).thenReturn(false);
+    @Test
+    @DisplayName("Should allow unlimited basic lands")
+    void shouldAllowUnlimitedBasicLands() {
+        // Given
+        when(deckRepository.findById(1L)).thenReturn(Optional.of(testDeck));
+        when(cardRepository.findById(2L)).thenReturn(Optional.of(basicLand));
+        when(cardLegalityRepository.findByCardIdAndFormatId(2L, 1L)).thenReturn(Optional.empty());
+        when(formatRepository.findById(1L)).thenReturn(Optional.of(standardFormat));
+        when(cardInDeckRepository.sumQuantityByDeckIdAndSection(1L, "main")).thenReturn(40); // Already 40 cards in deck
 
-		// When
-		final boolean isValid = this.formatService.isCardLegal(this.blackLotus.getId(), 1L);
+        // When & Then - Should allow any quantity for basic lands (20 would exceed normal 4-card limit)
+        // This should NOT throw an exception even though we're adding 20 copies of a card
+        deckValidationService.validateCardAddition(1L, 2L, 20, "main", false);
 
-		// Then
-		assertThat(isValid).isFalse(); // Black Lotus is banned in Standard
-	}
+        // Also verify that getMaxAllowedQuantity returns unlimited for basic lands
+        int maxAllowed = deckValidationService.getMaxAllowedQuantity(2L, 1L);
+        assertThat(maxAllowed).isEqualTo(9999); // UNLIMITED_QUANTITY constant used by service
 
-	@Test
-	@DisplayName("Should validate sideboard size")
-	void shouldValidateSideboardSize() {
-		// Given - Deck with oversized sideboard
-		final Deck deckWithLargeSideboard = Deck.builder()
-				.id(5L)
-				.formatId(1L)
-				.cards(Arrays.asList(
-						createCardInDeck(1L, 4, "main"),
-						createCardInDeck(2L, 20, "sideboard") // 20 cards in sideboard (max 15)
-				))
-				.build();
+        // Verify interactions - This test makes TWO separate API calls:
+        // 1. validateCardAddition() - optimized internally
+        // 2. getMaxAllowedQuantity() - separate public API call
+        // So cardRepository.findById is called twice total (once per API call)
+        verify(deckRepository).findById(1L);
+        verify(cardRepository, times(2)).findById(2L);
+        verify(cardLegalityRepository, atLeast(1)).findByCardIdAndFormatId(2L, 1L);
+    }
 
-		when(this.formatService.isDeckLegal(5L, 1L)).thenReturn(false);
+    @Test
+    @DisplayName("Should return main deck size for getMaxDeckSize")
+    void shouldReturnMainDeckSizeForGetMaxDeckSize() {
+        // Given
+        when(formatRepository.findById(1L)).thenReturn(Optional.of(standardFormat));
 
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(deckWithLargeSideboard.getId(), 1L);
+        // When
+        int maxDeckSize = deckValidationService.getMaxDeckSize(1L, "main");
 
-		// Then
-		assertThat(isValid).isFalse(); // Sideboard exceeds 15 cards
-	}
+        // Then
+        assertThat(maxDeckSize).isEqualTo(60);
+    }
 
-	@Test
-	@DisplayName("Should allow choosing specific card variants")
-	void shouldAllowChoosingSpecificCardVariant() {
-		// Given - Different variants of the same card
-		final Card forestVariant1 = this.forest.toBuilder().collectorNumber("264").build();
-		final Card forestVariant2 = this.forest.toBuilder().collectorNumber("265").build();
+    @Test
+    @DisplayName("Should return 4 for regular cards max quantity")
+    void shouldReturn4ForRegularCardsMaxQuantity() {
+        // Given
+        when(cardRepository.findById(1L)).thenReturn(Optional.of(regularCard));
+        when(cardLegalityRepository.findByCardIdAndFormatId(1L, 1L)).thenReturn(Optional.empty());
+        when(formatRepository.findById(1L)).thenReturn(Optional.of(standardFormat));
 
-		final Deck forestVariantDeck = Deck.builder()
-				.id(6L)
-				.formatId(1L)
-				.cards(Arrays.asList(
-						createCardInDeck(forestVariant1.getId(), 10, "main"),
-						createCardInDeck(forestVariant2.getId(), 10, "main")
-				))
-				.build();
+        // When
+        int maxQuantity = deckValidationService.getMaxAllowedQuantity(1L, 1L);
 
-		when(this.formatService.isDeckLegal(6L, 1L)).thenReturn(true);
+        // Then
+        assertThat(maxQuantity).isEqualTo(4);
+    }
 
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(forestVariantDeck.getId(), 1L);
+    @Test
+    @DisplayName("Should throw exception for non-basic card quantity > 4")
+    void shouldThrowExceptionForNonBasicCardQuantityGreaterThan4() {
+        // Given
+        when(deckRepository.findById(1L)).thenReturn(Optional.of(testDeck));
+        when(cardRepository.findById(1L)).thenReturn(Optional.of(regularCard));
+        when(cardLegalityRepository.findByCardIdAndFormatId(1L, 1L)).thenReturn(Optional.empty());
+        when(formatRepository.findById(1L)).thenReturn(Optional.of(standardFormat));
 
-		// Then
-		assertThat(isValid).isTrue(); // Different variants are treated as separate cards for basic lands
-	}
-
-	@Test
-	@DisplayName("Should validate deck even with different variants of non-basic cards")
-	void shouldValidateDeckEvenWithDifferentVariantsOfNonBasicCards() {
-		final Deck variantDeck = Deck.builder()
-				.id(7L)
-				.formatId(1L)
-				.cards(Arrays.asList(
-						createCardInDeck(10L, 2, "main"), // 2x regular Lightning Bolt
-						createCardInDeck(11L, 2, "main")  // 2x foil Lightning Bolt
-				))
-				.build();
-
-		when(this.formatService.isDeckLegal(7L, 1L)).thenReturn(true);
-
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(variantDeck.getId(), 1L);
-
-		// Then
-		assertThat(isValid).isTrue(); // 4 total Lightning Bolts across variants is valid
-	}
-
-	@Test
-	@DisplayName("Should invalidate deck when variants exceed 4-of rule")
-	void shouldInvalidateDeckWhenVariantsExceed4OfRule() {
-		// Given - Too many variants of Lightning Bolt
-		final Deck variantDeck = Deck.builder()
-				.id(8L)
-				.formatId(1L)
-				.cards(Arrays.asList(
-						createCardInDeck(10L, 2, "main"), // 2x regular Lightning Bolt
-						createCardInDeck(11L, 2, "main"), // 2x foil Lightning Bolt
-						createCardInDeck(12L, 2, "main")  // 2x promo Lightning Bolt = 6 total
-				))
-				.build();
-
-		when(this.formatService.isDeckLegal(8L, 1L)).thenReturn(false);
-
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(variantDeck.getId(), 1L);
-
-		// Then
-		assertThat(isValid).isFalse(); // 6 total Lightning Bolts exceeds 4-of rule
-	}
-
-	@Test
-	@DisplayName("Should validate complete deck for format compliance")
-	void shouldValidateCompleteDeckForFormatCompliance() {
-		// Given - Valid 60 card Standard deck
-		final Deck validStandardDeck = Deck.builder()
-				.id(9L)
-				.formatId(1L)
-				.cards(Arrays.asList(
-						createCardInDeck(1L, 4, "main"), // 4x Lightning Bolt
-						createCardInDeck(2L, 56, "main") // 56x Forest = 60 total
-				))
-				.build();
-
-		when(this.formatService.isDeckLegal(9L, 1L)).thenReturn(true);
-
-		// When
-		final boolean isValid = this.formatService.isDeckLegal(validStandardDeck.getId(), 1L);
-
-		// Then
-		assertThat(isValid).isTrue(); // Valid 60-card Standard deck
-	}
+        // When & Then - Should throw exception for trying to add 5 copies of a non-basic card
+        assertThatThrownBy(() -> deckValidationService.validateCardAddition(1L, 1L, 5, "main", false))
+            .isInstanceOf(InvalidDeckCompositionException.class)
+            .hasMessageContaining("quantity limit");
+    }
 }

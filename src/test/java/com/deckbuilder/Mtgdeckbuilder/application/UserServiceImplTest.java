@@ -1,6 +1,6 @@
-package com.deckbuilder.mtgdeckbuilder.application.implement;
+package com.deckbuilder.mtgdeckbuilder.application;
 
-import com.deckbuilder.mtgdeckbuilder.application.DeckService;
+import com.deckbuilder.mtgdeckbuilder.application.implement.UserServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;

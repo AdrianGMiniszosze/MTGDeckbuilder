@@ -171,4 +171,14 @@ public class DeckServiceImpl implements DeckService {
 		return section != null
 				&& (section.equals("main") || section.equals("sideboard") || section.equals("maybeboard"));
 	}
+
+	/**
+	 * Updates the deck modification time
+	 */
+	private void updateDeckModificationTime(Long deckId) {
+		DeckEntity deck = deckRepository.findById(deckId)
+			.orElseThrow(() -> new DeckNotFoundException(deckId));
+		deck.setModified(LocalDateTime.now());
+		deckRepository.save(deck);
+	}
 }

@@ -3,12 +3,16 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 import com.deckbuilder.apigenerator.openapi.api.CardsApi;
 import com.deckbuilder.apigenerator.openapi.api.model.CardDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CardTagDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CardSearchResponseDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.PageInfoDTO;
 import com.deckbuilder.mtgdeckbuilder.application.CardService;
 import com.deckbuilder.mtgdeckbuilder.application.CardTagService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardTagMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchCriteria;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -81,20 +85,85 @@ public class CardController implements CardsApi {
 		return ResponseEntity.noContent().build();
 	}
 
-	// Variant-specific endpoints
-	@GetMapping("/collector/{collectorNumber}")
-	public ResponseEntity<List<CardDTO>> getCardsByCollectorNumber(@PathVariable String collectorNumber) {
-		final List<Card> cards = this.cardService.findByCollectorNumber(collectorNumber);
-		final List<CardDTO> cardDTOs = this.cardMapper.toDtoList(cards);
+
+	@Override
+	public ResponseEntity<CardSearchResponseDTO> searchCards(
+			String name, String type, String rarity, String colors,
+			Integer cmcMin, Integer cmcMax, String powerMin, String powerMax,
+			String toughnessMin, String toughnessMax, Integer setId, Integer formatId,
+			String textContains, String keywords, Boolean isFoil, Boolean isPromo,
+			String language, Integer pagesize, Integer pagenumber,
+			String sortBy, String sortOrder) {
+
+		// Set default values
+		pagesize = pagesize != null ? pagesize : 20;
+		pagenumber = pagenumber != null ? pagenumber : 0;
+		sortBy = sortBy != null ? sortBy : "name";
+		sortOrder = sortOrder != null ? sortOrder : "asc";
+		language = language != null ? language : "en";
+
+		// Build search criteria object
+		final CardSearchCriteria criteria = CardSearchCriteria.builder()
+			.name(name)
+			.type(type)
+			.rarity(rarity)
+			.colors(colors)
+			.cmcMin(cmcMin)
+			.cmcMax(cmcMax)
+			.powerMin(powerMin)
+			.powerMax(powerMax)
+			.toughnessMin(toughnessMin)
+			.toughnessMax(toughnessMax)
+			.setId(setId != null ? setId.longValue() : null)
+			.formatId(formatId != null ? formatId.longValue() : null)
+			.textContains(textContains)
+			.keywords(keywords)
+			.isFoil(isFoil)
+			.isPromo(isPromo)
+			.language(language)
+			.sortBy(sortBy)
+			.sortOrder(sortOrder)
+			.build();
+
+		// Perform search
+		final CardSearchResult result = this.cardService.searchCardsWithCriteria(criteria, pagesize, pagenumber);
+
+		// Convert to DTOs
+		final List<CardDTO> cardDTOs = result.getCards().stream()
+			.map(this.cardMapper::toDto)
+			.toList();
+
+		// Create page info using builder pattern
+		final PageInfoDTO pageInfo = PageInfoDTO.builder()
+			.page_size(pagesize)
+			.has_next_page((pagenumber + 1) * pagesize < result.getTotalCount())
+			.total_pages((int) Math.ceil((double) result.getTotalCount() / pagesize))
+			.current_page(pagenumber)
+			.has_previous_page(pagenumber > 0)
+			.build();
+
+		// Create response
+		final CardSearchResponseDTO response = CardSearchResponseDTO.builder()
+			.page_info(pageInfo)
+			.total_count(result.getTotalCount())
+			.cards(cardDTOs)
+			.build();
+
+		return ResponseEntity.ok(response);
+	}
+
+	@Override
+    public ResponseEntity<List<CardDTO>> getRandomCards(Integer count, String type, String rarity, Integer formatId) {
+		count = count != null ? count : 1;
+
+		final List<Card> randomCards = this.cardService.getRandomCards(count, type, rarity,
+			formatId != null ? formatId.longValue() : null);
+
+		final List<CardDTO> cardDTOs = randomCards.stream()
+			.map(this.cardMapper::toDto)
+			.toList();
+
 		return ResponseEntity.ok(cardDTOs);
 	}
 
-	@GetMapping("/variants")
-	public ResponseEntity<List<CardDTO>> getCardVariants(
-			@RequestParam String cardName,
-			@RequestParam Integer setId) {
-		final List<Card> variants = this.cardService.findByNameAndSet(cardName, setId.longValue());
-		final List<CardDTO> variantDTOs = this.cardMapper.toDtoList(variants);
-		return ResponseEntity.ok(variantDTOs);
-	}
 }

@@ -1,5 +1,6 @@
-package com.deckbuilder.mtgdeckbuilder.application.implement;
+package com.deckbuilder.mtgdeckbuilder.application;
 
+import com.deckbuilder.mtgdeckbuilder.application.implement.CardTagServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardTagRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.CardTagEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardTagEntity;

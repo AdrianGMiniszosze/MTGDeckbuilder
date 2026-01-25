@@ -39,3 +39,4 @@ public class CardTagId implements Serializable {
 		return Objects.hash(this.cardId, this.tagId);
 	}
 }
+

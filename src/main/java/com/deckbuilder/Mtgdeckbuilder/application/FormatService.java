@@ -90,14 +90,22 @@ public interface FormatService {
 	boolean isCardLegal(Long cardId, Long formatId);
 
 	/**
-	 * Checks if a deck is legal in a specific format. Validates deck size,
-	 * sideboard size, and banned cards.
+	 * Checks if a card is restricted in a specific format.
 	 *
-	 * @param deckId
-	 *            the deck ID
+	 * @param cardId
+	 *            the card ID
 	 * @param formatId
 	 *            the format ID
-	 * @return true if the deck is legal, false otherwise
+	 * @return true if the card is restricted, false otherwise
 	 */
-	boolean isDeckLegal(Long deckId, Long formatId);
+	boolean isCardRestricted(Long cardId, Long formatId);
+
+	/**
+	 * Retrieves the list of restricted cards for a specific format.
+	 *
+	 * @param formatId
+	 *            the format ID
+	 * @return list of restricted card names in the format
+	 */
+	List<String> getRestrictedCards(Long formatId);
 }

@@ -6,6 +6,8 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.config.PaginationConfig;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.CardEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchCriteria;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -24,41 +26,66 @@ public class CardServiceImpl implements CardService {
 	private final CardEntityMapper cardEntityMapper;
 	private final PaginationConfig paginationConfig;
 
+	private PageRequest createPageRequest(int pageSize, int pageNumber) {
+		pageSize = this.paginationConfig.validatePageSize(pageSize);
+		pageNumber = this.paginationConfig.validatePageNumber(pageNumber);
+		return PageRequest.of(pageNumber, pageSize);
+	}
+
 	@Override
 	public List<Card> getAllCards(int pageSize, int pageNumber) {
 		log.debug("Fetching all cards with pageSize={}, pageNumber={}", pageSize, pageNumber);
 
-		// Validate and normalize pagination parameters
-		pageSize = this.paginationConfig.validatePageSize(pageSize);
-		pageNumber = this.paginationConfig.validatePageNumber(pageNumber);
+		final PageRequest pageRequest = createPageRequest(pageSize, pageNumber);
+		log.debug("Validated pagination: pageSize={}, pageNumber={}", pageRequest.getPageSize(), pageRequest.getPageNumber());
 
-		log.debug("Validated pagination: pageSize={}, pageNumber={}", pageSize, pageNumber);
-
-		final Page<CardEntity> page = this.cardRepository.findAll(PageRequest.of(pageNumber, pageSize));
-		final List<Card> cards = page.getContent().stream().map(this.cardEntityMapper::toModel).toList();
+		final Page<CardEntity> page = this.cardRepository.findAll(pageRequest);
+		final List<Card> cards = page.getContent().stream()
+			.map(this::mapEntityToModel)
+			.toList();
 
 		log.debug("Retrieved {} cards (total available: {})", cards.size(), page.getTotalElements());
 		return cards;
 	}
 
+	private Card mapEntityToModel(CardEntity entity) {
+		// If the card has a parent card, return the parent instead
+		if (entity.getParentCardId() != null) {
+			log.debug("Card {} has parent card {}, returning parent", entity.getId(), entity.getParentCardId());
+			return this.cardRepository.findById(entity.getParentCardId())
+				.map(this.cardEntityMapper::toModel)
+				.orElse(this.cardEntityMapper.toModel(entity));
+		}
+		return this.cardEntityMapper.toModel(entity);
+	}
+
 	@Override
 	public Optional<Card> getCardById(Long id) {
 		log.debug("Fetching card with id={}", id);
-		final Optional<Card> result = this.cardRepository.findById(id).map(this.cardEntityMapper::toModel);
+		final Optional<Card> result = this.cardRepository.findById(id).map(this::mapEntityToModel);
 		log.debug("Card with id={} found: {}", id, result.isPresent());
 		return result;
+	}
+
+	@Override
+	public Card getCardByIdRequired(Long id) {
+		log.debug("Fetching card with id={} (required)", id);
+		return getCardById(id)
+				.orElseThrow(() -> new RuntimeException("Card not found with id: " + id));
 	}
 
 	@Override
 	public List<Card> searchCards(String query, int pageSize, int pageNumber) {
 		log.debug("Searching cards with query='{}', pageSize={}, pageNumber={}", query, pageSize, pageNumber);
 
-		// Validate and normalize pagination parameters
-		pageSize = this.paginationConfig.validatePageSize(pageSize);
-		pageNumber = this.paginationConfig.validatePageNumber(pageNumber);
-
-		final Page<CardEntity> page = this.cardRepository.searchByName(query, PageRequest.of(pageNumber, pageSize));
-		final List<Card> cards = page.getContent().stream().map(this.cardEntityMapper::toModel).toList();
+		final PageRequest pageRequest = createPageRequest(pageSize, pageNumber);
+		final CardSearchCriteria criteria = CardSearchCriteria.builder()
+			.name(query)
+			.build();
+		final Page<CardEntity> page = this.cardRepository.searchCardsWithDetailedCriteria(criteria, pageRequest);
+		final List<Card> cards = page.getContent().stream()
+			.map(this::mapEntityToModel)
+			.toList();
 
 		log.debug("Found {} cards matching query='{}' (total available: {})", cards.size(), query,
 				page.getTotalElements());
@@ -67,8 +94,15 @@ public class CardServiceImpl implements CardService {
 
 	@Override
 	public List<Card> getCardsByFormat(Long formatId) {
-		final List<CardEntity> entities = this.cardRepository.findByFormatId(formatId);
-		return entities.stream().map(this.cardEntityMapper::toModel).toList();
+		log.debug("Finding cards by format: {}", formatId);
+		final CardSearchCriteria criteria = CardSearchCriteria.builder()
+			.formatId(formatId)
+			.build();
+		// Use a large page size to get all results
+		final Page<CardEntity> page = this.cardRepository.searchCardsWithDetailedCriteria(criteria, PageRequest.of(0, 10000));
+		return page.getContent().stream()
+			.map(this::mapEntityToModel)
+			.toList();
 	}
 
 	@Override
@@ -111,22 +145,12 @@ public class CardServiceImpl implements CardService {
 	}
 
 	@Override
-	public List<Card> findSimilarCards(Double[] vector, int maxResults) {
-		// TODO: Implement vector similarity search using PostgreSQL pgvector
-		throw new UnsupportedOperationException("Not implemented yet");
-	}
-
-	@Override
-	public List<Card> findSimilarToCard(Long cardId, int maxResults) {
-		// TODO: Implement similar card search using the vector of the given card
-		throw new UnsupportedOperationException("Not implemented yet");
-	}
-
-	@Override
 	public List<Card> findByCollectorNumber(String collectorNumber) {
 		log.debug("Finding cards by collector number: {}", collectorNumber);
 		final List<CardEntity> entities = this.cardRepository.findByCollectorNumber(collectorNumber);
-		final List<Card> cards = entities.stream().map(this.cardEntityMapper::toModel).toList();
+		final List<Card> cards = entities.stream()
+			.map(this::mapEntityToModel)
+			.toList();
 		log.debug("Found {} cards with collector number: {}", cards.size(), collectorNumber);
 		return cards;
 	}
@@ -135,8 +159,97 @@ public class CardServiceImpl implements CardService {
 	public List<Card> findByNameAndSet(String name, Long setId) {
 		log.debug("Finding cards by name: {} and set: {}", name, setId);
 		final List<CardEntity> entities = this.cardRepository.findByNameAndCardSet(name, setId);
-		final List<Card> cards = entities.stream().map(this.cardEntityMapper::toModel).toList();
+		final List<Card> cards = entities.stream()
+			.map(this::mapEntityToModel)
+			.toList();
 		log.debug("Found {} cards with name: {} in set: {}", cards.size(), name, setId);
+		return cards;
+	}
+
+	@Override
+	public List<Card> searchCardsByType(String cardType, int pageSize, int pageNumber) {
+		log.debug("Searching cards by type: {} with pageSize={}, pageNumber={}", cardType, pageSize, pageNumber);
+
+		final PageRequest pageRequest = createPageRequest(pageSize, pageNumber);
+		final CardSearchCriteria criteria = CardSearchCriteria.builder()
+			.type(cardType)
+			.build();
+		final Page<CardEntity> page = this.cardRepository.searchCardsWithDetailedCriteria(criteria, pageRequest);
+		final List<Card> cards = page.getContent().stream()
+			.map(this::mapEntityToModel)
+			.toList();
+
+		log.debug("Found {} cards with type: {} (total available: {})", cards.size(), cardType, page.getTotalElements());
+		return cards;
+	}
+
+	@Override
+	public List<Card> searchCardsByName(String name, int pageSize, int pageNumber) {
+		log.debug("Searching cards by name: {} with pageSize={}, pageNumber={}", name, pageSize, pageNumber);
+
+		final PageRequest pageRequest = createPageRequest(pageSize, pageNumber);
+		final CardSearchCriteria criteria = CardSearchCriteria.builder()
+			.name(name)
+			.build();
+		final Page<CardEntity> page = this.cardRepository.searchCardsWithDetailedCriteria(criteria, pageRequest);
+		final List<Card> cards = page.getContent().stream()
+			.map(this::mapEntityToModel)
+			.distinct() // Remove duplicates in case multiple faces point to same parent card
+			.toList();
+
+		log.debug("Found {} cards matching name: {} (total available: {})", cards.size(), name, page.getTotalElements());
+		return cards;
+	}
+
+	@Override
+	public List<Card> searchCardsAdvanced(String name, String cardType, String rarity, int pageSize, int pageNumber) {
+		log.debug("Advanced search: name={}, type={}, rarity={}, pageSize={}, pageNumber={}",
+				 name, cardType, rarity, pageSize, pageNumber);
+
+		final PageRequest pageRequest = createPageRequest(pageSize, pageNumber);
+		final CardSearchCriteria criteria = CardSearchCriteria.builder()
+			.name(name)
+			.type(cardType)
+			.rarity(rarity)
+			.build();
+		final Page<CardEntity> page = this.cardRepository.searchCardsWithDetailedCriteria(criteria, pageRequest);
+
+		List<Card> cards = page.getContent().stream()
+			.map(this::mapEntityToModel)
+			.distinct() // Remove duplicates
+			.toList();
+
+		log.debug("Advanced search found {} cards (total available: {})", cards.size(), page.getTotalElements());
+		return cards;
+	}
+
+	@Override
+	public CardSearchResult searchCardsWithCriteria(CardSearchCriteria criteria, int pageSize, int pageNumber) {
+		log.debug("Advanced search with criteria: {}, pageSize={}, pageNumber={}", criteria, pageSize, pageNumber);
+
+		final PageRequest pageRequest = createPageRequest(pageSize, pageNumber);
+		final Page<CardEntity> page = this.cardRepository.searchCardsWithDetailedCriteria(criteria, pageRequest);
+		final List<Card> cards = page.getContent().stream()
+			.map(this::mapEntityToModel)
+			.distinct() // Remove duplicates
+			.toList();
+
+		log.debug("Advanced criteria search found {} cards (total available: {})", cards.size(), page.getTotalElements());
+
+		return CardSearchResult.of(cards, (int) page.getTotalElements());
+	}
+
+	@Override
+	public List<Card> getRandomCards(int count, String type, String rarity, Long formatId) {
+		log.debug("Getting {} random cards with type={}, rarity={}, formatId={}", count, type, rarity, formatId);
+
+		final List<CardEntity> entities = this.cardRepository.findRandomCards(count, type, rarity, formatId);
+		final List<Card> cards = entities.stream()
+			.map(this::mapEntityToModel)
+			.distinct() // Remove duplicates in case multiple faces point to same parent card
+			.toList();
+
+		log.debug("Found {} random cards matching criteria", cards.size());
 		return cards;
 	}
 

@@ -1,5 +1,6 @@
-package com.deckbuilder.mtgdeckbuilder.application.implement;
+package com.deckbuilder.mtgdeckbuilder.application;
 
+import com.deckbuilder.mtgdeckbuilder.application.implement.SetServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.SetRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.SetNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.SetEntityMapper;

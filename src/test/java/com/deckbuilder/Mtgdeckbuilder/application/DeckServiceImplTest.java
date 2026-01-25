@@ -1,5 +1,6 @@
-package com.deckbuilder.mtgdeckbuilder.application.implement;
+package com.deckbuilder.mtgdeckbuilder.application;
 
+import com.deckbuilder.mtgdeckbuilder.application.implement.DeckServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;

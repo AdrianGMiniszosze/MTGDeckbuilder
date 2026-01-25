@@ -13,6 +13,9 @@
 -- Your original design is maintained 100%
 -- ============================================
 
+DROP TABLE IF EXISTS card_relationships CASCADE;
+DROP TABLE IF EXISTS card_supertypes CASCADE;
+DROP TABLE IF EXISTS card_types CASCADE;
 DROP TABLE IF EXISTS card_subtypes CASCADE;
 DROP TABLE IF EXISTS card_keywords CASCADE;
 DROP TABLE IF EXISTS card_color_identity CASCADE;
@@ -41,9 +44,9 @@ CREATE TABLE sets (
 CREATE TABLE cards (
     id SERIAL PRIMARY KEY,
     card_name TEXT NOT NULL,
-    mana_cost TEXT NOT NULL,
+    mana_cost TEXT,
     cmc INTEGER NOT NULL,
-    color_identity TEXT NOT NULL,
+    color_identity TEXT,
     type_line TEXT NOT NULL,
     card_type TEXT NOT NULL,
     card_supertype TEXT,
@@ -80,6 +83,16 @@ CREATE TABLE card_color_identity (
     PRIMARY KEY (card_id, color)
 );
 
+-- Card types table (many-to-many for card types: Creature, Instant, Artifact, etc.)
+CREATE TABLE card_types (
+    card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN (
+        'Land', 'Creature', 'Artifact', 'Enchantment', 'Planeswalker',
+        'Instant', 'Sorcery', 'Tribal', 'Battle', 'Kindred'
+    )),
+    PRIMARY KEY (card_id, type)
+);
+
 -- Card keywords table (many-to-many for keywords)
 CREATE TABLE card_keywords (
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
@@ -87,11 +100,37 @@ CREATE TABLE card_keywords (
     PRIMARY KEY (card_id, keyword)
 );
 
--- Card subtypes table (many-to-many for subtypes)
+-- Card subtypes table (many-to-many for subtypes: Goblin, Wizard, Equipment, etc.)
 CREATE TABLE card_subtypes (
     card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
     subtype TEXT NOT NULL,
     PRIMARY KEY (card_id, subtype)
+);
+
+-- Card supertypes table (many-to-many for supertypes: Legendary, Basic, Snow, etc.)
+CREATE TABLE card_supertypes (
+    card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    supertype TEXT NOT NULL CHECK (supertype IN (
+        'Basic', 'Elite', 'Legendary', 'Ongoing', 'Snow', 'World'
+    )),
+    PRIMARY KEY (card_id, supertype)
+);
+
+-- Card relationships table (for Adventure cards, split cards, etc.)
+CREATE TABLE card_relationships (
+    id SERIAL PRIMARY KEY,
+    parent_card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    related_card_id INTEGER NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    relationship_type TEXT NOT NULL CHECK (relationship_type IN (
+        'adventure_face', 'adventure_combined',
+        'split_face', 'split_combined',
+        'transform_face', 'transform_combined',
+        'modal_dfc_face', 'modal_dfc_combined',
+        'flip_face', 'flip_combined',
+        'multi_face_face', 'multi_face_combined'
+    )),
+    face_order INTEGER, -- 0 for main/first, 1 for adventure/second, etc.
+    UNIQUE (parent_card_id, related_card_id, relationship_type)
 );
 
 CREATE TABLE users (
@@ -178,8 +217,13 @@ CREATE INDEX idx_card_deck_deck_id ON card_deck(deck_id);
 CREATE INDEX idx_card_legality_format_id ON card_legality(format_id);
 CREATE INDEX idx_card_colors_color ON card_colors(color);
 CREATE INDEX idx_card_color_identity_color ON card_color_identity(color);
+CREATE INDEX idx_card_types_type ON card_types(type);
 CREATE INDEX idx_card_keywords_keyword ON card_keywords(keyword);
 CREATE INDEX idx_card_subtypes_subtype ON card_subtypes(subtype);
+CREATE INDEX idx_card_supertypes_supertype ON card_supertypes(supertype);
+CREATE INDEX idx_card_relationships_parent ON card_relationships(parent_card_id);
+CREATE INDEX idx_card_relationships_related ON card_relationships(related_card_id);
+CREATE INDEX idx_card_relationships_type ON card_relationships(relationship_type);
 
 -- ⭐ NEW: Additional indexes for performance
 CREATE INDEX idx_cards_cmc ON cards(cmc);
@@ -199,97 +243,41 @@ USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 
 -- ============================================
--- TRIGGERS (Your Original - EXCELLENT!)
+-- TRIGGERS AND FUNCTIONS
 -- ============================================
 
-CREATE OR REPLACE FUNCTION check_card_quantity()
+-- Note: Card quantity and deck validation logic has been moved to DeckValidationService
+-- This provides better error handling and business logic separation
+
+-- Function to automatically update deck modification time
+CREATE OR REPLACE FUNCTION update_deck_modification_time()
 RETURNS TRIGGER AS $$
 DECLARE
-    deck_format_id INTEGER;
-    legality_status TEXT;
-    card_type_name TEXT;
-    card_super_type_name TEXT;
-    unlimited_copies_flag BOOLEAN;
-    max_quantity_single_card INTEGER;
-    current_total_cards INTEGER;
-    max_deck_size INTEGER;
+    target_deck_id INTEGER;
 BEGIN
-    -- Use the section from card_deck (NEW.section) instead of deck_type
-    -- Skip validation for maybeboard cards
-    IF NEW.section = 'maybeboard' THEN
+    -- Get the appropriate deck_id based on operation type
+    IF TG_OP = 'DELETE' THEN
+        target_deck_id := OLD.deck_id;
+    ELSE
+        target_deck_id := NEW.deck_id;
+    END IF;
+
+    UPDATE decks SET last_modification = CURRENT_TIMESTAMP WHERE id = target_deck_id;
+
+    -- Return the appropriate record
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    ELSE
         RETURN NEW;
     END IF;
-
-    -- Get the deck's format
-    SELECT format INTO deck_format_id
-    FROM decks
-    WHERE id = NEW.deck_id;
-
-    SELECT legality_status INTO legality_status
-    FROM card_legality
-    WHERE card_id = NEW.card_id AND format_id = deck_format_id;
-
-    IF legality_status = 'banned' THEN
-        RAISE EXCEPTION 'Card is banned in the % format.', (SELECT format_name FROM formats WHERE id = deck_format_id);
-    END IF;
-
-    SELECT card_type, card_supertype, unlimited_copies INTO card_type_name, card_super_type_name, unlimited_copies_flag
-    FROM cards
-    WHERE id = NEW.card_id;
-
-    IF unlimited_copies_flag THEN
-        max_quantity_single_card := 9999;
-    ELSIF card_type_name = 'Land' AND card_super_type_name = 'Basic' THEN
-        max_quantity_single_card := 9999;
-    ELSIF legality_status = 'restricted' THEN
-        max_quantity_single_card := 1;
-    ELSIF (SELECT format_name FROM formats WHERE id = deck_format_id) = 'Commander' THEN
-        max_quantity_single_card := 1;
-    ELSE
-        max_quantity_single_card := 4;
-    END IF;
-
-    IF NEW.quantity IS NULL THEN
-        RAISE EXCEPTION 'Quantity cannot be null for card %', NEW.card_id;
-    END IF;
-
-    IF NEW.quantity > max_quantity_single_card THEN
-        RAISE EXCEPTION 'Card with id %s quantity limit exceeded. Max allowed is %.', NEW.card_id, max_quantity_single_card;
-    END IF;
-
-    SELECT SUM(quantity) INTO current_total_cards
-    FROM card_deck
-    WHERE deck_id = NEW.deck_id AND card_id != NEW.card_id AND section = NEW.section;
-
-    IF TG_OP = 'UPDATE' THEN
-        SELECT quantity INTO current_total_cards
-        FROM card_deck
-        WHERE deck_id = OLD.deck_id AND card_id = OLD.card_id AND section = OLD.section;
-    END IF;
-
-    -- Set max deck size based on section
-    IF NEW.section = 'sideboard' THEN
-        max_deck_size := 15;
-    ELSE
-        -- For main deck, use format's deck size limit
-        SELECT deck_size INTO max_deck_size
-        FROM formats
-        WHERE id = deck_format_id;
-    END IF;
-
-    IF (COALESCE(current_total_cards, 0) + NEW.quantity) > max_deck_size THEN
-        RAISE EXCEPTION 'Deck section "%" size limit exceeded. Max allowed is %.', NEW.section, max_deck_size;
-    END IF;
-
-    UPDATE decks SET last_modification = CURRENT_TIMESTAMP WHERE id = NEW.deck_id;
-    RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER enforce_card_quantity_limit
-BEFORE INSERT OR UPDATE ON card_deck
+-- Trigger to update deck modification time when cards are added/removed
+CREATE TRIGGER update_deck_time_on_card_change
+AFTER INSERT OR UPDATE OR DELETE ON card_deck
 FOR EACH ROW
-EXECUTE FUNCTION check_card_quantity();
+EXECUTE FUNCTION update_deck_modification_time();
 
 -- ============================================
 -- ⭐ NEW: HELPER FUNCTIONS
@@ -330,8 +318,11 @@ COMMENT ON TABLE card_deck IS 'Junction table linking cards to decks with quanti
 COMMENT ON TABLE decks IS 'User-created decks with format and privacy settings';
 COMMENT ON TABLE card_colors IS 'Many-to-many: actual colors of a card';
 COMMENT ON TABLE card_color_identity IS 'Many-to-many: color identity (Commander rules)';
+COMMENT ON TABLE card_types IS 'Many-to-many: card types (Creature, Instant, Artifact, etc.)';
 COMMENT ON TABLE card_keywords IS 'Many-to-many: MTG keywords associated with cards';
-COMMENT ON TABLE card_subtypes IS 'Many-to-many: creature types, artifact types, etc.';
+COMMENT ON TABLE card_subtypes IS 'Many-to-many: creature types, equipment types, etc. (Goblin, Wizard, Equipment)';
+COMMENT ON TABLE card_supertypes IS 'Many-to-many: supertypes (Legendary, Basic, Snow, etc.)';
+COMMENT ON TABLE card_relationships IS 'Links related cards (Adventure faces, split cards, etc.)';
 
 COMMENT ON COLUMN cards.embedding IS 'Vector embedding (1536-dim) for semantic similarity search via pgvector';
 COMMENT ON COLUMN card_tag.confidence IS 'AI confidence score (0-1) for tag assignment';

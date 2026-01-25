@@ -21,13 +21,13 @@ public class CardEntity {
 	@Column(name = "card_name", nullable = false)
 	private String name;
 
-	@Column(name = "mana_cost", nullable = false)
+	@Column(name = "mana_cost")  // Now nullable
 	private String manaCost;
 
 	@Column(nullable = false)
 	private Integer cmc;
 
-	@Column(name = "color_identity", nullable = false)
+	@Column(name = "color_identity")  // Now nullable
 	private String colorIdentity;
 
 	@Column(name = "type_line", nullable = false)
@@ -43,7 +43,7 @@ public class CardEntity {
 	private String rarity;
 
 	@Column(name = "card_text", nullable = false, columnDefinition = "TEXT")
-	private String oracleText;
+	private String cardText;
 
 	@Column(name = "flavor_text", columnDefinition = "TEXT")
 	private String flavorText;
@@ -67,11 +67,15 @@ public class CardEntity {
 	@Column(name = "related_card")
 	private Long relatedCard;
 
+	@Column(name = "parent_card_id")
+	private Long parentCardId;
+
 	@Column(nullable = false)
 	private String language;
 
-	@Column(name = "embedding", columnDefinition = "vector(1536)")
-	private Double[] embedding;
+	@Column(name = "embedding")
+	@Lob
+	private String embedding;
 
 	private String archetype;
 
@@ -98,6 +102,16 @@ public class CardEntity {
 	@Enumerated(EnumType.STRING)
 	@Column(name = "color", length = 1)
 	private List<CardColor> colorIdentityColors;
+
+	@ElementCollection
+	@CollectionTable(name = "card_types", joinColumns = @JoinColumn(name = "card_id"))
+	@Column(name = "type")
+	private List<String> types;
+
+	@ElementCollection
+	@CollectionTable(name = "card_supertypes", joinColumns = @JoinColumn(name = "card_id"))
+	@Column(name = "supertype")
+	private List<String> supertypes;
 
 	@ElementCollection
 	@CollectionTable(name = "card_keywords", joinColumns = @JoinColumn(name = "card_id"))
