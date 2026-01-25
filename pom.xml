@@ -9,7 +9,7 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.deckbuilder</groupId>
-	<artifactId>Mtgdeckbuilder</artifactId>
+	<artifactId>mtgdeckbuilder</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>Mtgdeckbuilder</name>
 	<description>Deck Building project</description>
@@ -45,7 +45,6 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>com.h2database</groupId>
@@ -90,6 +89,24 @@
             <version>4.0.0-M1</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Testcontainers for integration testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
             <artifactId>swagger-parser-core</artifactId>
@@ -136,9 +153,6 @@
 				<configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
-                    <compilerArgs>
-                        <compilerArg>-Amapstruct.verbose=true</compilerArg>
-                    </compilerArgs>
 					<annotationProcessorPaths>
                         <path>
                             <groupId>org.mapstruct</groupId>
@@ -173,7 +187,7 @@
             <plugin>
                 <groupId>com.sngular</groupId>
                 <artifactId>scs-multiapi-maven-plugin</artifactId>
-                <version>6.2.1</version>
+                <version>6.3.1</version>
                 <executions>
                     <execution>
                         <goals>

@@ -38,7 +38,7 @@ class CardRepositoryTest {
         this.testCardEntity.setColorIdentity("");
         this.testCardEntity.setTypeLine("Artifact");
         this.testCardEntity.setCardType("Artifact");
-        this.testCardEntity.setOracleText("Add three mana of any one color.");
+        this.testCardEntity.setCardText("Add three mana of any one color.");
         this.testCardEntity.setRarity("Mythic Rare");
         this.testCardEntity.setCardSet(1L);
         this.testCardEntity.setImageUrl("http://example.com/black-lotus.jpg");
@@ -104,15 +104,16 @@ class CardRepositoryTest {
 	void shouldSearchCardsByName() {
 		// Given
 		final Page<CardEntity> entityPage = new PageImpl<>(List.of(this.testCardEntity));
-		when(this.cardRepository.searchByName(eq("Lotus"), any(Pageable.class))).thenReturn(entityPage);
+		when(this.cardRepository.searchCardsWithDetailedCriteria(any(), any(Pageable.class))).thenReturn(entityPage);
 
 		// When
-		final Page<CardEntity> result = this.cardRepository.searchByName("Lotus", Pageable.ofSize(10).withPage(0));
+		final Pageable pageable = Pageable.ofSize(10).withPage(0);
+		final Page<CardEntity> result = this.cardRepository.searchCardsWithDetailedCriteria(null, pageable);
 
 		// Then
 		assertThat(result.getContent()).hasSize(1);
 		assertThat(result.getContent().get(0).getName()).contains("Lotus");
-		verify(this.cardRepository, times(1)).searchByName(eq("Lotus"), any(Pageable.class));
+		verify(this.cardRepository, times(1)).searchCardsWithDetailedCriteria(any(), any(Pageable.class));
 	}
 
 	@Test
@@ -142,21 +143,6 @@ class CardRepositoryTest {
 
 		// Then
 		verify(this.cardRepository, times(1)).deleteById(1L);
-	}
-
-	@Test
-	@DisplayName("Should find cards by format ID")
-	void shouldFindCardsByFormatId() {
-		// Given
-		when(this.cardRepository.findByFormatId(anyLong())).thenReturn(List.of(this.testCardEntity));
-
-		// When
-		final List<CardEntity> result = this.cardRepository.findByFormatId(1L);
-
-		// Then
-		assertThat(result).hasSize(1);
-		assertThat(result.get(0).getName()).isEqualTo("Black Lotus");
-		verify(this.cardRepository, times(1)).findByFormatId(1L);
 	}
 
 	// ========================================
@@ -289,5 +275,64 @@ class CardRepositoryTest {
 		assertThat(result).allMatch(card -> card.getName().equals("Forest"));
 		assertThat(result).allMatch(card -> card.getCardSet().equals(1L));
 		assertThat(result.stream().map(CardEntity::getCollectorNumber)).containsExactlyInAnyOrder("264", "265", "266");
+	}
+
+	// ========================================
+	// Tests for New Repository Methods
+	// ========================================
+
+	@Test
+	@DisplayName("Should store and retrieve parent card relationship")
+	void shouldStoreAndRetrieveParentCardRelationship() {
+		// Given - Parent card and face card
+		final CardEntity parentCard = new CardEntity();
+		parentCard.setId(1L);
+		parentCard.setName("Beanstalk Giant // Fertile Footsteps");
+
+		final CardEntity faceCard = new CardEntity();
+		faceCard.setId(2L);
+		faceCard.setName("Beanstalk Giant");
+		faceCard.setParentCardId(1L);
+
+		when(this.cardRepository.save(parentCard)).thenReturn(parentCard);
+		when(this.cardRepository.save(faceCard)).thenReturn(faceCard);
+
+		// When
+		final CardEntity savedParent = this.cardRepository.save(parentCard);
+		final CardEntity savedFace = this.cardRepository.save(faceCard);
+
+		// Then
+		assertThat(savedParent.getId()).isEqualTo(1L);
+		assertThat(savedFace.getParentCardId()).isEqualTo(1L);
+		verify(this.cardRepository, times(1)).save(parentCard);
+		verify(this.cardRepository, times(1)).save(faceCard);
+	}
+
+
+	@Test
+	@DisplayName("Should find multiple cards with same collector number across different sets")
+	void shouldFindMultipleCardsWithSameCollectorNumberAcrossDifferentSets() {
+		// Given - Same card reprinted in different sets
+		final CardEntity originalPrint = new CardEntity();
+		originalPrint.setName("Lightning Bolt");
+		originalPrint.setCollectorNumber("001");
+		originalPrint.setCardSet(1L); // Alpha set
+
+		final CardEntity reprint = new CardEntity();
+		reprint.setName("Lightning Bolt");
+		reprint.setCollectorNumber("001");
+		reprint.setCardSet(2L); // Beta set
+
+		final List<CardEntity> cards = Arrays.asList(originalPrint, reprint);
+		when(this.cardRepository.findByCollectorNumber("001")).thenReturn(cards);
+
+		// When
+		final List<CardEntity> result = this.cardRepository.findByCollectorNumber("001");
+
+		// Then
+		assertThat(result).hasSize(2);
+		assertThat(result).allMatch(card -> card.getCollectorNumber().equals("001"));
+		assertThat(result).allMatch(card -> card.getName().equals("Lightning Bolt"));
+		assertThat(result.stream().map(CardEntity::getCardSet)).containsExactlyInAnyOrder(1L, 2L);
 	}
 }

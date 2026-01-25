@@ -10,12 +10,12 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - ../src/main/resources/scripts/01-create-schema.sql:/docker-entrypoint-initdb.d/01-create-schema.sql
+      - ../src/main/resources/scripts/01-create-schema-ENHANCED.sql:/docker-entrypoint-initdb.d/01-create-schema.sql
       - postgres_data:/var/lib/postgresql/data
 
   app:
     build:
-      context: ../
+      context: ..
       dockerfile: infra/Dockerfile
     container_name: mtgdeckbuilder_app
     restart: always

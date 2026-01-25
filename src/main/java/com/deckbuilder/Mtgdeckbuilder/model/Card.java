@@ -21,7 +21,7 @@ public class Card {
 	private String cardType;
 	private String cardSupertype;
 	private String rarity;
-	private String oracleText;
+	private String cardText;
 	private String flavorText;
 	private String power;
 	private String toughness;
@@ -30,8 +30,9 @@ public class Card {
 	private Boolean foil;
 	private Boolean gameChanger;
 	private Long relatedCard;
+	private Long parentCardId;
 	private String language;
-	private Double[] embedding;
+	private String embedding;
 	private String archetype;
 	private Long cardSet;
 	private String collectorNumber;
@@ -39,6 +40,8 @@ public class Card {
 	private Boolean variation;
 	private List<String> colors;
 	private List<String> colorIdentityColors;
+	private List<String> types;           // NEW: Separated card types (Creature, Instant, etc.)
+	private List<String> supertypes;      // NEW: Separated supertypes (Legendary, Basic, etc.)
 	private List<String> keywords;
 	private List<String> subtypes;
 }

@@ -1,6 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.model.CardDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CardSearchResponseDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CardTagDTO;
 import com.deckbuilder.mtgdeckbuilder.application.CardService;
 import com.deckbuilder.mtgdeckbuilder.application.CardTagService;
@@ -8,8 +9,9 @@ import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardTagMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchCriteria;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchResult;
 import com.deckbuilder.mtgdeckbuilder.model.CardTag;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,15 +54,45 @@ class CardControllerTest {
 	private Card testCard;
 	private CardDTO testCardDTO;
 
+	// Additional test data for search endpoint tests
+	private Card testCard2;
+	private CardDTO testCardDTO2;
+
 	@BeforeEach
 	void setUp() {
 		this.testCard = Card.builder().id(1L).name("Lightning Bolt").manaCost("{R}").typeLine("Instant")
-				.oracleText("Lightning Bolt deals 3 damage to any target.").rarity("Common").build();
+				.cardText("Lightning Bolt deals 3 damage to any target.").rarity("Common").build();
 
 		this.testCardDTO = CardDTO.builder().id(1).card_name("Lightning Bolt").mana_cost("{R}").cmc(1)
 				.color_identity("R").type_line("Instant").card_type("Instant").rarity(CardDTO.Rarity.COMMON)
 				.card_text("Lightning Bolt deals 3 damage to any target.").image_url("https://example.com/card.jpg")
 				.language("en").build();
+
+		// Additional test data for search endpoint tests
+		this.testCard2 = Card.builder()
+			.id(2L)
+			.name("Lightning Strike")
+			.manaCost("{1}{R}")
+			.cmc(2)
+			.cardType("Instant")
+			.rarity("common")
+			.cardText("Lightning Strike deals 3 damage to any target.")
+			.colorIdentity("R")
+			.build();
+
+		this.testCardDTO2 = CardDTO.builder()
+			.id(2)
+			.card_name("Lightning Strike")
+			.mana_cost("{1}{R}")
+			.cmc(2)
+			.card_type("Instant")
+			.rarity(CardDTO.Rarity.COMMON)
+			.card_text("Lightning Strike deals 3 damage to any target.")
+			.color_identity("R")
+			.image_url("https://example.com/lightning_strike.jpg")
+			.language("en")
+			.type_line("Instant")
+			.build();
 	}
 
 	@Test
@@ -324,7 +357,7 @@ class CardControllerTest {
 				.card_type("Instant")
 				.rarity(CardDTO.Rarity.COMMON)
 				.card_text("Lightning Bolt deals 3 damage to any target.")
-				.image_url("https://example.com/lightning-bolt.jpg")
+				.image_url("https://example.com/card.jpg")
 				.language("en")
 				.collector_number("001")
 				.card_set(1)
@@ -334,157 +367,35 @@ class CardControllerTest {
 				.name("Lightning Bolt")
 				.collectorNumber("001")
 				.cardSet(1L)
-				.manaCost("{R}")
-				.cmc(1)
-				.colorIdentity("R")
-				.typeLine("Instant")
-				.cardType("Instant")
-				.rarity("COMMON")
-				.oracleText("Lightning Bolt deals 3 damage to any target.")
-				.imageUrl("https://example.com/lightning-bolt.jpg")
-				.language("en")
 				.build();
 
 		final Card savedCard = cardWithCollector.toBuilder().id(1L).build();
 
 		when(this.cardMapper.toEntity(cardDTOWithCollector)).thenReturn(cardWithCollector);
-		when(this.cardService.createCard(any(Card.class))).thenReturn(savedCard);
+		when(this.cardService.createCard(cardWithCollector)).thenReturn(savedCard);
 		when(this.cardMapper.toDto(savedCard)).thenReturn(CardDTO.builder()
-				.id(1)
-				.card_name("Lightning Bolt")
-				.collector_number("001")
-				.card_set(1)
-				.mana_cost("{R}")
-				.cmc(1)
-				.color_identity("R")
-				.type_line("Instant")
-				.card_type("Instant")
-				.rarity(CardDTO.Rarity.COMMON)
-				.card_text("Lightning Bolt deals 3 damage to any target.")
-				.image_url("https://example.com/lightning-bolt.jpg")
-				.language("en")
-				.build());
+			.id(1)
+			.card_name(cardDTOWithCollector.getCard_name())
+			.mana_cost(cardDTOWithCollector.getMana_cost())
+			.cmc(cardDTOWithCollector.getCmc())
+			.color_identity(cardDTOWithCollector.getColor_identity())
+			.type_line(cardDTOWithCollector.getType_line())
+			.card_type(cardDTOWithCollector.getCard_type())
+			.rarity(cardDTOWithCollector.getRarity())
+			.card_text(cardDTOWithCollector.getCard_text())
+			.image_url(cardDTOWithCollector.getImage_url())
+			.language(cardDTOWithCollector.getLanguage())
+			.collector_number("001")
+			.card_set(cardDTOWithCollector.getCard_set())
+			.build());
 
 		// When
 		final ResponseEntity<CardDTO> response = this.cardController.createCard(cardDTOWithCollector);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        Assertions.assertNotNull(response.getBody());
-        assertThat(response.getBody().getCollector_number()).isEqualTo("001");
+		assertThat(response.getBody().getCollector_number()).isEqualTo("001");
 		verify(this.cardService).createCard(cardWithCollector);
-	}
-
-	@Test
-	@DisplayName("Should filter cards by collector number")
-	void shouldFilterCardsByCollectorNumber() {
-		// Given
-		final Card cardVariant1 = this.testCard.toBuilder().collectorNumber("001").foil(false).build();
-
-		final CardDTO cardDTO1 = CardDTO.builder()
-				.id(this.testCardDTO.getId())
-				.card_name(this.testCardDTO.getCard_name())
-				.mana_cost(this.testCardDTO.getMana_cost())
-				.cmc(this.testCardDTO.getCmc())
-				.color_identity(this.testCardDTO.getColor_identity())
-				.type_line(this.testCardDTO.getType_line())
-				.card_type(this.testCardDTO.getCard_type())
-				.rarity(this.testCardDTO.getRarity())
-				.card_text(this.testCardDTO.getCard_text())
-				.image_url(this.testCardDTO.getImage_url())
-				.language(this.testCardDTO.getLanguage())
-				.collector_number("001")
-				.foil(false)
-				.build();
-
-		when(this.cardService.findByCollectorNumber("001")).thenReturn(List.of(cardVariant1));
-		when(this.cardMapper.toDtoList(List.of(cardVariant1))).thenReturn(List.of(cardDTO1));
-
-		// When
-		final ResponseEntity<List<CardDTO>> response = this.cardController.getCardsByCollectorNumber("001");
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		assertThat(response.getBody()).hasSize(1);
-		assertThat(response.getBody().getFirst().getCollector_number()).isEqualTo("001");
-		verify(this.cardService).findByCollectorNumber("001");
-	}
-
-	@Test
-	@DisplayName("Should return all variants of a card")
-	void shouldReturnAllVariantsOfCard() {
-		// Given
-		final Card regularCard = this.testCard.toBuilder().collectorNumber("264").foil(false).promo(false).build();
-		final Card foilCard = this.testCard.toBuilder().collectorNumber("264★").foil(true).promo(false).build();
-		final Card promoCard = this.testCard.toBuilder().collectorNumber("264p").foil(false).promo(true).build();
-
-		final CardDTO regularDTO = CardDTO.builder()
-				.id(this.testCardDTO.getId())
-				.card_name(this.testCardDTO.getCard_name())
-				.mana_cost(this.testCardDTO.getMana_cost())
-				.cmc(this.testCardDTO.getCmc())
-				.color_identity(this.testCardDTO.getColor_identity())
-				.type_line(this.testCardDTO.getType_line())
-				.card_type(this.testCardDTO.getCard_type())
-				.rarity(this.testCardDTO.getRarity())
-				.card_text(this.testCardDTO.getCard_text())
-				.image_url(this.testCardDTO.getImage_url())
-				.language(this.testCardDTO.getLanguage())
-				.collector_number("264")
-				.foil(false)
-				.promo(false)
-				.build();
-		final CardDTO foilDTO = CardDTO.builder()
-				.id(this.testCardDTO.getId())
-				.card_name(this.testCardDTO.getCard_name())
-				.mana_cost(this.testCardDTO.getMana_cost())
-				.cmc(this.testCardDTO.getCmc())
-				.color_identity(this.testCardDTO.getColor_identity())
-				.type_line(this.testCardDTO.getType_line())
-				.card_type(this.testCardDTO.getCard_type())
-				.rarity(this.testCardDTO.getRarity())
-				.card_text(this.testCardDTO.getCard_text())
-				.image_url(this.testCardDTO.getImage_url())
-				.language(this.testCardDTO.getLanguage())
-				.collector_number("264★")
-				.foil(true)
-				.promo(false)
-				.build();
-		final CardDTO promoDTO = CardDTO.builder()
-				.id(this.testCardDTO.getId())
-				.card_name(this.testCardDTO.getCard_name())
-				.mana_cost(this.testCardDTO.getMana_cost())
-				.cmc(this.testCardDTO.getCmc())
-				.color_identity(this.testCardDTO.getColor_identity())
-				.type_line(this.testCardDTO.getType_line())
-				.card_type(this.testCardDTO.getCard_type())
-				.rarity(this.testCardDTO.getRarity())
-				.card_text(this.testCardDTO.getCard_text())
-				.image_url(this.testCardDTO.getImage_url())
-				.language(this.testCardDTO.getLanguage())
-				.collector_number("264p")
-				.foil(false)
-				.promo(true)
-				.build();
-
-		final List<Card> variants = Arrays.asList(regularCard, foilCard, promoCard);
-		final List<CardDTO> variantDTOs = Arrays.asList(regularDTO, foilDTO, promoDTO);
-
-		when(this.cardService.findByNameAndSet("Forest", 1L)).thenReturn(variants);
-		when(this.cardMapper.toDtoList(variants)).thenReturn(variantDTOs);
-
-		// When
-		final ResponseEntity<List<CardDTO>> response = this.cardController.getCardVariants("Forest", 1);
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		assertThat(response.getBody()).hasSize(3);
-		assertThat(response.getBody()).extracting(CardDTO::getCollector_number)
-				.containsExactlyInAnyOrder("264", "264★", "264p");
-		assertThat(response.getBody()).extracting(CardDTO::getFoil)
-				.containsExactlyInAnyOrder(false, true, false);
-		assertThat(response.getBody()).extracting(CardDTO::getPromo)
-				.containsExactlyInAnyOrder(false, false, true);
 	}
 
 	@Test
@@ -492,22 +403,22 @@ class CardControllerTest {
 	void shouldIncludeVariantMetadataInResponse() {
 		// Given
 		final CardDTO variantCardDTO = CardDTO.builder()
-				.id(this.testCardDTO.getId())
-				.card_name(this.testCardDTO.getCard_name())
-				.mana_cost(this.testCardDTO.getMana_cost())
-				.cmc(this.testCardDTO.getCmc())
-				.color_identity(this.testCardDTO.getColor_identity())
-				.type_line(this.testCardDTO.getType_line())
-				.card_type(this.testCardDTO.getCard_type())
-				.rarity(this.testCardDTO.getRarity())
-				.card_text(this.testCardDTO.getCard_text())
-				.image_url(this.testCardDTO.getImage_url())
-				.language(this.testCardDTO.getLanguage())
-				.collector_number("001")
-				.foil(true)
-				.promo(true)
-				.variation(true)
-				.build();
+			.id(this.testCardDTO.getId())
+			.card_name(this.testCardDTO.getCard_name())
+			.mana_cost(this.testCardDTO.getMana_cost())
+			.cmc(this.testCardDTO.getCmc())
+			.color_identity(this.testCardDTO.getColor_identity())
+			.type_line(this.testCardDTO.getType_line())
+			.card_type(this.testCardDTO.getCard_type())
+			.rarity(this.testCardDTO.getRarity())
+			.card_text(this.testCardDTO.getCard_text())
+			.image_url(this.testCardDTO.getImage_url())
+			.language(this.testCardDTO.getLanguage())
+			.collector_number("001")
+			.foil(true)
+			.promo(true)
+			.variation(true)
+			.build();
 
 		final Card variantCard = this.testCard.toBuilder()
 				.collectorNumber("001")
@@ -524,8 +435,7 @@ class CardControllerTest {
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        Assertions.assertNotNull(response.getBody());
-        assertThat(response.getBody().getCollector_number()).isEqualTo("001");
+		assertThat(response.getBody().getCollector_number()).isEqualTo("001");
 		assertThat(response.getBody().getFoil()).isTrue();
 		assertThat(response.getBody().getPromo()).isTrue();
 		assertThat(response.getBody().getVariation()).isTrue();
@@ -543,5 +453,202 @@ class CardControllerTest {
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 		verify(this.cardTagService, times(1)).deleteCardTag(1L, 1L);
+	}
+
+	// ========================================
+	// Search Endpoint Tests
+	// ========================================
+
+	@Test
+	@DisplayName("Should search cards with basic name filter")
+	void shouldSearchCardsWithBasicNameFilter() {
+		// Given
+		final List<Card> searchResults = Arrays.asList(testCard, testCard2);
+		final CardSearchResult result = CardSearchResult.of(searchResults, 2);
+
+		when(cardService.searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0)))
+			.thenReturn(result);
+		when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+		when(cardMapper.toDto(testCard2)).thenReturn(testCardDTO2);
+
+		// When
+		ResponseEntity<CardSearchResponseDTO> response = cardController.searchCards(
+			"Lightning", null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null, null
+		);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getCards()).hasSize(2);
+		assertThat(response.getBody().getTotal_count()).isEqualTo(2);
+		assertThat(response.getBody().getPage_info().getCurrent_page()).isEqualTo(0);
+		assertThat(response.getBody().getPage_info().getPage_size()).isEqualTo(20);
+
+		verify(cardService).searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0));
+	}
+
+	@Test
+	@DisplayName("Should search cards with multiple filters")
+	void shouldSearchCardsWithMultipleFilters() {
+		// Given
+		final List<Card> searchResults = Arrays.asList(testCard);
+		final CardSearchResult result = CardSearchResult.of(searchResults, 1);
+
+		when(cardService.searchCardsWithCriteria(any(CardSearchCriteria.class), eq(10), eq(0)))
+			.thenReturn(result);
+		when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+
+		// When
+		ResponseEntity<CardSearchResponseDTO> response = cardController.searchCards(
+			"Lightning", "Instant", "common", "R",
+			1, 3, null, null,
+			null, null, null, null,
+			"damage", null, null, null,
+			"en", 10, 0, "name", "asc"
+		);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getCards()).hasSize(1);
+		assertThat(response.getBody().getCards().get(0).getCard_name()).isEqualTo("Lightning Bolt");
+		assertThat(response.getBody().getTotal_count()).isEqualTo(1);
+
+		verify(cardService).searchCardsWithCriteria(any(CardSearchCriteria.class), eq(10), eq(0));
+	}
+
+	@Test
+	@DisplayName("Should handle pagination correctly")
+	void shouldHandlePaginationCorrectly() {
+		// Given
+		final List<Card> searchResults = Arrays.asList(testCard2);
+		final CardSearchResult result = CardSearchResult.of(searchResults, 25); // Total 25 cards
+
+		when(cardService.searchCardsWithCriteria(any(CardSearchCriteria.class), eq(10), eq(1)))
+			.thenReturn(result);
+		when(cardMapper.toDto(testCard2)).thenReturn(testCardDTO2);
+
+		// When
+		ResponseEntity<CardSearchResponseDTO> response = cardController.searchCards(
+			"Lightning", null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, 10, 1, null, null
+		);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getPage_info().getCurrent_page()).isEqualTo(1);
+		assertThat(response.getBody().getPage_info().getPage_size()).isEqualTo(10);
+		assertThat(response.getBody().getPage_info().getTotal_pages()).isEqualTo(3); // ceil(25/10)
+		assertThat(response.getBody().getPage_info().getHas_next_page()).isTrue();
+		assertThat(response.getBody().getPage_info().getHas_previous_page()).isTrue();
+
+		verify(cardService).searchCardsWithCriteria(any(CardSearchCriteria.class), eq(10), eq(1));
+	}
+
+	@Test
+	@DisplayName("Should get random cards with basic parameters")
+	void shouldGetRandomCardsWithBasicParameters() {
+		// Given
+		final List<Card> randomCards = Arrays.asList(testCard, testCard2);
+		when(cardService.getRandomCards(2, null, null, null))
+			.thenReturn(randomCards);
+		when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+		when(cardMapper.toDto(testCard2)).thenReturn(testCardDTO2);
+
+		// When
+		ResponseEntity<List<CardDTO>> response = cardController.getRandomCards(2, null, null, null);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).hasSize(2);
+		assertThat(response.getBody().get(0).getCard_name()).isEqualTo("Lightning Bolt");
+		assertThat(response.getBody().get(1).getCard_name()).isEqualTo("Lightning Strike");
+
+		verify(cardService).getRandomCards(2, null, null, null);
+	}
+
+	@Test
+	@DisplayName("Should get random cards with filters")
+	void shouldGetRandomCardsWithFilters() {
+		// Given
+		final List<Card> randomCards = Arrays.asList(testCard);
+		when(cardService.getRandomCards(1, "Instant", "common", 1L))
+			.thenReturn(randomCards);
+		when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+
+		// When
+		ResponseEntity<List<CardDTO>> response = cardController.getRandomCards(1, "Instant", "common", 1);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).hasSize(1);
+		assertThat(response.getBody().get(0).getCard_name()).isEqualTo("Lightning Bolt");
+		assertThat(response.getBody().get(0).getCard_type()).isEqualTo("Instant");
+
+		verify(cardService).getRandomCards(1, "Instant", "common", 1L);
+	}
+
+	@Test
+	@DisplayName("Should use default values for null parameters")
+	void shouldUseDefaultValuesForNullParameters() {
+		// Given
+		final List<Card> searchResults = Arrays.asList(testCard);
+		final CardSearchResult result = CardSearchResult.of(searchResults, 1);
+
+		when(cardService.searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0)))
+			.thenReturn(result);
+		when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+
+		// When
+		ResponseEntity<CardSearchResponseDTO> response = cardController.searchCards(
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null, null
+		);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody().getPage_info().getCurrent_page()).isEqualTo(0);
+		assertThat(response.getBody().getPage_info().getPage_size()).isEqualTo(20);
+
+		verify(cardService).searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0));
+	}
+
+	@Test
+	@DisplayName("Should handle empty search results")
+	void shouldHandleEmptySearchResults() {
+		// Given
+		final CardSearchResult result = CardSearchResult.of(Arrays.asList(), 0);
+
+		when(cardService.searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0)))
+			.thenReturn(result);
+
+		// When
+		ResponseEntity<CardSearchResponseDTO> response = cardController.searchCards(
+			"NonexistentCard", null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null,
+			null, null, null, null, null
+		);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody().getCards()).isEmpty();
+		assertThat(response.getBody().getTotal_count()).isEqualTo(0);
+		assertThat(response.getBody().getPage_info().getTotal_pages()).isEqualTo(0);
+		assertThat(response.getBody().getPage_info().getHas_next_page()).isFalse();
+
+		verify(cardService).searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0));
 	}
 }

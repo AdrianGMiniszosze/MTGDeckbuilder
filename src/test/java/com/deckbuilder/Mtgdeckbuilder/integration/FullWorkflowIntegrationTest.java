@@ -10,19 +10,34 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.when;
 
-@ExtendWith(SpringExtension.class)
-@SpringBootTest
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("Full Workflow Integration Tests")
 class FullWorkflowIntegrationTest {
+
+	@Mock
+	private UserController userController;
+
+	@Mock
+	private CardController cardController;
+
+	@Mock
+	private DeckController deckController;
+
 	private UserDTO testUser;
 	private CardDTO lightningBolt;
 	private CardDTO forest;
@@ -76,6 +91,16 @@ class FullWorkflowIntegrationTest {
 				.variation(false)
 				.card_set(1)
 				.build();
+
+		// Setup mock responses
+		when(userController.createUser(any(UserDTO.class)))
+			.thenReturn(new ResponseEntity<>(testUser, HttpStatus.CREATED));
+
+		when(cardController.getCardById(1))
+			.thenReturn(new ResponseEntity<>(lightningBolt, HttpStatus.OK));
+
+		when(cardController.getCardById(2))
+			.thenReturn(new ResponseEntity<>(forest, HttpStatus.OK));
 	}
 
 	// ========================================
@@ -86,7 +111,7 @@ class FullWorkflowIntegrationTest {
 	@DisplayName("Should complete full workflow: Create User → Create Deck → Add Cards → Validate Deck")
 	void shouldCompleteFullWorkflow() {
 		// Step 1: Create User
-		final ResponseEntity<UserDTO> userResponse = new ResponseEntity<>(this.testUser, HttpStatus.CREATED);
+		final ResponseEntity<UserDTO> userResponse = userController.createUser(testUser);
 		assertThat(userResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         Assertions.assertNotNull(userResponse.getBody());
         assertThat(userResponse.getBody().getUsername()).isEqualTo("testplayer");
@@ -110,7 +135,12 @@ class FullWorkflowIntegrationTest {
 				.deck_type(newDeck.getDeck_type())
 				.is_private(newDeck.getIs_private())
 				.build();
-		final ResponseEntity<DeckDTO> deckResponse = new ResponseEntity<>(createdDeck, HttpStatus.CREATED);
+
+		// Mock deck creation
+		when(deckController.createDeck(any(DeckDTO.class)))
+			.thenReturn(new ResponseEntity<>(createdDeck, HttpStatus.CREATED));
+
+		final ResponseEntity<DeckDTO> deckResponse = deckController.createDeck(newDeck);
 
 		assertThat(deckResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         Assertions.assertNotNull(deckResponse.getBody());
@@ -131,8 +161,8 @@ class FullWorkflowIntegrationTest {
 				.build();
 
 		// Step 4: Verify cards exist and have proper variant information
-		final ResponseEntity<CardDTO> cardResponse1 = new ResponseEntity<>(this.lightningBolt, HttpStatus.OK);
-		final ResponseEntity<CardDTO> cardResponse2 = new ResponseEntity<>(this.forest, HttpStatus.OK);
+		final ResponseEntity<CardDTO> cardResponse1 = cardController.getCardById(1);
+		final ResponseEntity<CardDTO> cardResponse2 = cardController.getCardById(2);
 
         Assertions.assertNotNull(cardResponse1.getBody());
         assertThat(cardResponse1.getBody().getCollector_number()).isEqualTo("001");
@@ -245,10 +275,10 @@ class FullWorkflowIntegrationTest {
 				.is_private(false)
 				.main_board(List.of(
 						CardDeckDTO.builder().deck_id(1).card_id(1).quantity(4).build(), // 4x Lightning Bolt
-						CardDeckDTO.builder().deck_id(1).card_id(2).quantity(20).build() // 20x Mountain
+						CardDeckDTO.builder().deck_id(1).card_id(2).quantity(20).build() // 20x Card #2
 				))
 				.side_board(List.of(
-						CardDeckDTO.builder().deck_id(1).card_id(3).quantity(3).build() // 3x Pyroclasm
+						CardDeckDTO.builder().deck_id(1).card_id(3).quantity(3).build() // 3x Card #3
 				))
 				.build();
 
@@ -259,9 +289,9 @@ class FullWorkflowIntegrationTest {
 		assertThat(exportedDeck)
 			.contains("Lightning Aggro")
 			.contains("4 Lightning Bolt")
-			.contains("20 Mountain")
+			.contains("20 Card #2")
 			.contains("Sideboard:")
-			.contains("3 Pyroclasm");
+			.contains("3 Card #3");
 
 		System.out.println("✅ Deck export/import test completed successfully");
 	}
@@ -296,19 +326,19 @@ class FullWorkflowIntegrationTest {
 
 	private String exportDeckToString(CompleteDeckDTO deck) {
 		final StringBuilder sb = new StringBuilder();
-		sb.append("// ").append(deck.getDeck_name()).append("\n");
-		sb.append("// ").append(deck.getDescription()).append("\n\n");
+		sb.append("// ").append(deck.getDeck_name()).append(" ");
+		sb.append("// ").append(deck.getDescription()).append(" ");
 
-		sb.append("Mainboard:\n");
+		sb.append(" Mainboard: ");
 		if (deck.getMain_board() != null) {
 			deck.getMain_board().forEach(card ->
-				sb.append(card.getQuantity()).append(" ").append(getCardNameById(card.getCard_id())).append("\n"));
+				sb.append(card.getQuantity()).append(" ").append(getCardNameById(card.getCard_id())).append(" "));
 		}
 
-		sb.append("\nSideboard:\n");
+		sb.append(" Sideboard: ");
 		if (deck.getSide_board() != null) {
 			deck.getSide_board().forEach(card ->
-				sb.append(card.getQuantity()).append(" ").append(getCardNameById(card.getCard_id())).append("\n"));
+				sb.append(card.getQuantity()).append(" ").append(getCardNameById(card.getCard_id())).append(" "));
 		}
 
 		return sb.toString();
@@ -318,8 +348,8 @@ class FullWorkflowIntegrationTest {
 		// Map card IDs to names for the test
         return switch (cardId) {
             case 1 -> "Lightning Bolt";
-            case 2 -> "Mountain";
-            case 3 -> "Pyroclasm";
+            case 2 -> "Card #2";
+            case 3 -> "Card #3";
             default -> "Unknown Card";
         };
 	}

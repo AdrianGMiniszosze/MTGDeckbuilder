@@ -1,6 +1,5 @@
 package com.deckbuilder.mtgdeckbuilder.infrastructure.exception;
 
-
 /**
  * Exception thrown when a requested deck is not found
  */

@@ -1,6 +1,8 @@
 package com.deckbuilder.mtgdeckbuilder.application;
 
 import com.deckbuilder.mtgdeckbuilder.model.Card;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchCriteria;
+import com.deckbuilder.mtgdeckbuilder.model.CardSearchResult;
 
 import java.util.List;
 import java.util.Optional;
@@ -21,9 +23,19 @@ public interface CardService {
 	List<Card> findByCollectorNumber(String collectorNumber);
 	List<Card> findByNameAndSet(String name, Long setId);
 
-	// Similarity search operations (for future ML features)
-	List<Card> findSimilarCards(Double[] vector, int maxResults);
-	List<Card> findSimilarToCard(Long cardId, int maxResults);
+	// Multi-face card operations
+	Card getCardByIdRequired(Long id); // Returns Card or throws exception if not found
+
+	// Enhanced search operations that return combined cards for faces
+	List<Card> searchCardsByType(String cardType, int pageSize, int pageNumber);
+	List<Card> searchCardsByName(String name, int pageSize, int pageNumber);
+	List<Card> searchCardsAdvanced(String name, String cardType, String rarity, int pageSize, int pageNumber);
+
+	// Advanced search with multiple criteria
+	CardSearchResult searchCardsWithCriteria(CardSearchCriteria criteria, int pageSize, int pageNumber);
+
+	// Random card operations
+	List<Card> getRandomCards(int count, String type, String rarity, Long formatId);
 
 	// Alias methods for test compatibility
 	default Optional<Card> findById(Long id) {

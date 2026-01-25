@@ -1,5 +1,6 @@
-package com.deckbuilder.mtgdeckbuilder.application.implement;
+package com.deckbuilder.mtgdeckbuilder.application;
 
+import com.deckbuilder.mtgdeckbuilder.application.implement.TagServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.TagRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.TagNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.TagEntityMapper;

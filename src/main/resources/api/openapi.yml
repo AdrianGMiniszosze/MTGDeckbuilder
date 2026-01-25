@@ -890,6 +890,246 @@ paths:
                 items:
                   $ref: '#/components/schemas/Card'
 
+  /cards/search:
+    get:
+      summary: Search cards with multiple filters
+      operationId: searchCards
+      tags:
+        - Cards
+      parameters:
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          description: Search by card name (partial match)
+          example: "Lightning"
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+          description: Search by card type
+          example: "Instant"
+        - name: rarity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [common, uncommon, rare, mythic, special]
+          description: Filter by card rarity
+          example: "rare"
+        - name: colors
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[WUBRG]*$'
+            maxLength: 5
+          description: Filter by color identity (combination of W, U, B, R, G)
+          example: "UB"
+        - name: cmc_min
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 20
+          description: Minimum converted mana cost
+          example: 1
+        - name: cmc_max
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 20
+          description: Maximum converted mana cost
+          example: 5
+        - name: power_min
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+          description: Minimum power for creatures
+          example: "2"
+        - name: power_max
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+          description: Maximum power for creatures
+          example: "5"
+        - name: toughness_min
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+          description: Minimum toughness for creatures
+          example: "1"
+        - name: toughness_max
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[0-9]+$'
+          description: Maximum toughness for creatures
+          example: "4"
+        - name: set_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Filter by specific set ID
+          example: 1
+        - name: format_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Filter by legal format
+          example: 1
+        - name: text_contains
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          description: Search in card text (rules text)
+          example: "damage"
+        - name: keywords
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          description: Search by keywords (comma-separated)
+          example: "flying,first strike"
+        - name: is_foil
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter foil cards only
+        - name: is_promo
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter promotional cards only
+        - name: language
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[a-z]{2}$'
+            default: "en"
+          description: Filter by card language
+          example: "en"
+        - name: pagesize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Number of items per page
+        - name: pagenumber
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: Page number to retrieve (0-indexed)
+        - name: sort_by
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [name, cmc, rarity, type, set, power, toughness]
+            default: "name"
+          description: Sort results by field
+        - name: sort_order
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: "asc"
+          description: Sort order (ascending or descending)
+      responses:
+        '200':
+          description: List of cards matching the search criteria
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardSearchResponse'
+        '400':
+          description: Invalid search parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchError'
+
+  /cards/random:
+    get:
+      summary: Get random cards with optional filters
+      operationId: getRandomCards
+      tags:
+        - Cards
+      parameters:
+        - name: count
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 1
+          description: Number of random cards to return
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter random cards by type
+        - name: rarity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [common, uncommon, rare, mythic, special]
+          description: Filter random cards by rarity
+        - name: format_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Filter random cards legal in format
+      responses:
+        '200':
+          description: Random cards matching criteria
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+
 components:
   schemas:
     Set:
@@ -924,9 +1164,7 @@ components:
       type: object
       required:
         - card_name
-        - mana_cost
         - cmc
-        - color_identity
         - type_line
         - card_type
         - rarity
@@ -944,6 +1182,7 @@ components:
           example: "Lightning Bolt"
         mana_cost:
           type: string
+          nullable: true
           minLength: 0
           maxLength: 50
           example: "{R}"
@@ -954,6 +1193,7 @@ components:
           example: 1
         color_identity:
           type: string
+          nullable: true
           minLength: 0
           maxLength: 10
           pattern: '^[WUBRG]*$'
@@ -1332,6 +1572,70 @@ components:
         keyword_id:
           type: integer
           minimum: 1
+
+    CardSearchResponse:
+      type: object
+      required:
+        - cards
+        - total_count
+        - page_info
+      properties:
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/Card'
+        total_count:
+          type: integer
+          description: Total number of cards matching the criteria
+          example: 150
+        page_info:
+          $ref: '#/components/schemas/PageInfo'
+
+    PageInfo:
+      type: object
+      required:
+        - current_page
+        - page_size
+        - total_pages
+        - has_next_page
+        - has_previous_page
+      properties:
+        current_page:
+          type: integer
+          description: Current page number (0-indexed)
+          example: 0
+        page_size:
+          type: integer
+          description: Number of items per page
+          example: 20
+        total_pages:
+          type: integer
+          description: Total number of pages
+          example: 8
+        has_next_page:
+          type: boolean
+          description: Whether there is a next page
+          example: true
+        has_previous_page:
+          type: boolean
+          description: Whether there is a previous page
+          example: false
+
+    SearchError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          description: Error message
+          example: "Invalid parameter: cmc_min must be less than or equal to cmc_max"
+        details:
+          type: array
+          items:
+            type: string
+          description: Detailed error messages
+          example: ["cmc_min cannot be greater than cmc_max", "Invalid color combination"]
 
   parameters:
     PageSize:
