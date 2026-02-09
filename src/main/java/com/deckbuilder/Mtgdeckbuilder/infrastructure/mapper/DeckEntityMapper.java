@@ -13,6 +13,7 @@ public interface DeckEntityMapper {
 	@Mapping(target = "cards", ignore = true)
 	DeckEntity toEntity(Deck model);
 
+	// MapStruct will map companionCardId automatically as names match
 	Deck toModel(DeckEntity entity);
 
 	List<DeckEntity> toEntityList(List<Deck> models);

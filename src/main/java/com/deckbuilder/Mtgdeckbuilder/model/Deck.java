@@ -25,6 +25,7 @@ public class Deck {
 	private Long parentDeckId;
 	private Long formatId;
 	private Long userId;
+	private Long companionCardId;
 	private List<CardInDeck> cards;
 
 	@Data
