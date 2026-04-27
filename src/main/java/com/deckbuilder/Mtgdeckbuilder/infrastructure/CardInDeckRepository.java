@@ -22,18 +22,15 @@ public interface CardInDeckRepository extends JpaRepository<CardInDeckEntity, Lo
 	/**
 	 * Calculate total cards in a deck section, excluding a specific card
 	 */
-	@Query("SELECT COALESCE(SUM(cid.quantity), 0) " +
-		   "FROM CardInDeckEntity cid " +
-		   "WHERE cid.deckId = :deckId AND cid.section = :section AND cid.cardId != :excludeCardId")
-	Integer sumQuantityByDeckIdAndSectionExcludingCard(@Param("deckId") Long deckId,
-													   @Param("section") String section,
-													   @Param("excludeCardId") Long excludeCardId);
+	@Query("SELECT COALESCE(SUM(cid.quantity), 0) " + "FROM CardInDeckEntity cid "
+			+ "WHERE cid.deckId = :deckId AND cid.section = :section AND cid.cardId != :excludeCardId")
+	Integer sumQuantityByDeckIdAndSectionExcludingCard(@Param("deckId") Long deckId, @Param("section") String section,
+			@Param("excludeCardId") Long excludeCardId);
 
 	/**
 	 * Calculate total cards in a deck section
 	 */
-	@Query("SELECT COALESCE(SUM(cid.quantity), 0) " +
-		   "FROM CardInDeckEntity cid " +
-		   "WHERE cid.deckId = :deckId AND cid.section = :section")
+	@Query("SELECT COALESCE(SUM(cid.quantity), 0) " + "FROM CardInDeckEntity cid "
+			+ "WHERE cid.deckId = :deckId AND cid.section = :section")
 	Integer sumQuantityByDeckIdAndSection(@Param("deckId") Long deckId, @Param("section") String section);
 }
