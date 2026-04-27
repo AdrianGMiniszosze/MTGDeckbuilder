@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -42,6 +43,7 @@ public class DeckController implements DecksApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<DeckDTO> updateDeck(Integer id, @Valid DeckDTO deckDTO) {
 		final var deck = this.deckMapper.toDeck(deckDTO);
 		final var updated = this.deckService.update(id.longValue(), deck);
@@ -49,6 +51,7 @@ public class DeckController implements DecksApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Void> deleteDeck(Integer id) {
 		final var deleted = this.deckService.deleteById(id.longValue());
 		if (!deleted) {

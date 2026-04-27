@@ -32,6 +32,10 @@ public class UserEntity {
 	@Column(name = "registration_date", nullable = false)
 	private LocalDateTime registrationDate;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private UserRole role = UserRole.ROLE_USER;
+
 	@PrePersist
 	protected void onCreate() {
         this.registrationDate = LocalDateTime.now();

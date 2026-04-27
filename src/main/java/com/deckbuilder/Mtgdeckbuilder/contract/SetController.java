@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,6 +34,7 @@ public class SetController implements SetsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<SetDTO> createSet(@Valid SetDTO setDTO) {
 		final var set = this.setMapper.toSet(setDTO);
 		final var created = this.setService.create(set);
@@ -40,6 +42,7 @@ public class SetController implements SetsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<SetDTO> updateSet(Integer id, @Valid SetDTO setDTO) {
 		final var set = this.setMapper.toSet(setDTO);
 		final var updated = this.setService.update(id.longValue(), set);
@@ -47,6 +50,7 @@ public class SetController implements SetsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Void> deleteSet(Integer id) {
 		this.setService.deleteById(id.longValue());
 		return ResponseEntity.noContent().build();

@@ -17,6 +17,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -45,6 +46,7 @@ public class CardController implements CardsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<CardDTO> createCard(@Valid CardDTO cardDTO) {
 		final Card card = this.cardMapper.toEntity(cardDTO);
 		final Card createdCard = this.cardService.createCard(card);
@@ -52,6 +54,7 @@ public class CardController implements CardsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<CardDTO> updateCard(Integer id, @Valid CardDTO cardDTO) {
 		final Card card = this.cardMapper.toEntity(cardDTO);
 		final Card updatedCard = this.cardService.updateCard(id.longValue(), card)
@@ -60,6 +63,7 @@ public class CardController implements CardsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Void> deleteCard(Integer id) {
 		this.cardService.deleteCard(id.longValue());
 		return ResponseEntity.noContent().build();
@@ -72,6 +76,7 @@ public class CardController implements CardsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<CardTagDTO> updateCardTag(Integer id, Integer tagId, @Valid CardTagDTO cardTagDTO) {
 		final var cardTag = this.cardTagMapper.toCardTag(cardTagDTO);
 		final var updated = this.cardTagService.updateCardTag(id.longValue(), tagId.longValue(), cardTag)
@@ -80,6 +85,7 @@ public class CardController implements CardsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Void> deleteCardTag(Integer id, Integer tagId) {
 		this.cardTagService.deleteCardTag(id.longValue(), tagId.longValue());
 		return ResponseEntity.noContent().build();
