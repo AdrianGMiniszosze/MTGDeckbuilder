@@ -161,7 +161,8 @@ CREATE TABLE decks (
     share_url TEXT UNIQUE,
     parent_deck_id INTEGER REFERENCES decks(id) ON DELETE CASCADE,
     format INTEGER REFERENCES formats(id) ON DELETE CASCADE,
-    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    companion_card_id INTEGER REFERENCES cards(id) ON DELETE SET NULL
 );
 
 CREATE TABLE tags (
@@ -232,6 +233,7 @@ CREATE INDEX idx_cards_type ON cards(card_type);
 CREATE INDEX idx_cards_archetype ON cards(archetype);
 CREATE INDEX idx_decks_user_id ON decks(user_id);
 CREATE INDEX idx_decks_format ON decks(format);
+CREATE INDEX idx_decks_companion ON decks(companion_card_id);
 CREATE INDEX idx_card_deck_card_id ON card_deck(card_id);
 CREATE INDEX idx_card_tag_card_id ON card_tag(card_id);
 CREATE INDEX idx_card_legality_card_id ON card_legality(card_id);
@@ -329,6 +331,7 @@ COMMENT ON COLUMN card_tag.confidence IS 'AI confidence score (0-1) for tag assi
 COMMENT ON COLUMN card_tag.source IS 'Origin of tag: manual, ai_text, ai_vision, heuristic, admin';
 COMMENT ON COLUMN card_tag.model_version IS 'Version of AI model that generated this tag';
 COMMENT ON COLUMN decks.deck_type IS 'Type of deck: main, sideboard, or maybeboard';
+COMMENT ON COLUMN decks.companion_card_id IS 'Optional: selected Companion card applied to this deck for rule validation';
 COMMENT ON COLUMN card_deck.section IS 'Which section of deck: main, sideboard, or maybeboard';
 
 -- ============================================

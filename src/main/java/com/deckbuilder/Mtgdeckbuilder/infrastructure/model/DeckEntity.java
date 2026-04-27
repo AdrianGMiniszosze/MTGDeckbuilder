@@ -48,17 +48,20 @@ public class DeckEntity {
 	@Column(name = "share_url")
 	private String shareUrl;
 
+	@Column(name = "companion_card_id")
+	private Long companionCardId;
+
 	@OneToMany(mappedBy = "deck", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<CardInDeckEntity> cards = new ArrayList<>();
 
 	@PrePersist
 	protected void onCreate() {
-        this.created = LocalDateTime.now();
-        this.modified = this.created;
+		this.created = LocalDateTime.now();
+		this.modified = this.created;
 	}
 
 	@PreUpdate
 	protected void onUpdate() {
-        this.modified = LocalDateTime.now();
+		this.modified = LocalDateTime.now();
 	}
 }
