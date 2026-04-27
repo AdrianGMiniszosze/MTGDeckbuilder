@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="DdlMappings">
+    <mapping uuid="dbaf42ac-c11e-46e5-a71a-0d3d48b60c80" name="deckbuilder_db@localhost Mapping">
+      <data-sources db="f2a4a4f4-6d8a-4bb4-a03d-8444dc2c48b9" />
+    </mapping>
+  </component>
+</project>

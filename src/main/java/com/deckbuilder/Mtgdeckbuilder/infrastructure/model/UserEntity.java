@@ -21,11 +21,15 @@ public class UserEntity {
 	@Column(nullable = false, unique = true)
 	private String username;
 
-	@Column(nullable = false)
+	@Column(nullable = false, unique = true)
 	private String email;
 
 	@Column(name = "hashed_password", nullable = false)
 	private String hashedPassword;
+
+	@Column(nullable = false)
+	@Enumerated(EnumType.STRING)
+	private UserRole role = UserRole.ROLE_USER;
 
 	private String country;
 
@@ -35,5 +39,9 @@ public class UserEntity {
 	@PrePersist
 	protected void onCreate() {
         this.registrationDate = LocalDateTime.now();
+	}
+
+	public enum UserRole {
+		ROLE_USER, ROLE_ADMIN
 	}
 }
