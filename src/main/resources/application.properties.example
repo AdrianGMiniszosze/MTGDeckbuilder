@@ -1,5 +1,26 @@
 spring.application.name=Mtgdeckbuilder
-spring.datasource.url=jdbc:postgresql://db:5432/mtg_db
-spring.datasource.username=your_username
-spring.datasource.password=your_password
-spring.jpa.hibernate.ddl-auto=create-drop
+server.port=${PORT:8080}
+
+# Database Configuration
+# Copy this file to application.properties and fill in your values
+# Required env vars: DB_PASSWORD
+# Optional env vars: DB_URL, DB_USERNAME (defaults shown below)
+spring.datasource.url=${DB_URL:jdbc:postgresql://localhost:5433/mtg_db}
+spring.datasource.username=${DB_USERNAME:user}
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# JPA Configuration
+spring.jpa.hibernate.ddl-auto=none
+spring.jpa.show-sql=false
+spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.properties.hibernate.jdbc.lob.non_contextual_creation=true
+
+# Connection Pool Configuration
+spring.datasource.hikari.maximum-pool-size=20
+spring.datasource.hikari.minimum-idle=5
+
+# Logging
+logging.level.org.springframework.web=DEBUG
+logging.level.com.deckbuilder=DEBUG

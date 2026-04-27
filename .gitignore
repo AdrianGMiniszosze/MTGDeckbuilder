@@ -18,4 +18,7 @@ buildNumber.properties
 
 infra/.env
 
+# Local configuration with real credentials - use application.properties.example as template
+src/main/resources/application.properties
+
 Summary and improvement.txt
