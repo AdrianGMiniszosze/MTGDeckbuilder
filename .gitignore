@@ -22,3 +22,7 @@ infra/.env
 src/main/resources/application.properties
 
 Summary and improvement.txt
+
+# IDE local files
+.idea/
+.vscode/

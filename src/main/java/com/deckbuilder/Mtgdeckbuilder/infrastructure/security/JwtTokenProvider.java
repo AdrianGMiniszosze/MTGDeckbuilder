@@ -19,7 +19,7 @@ import java.util.Map;
 @Slf4j
 @Component
 public class JwtTokenProvider {
-    @Value("${app.jwt.secret:mySecretKeyForJWTTokenGenerationAndValidation1234567890123456}")
+    @Value("${app.jwt.secret}")
     private String jwtSecret;
 
     @Value("${app.jwt.expiration:86400000}")
@@ -116,11 +116,11 @@ public class JwtTokenProvider {
     private Claims getAllClaimsFromToken(String token) {
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
 
-        return Jwts.parserBuilder()
-                .setSigningKey(key)
+        return Jwts.parser()
+            .verifyWith(key)
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+            .parseSignedClaims(token)
+            .getPayload();
     }
 
     /**

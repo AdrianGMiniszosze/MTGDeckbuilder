@@ -5,6 +5,7 @@ import com.deckbuilder.mtgdeckbuilder.contract.dto.AuthResponseDTO;
 import com.deckbuilder.mtgdeckbuilder.contract.dto.LoginRequestDTO;
 import com.deckbuilder.mtgdeckbuilder.contract.dto.RegisterRequestDTO;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.security.CustomUserDetails;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.security.JwtTokenProvider;
 import lombok.AllArgsConstructor;
