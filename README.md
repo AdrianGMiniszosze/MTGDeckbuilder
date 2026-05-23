@@ -121,7 +121,7 @@ set DB_PASSWORD=yourpassword
 mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-The API is now available at **http://localhost:8080/api**.
+The API is now available at **http://localhost:8080/api/v1**.
 
 ---
 
