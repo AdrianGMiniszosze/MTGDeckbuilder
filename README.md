@@ -241,7 +241,7 @@ The application resolves configuration from environment variables, with sensible
 | `JWT_SECRET` | *(dev default)* | Secret key used to sign JWT tokens |
 | `JWT_EXPIRATION` | `86400000` | Token expiry in milliseconds (24 h) |
 
-See `src/main/resources/application.properties` for the full property list and `infra/.env.example` for the Docker Compose variables.
+See `src/main/resources/application.properties.example` and the profile-specific `src/main/resources/application-*.properties` files for the full property list, and `infra/.env.example` for the Docker Compose variables.
 
 ---
 
