@@ -237,10 +237,8 @@ The full API contract is defined in `src/main/resources/api/openapi.yml`.
 | `POST /decks` | Create a new deck |
 | `PUT /decks/{id}` | Update a deck |
 | `DELETE /decks/{id}` | Delete a deck |
-| `POST /decks/{id}/cards` | Add a card to a deck |
-| `DELETE /decks/{id}/cards/{cardId}` | Remove a card from a deck |
 | `GET /users` | List users |
-| `POST /users` | Create a user |
+| `GET /users/{id}/decks` | List decks for a specific user |
 | `GET /formats` | List game formats |
 | `GET /sets` | List card sets |
 | `GET /tags` | List tags |
@@ -274,21 +272,20 @@ MTGDeckbuilder/
 ├── infra/                          # Docker Compose, Dockerfile, .env.example
 ├── src/
 │   ├── main/
-│   │   ├── java/com/deckbuilder/mtgdeckbuilder/
-│   │   │   ├── application/        # Business logic & services
-│   │   │   ├── contract/           # REST controllers
-│   │   │   ├── infrastructure/     # JPA repositories & adapters
-│   │   │   └── model/              # Domain entities
+│   │   ├── java/com/deckbuilder/
+│   │   │   ├── Mtgdeckbuilder/     # Primary package tree currently used by most code
+│   │   │   └── mtgdeckbuilder/     # Additional package tree also present in this repo
 │   │   └── resources/
 │   │       ├── api/openapi.yml     # API contract (source of truth)
 │   │       ├── scripts/            # SQL schema
 │   │       └── application*.properties
-│   └── test/                       # Unit & integration tests
+│   └── test/
+│       └── java/com/deckbuilder/Mtgdeckbuilder/  # Test packages
 ├── docs/                           # Architecture decisions & technical context
 └── .github/workflows/              # CI/CD with GitHub Actions
 ```
 
-> **Note:** Source paths in this repository use lowercase `com/deckbuilder/mtgdeckbuilder`. Keep this exact casing on case-sensitive filesystems.
+> **Note:** This repository currently contains mixed-case package paths (`Mtgdeckbuilder` and `mtgdeckbuilder`). On case-insensitive filesystems this can be confusing and make renames/error diagnosis harder, so use the exact on-disk casing when navigating or creating files.
 
 > **Important:** Never manually edit files inside `target/generated-sources/` — they are auto-generated from `openapi.yml` on every build.
 
@@ -360,4 +357,3 @@ Testcontainers requires Docker Desktop to be running. Prefer Docker Desktop's de
 - Architecture & design decisions: [`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md)
 - Detailed technical context: [`docs/TECHNICAL_AGENT_CONTEXT.md`](docs/TECHNICAL_AGENT_CONTEXT.md)
 - Agent onboarding guide: [`docs/AGENT_QUICKSTART.md`](docs/AGENT_QUICKSTART.md)
-
