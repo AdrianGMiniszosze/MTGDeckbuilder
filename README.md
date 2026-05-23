@@ -89,7 +89,7 @@ Copy-Item infra\.env.example infra\.env
 copy infra\.env.example infra\.env
 ```
 
-Then open `infra/.env` and set a value for `POSTGRES_PASSWORD` and `SPRING_DATASOURCE_PASSWORD`. The other defaults work as-is.
+Then open `infra/.env` and set a value for `POSTGRES_PASSWORD`. For Option A, this is the only password you need in `infra/.env`.
 
 #### 2. Start the database
 
@@ -154,7 +154,7 @@ Copy-Item infra\.env.example infra\.env
 copy infra\.env.example infra\.env
 ```
 
-Then open `infra/.env` and set your passwords.
+Then open `infra/.env` and set `POSTGRES_PASSWORD`. When running the app container too (Option B), its datasource password must match the database password.
 
 #### 2. Build the JAR first
 
@@ -260,8 +260,8 @@ The application resolves configuration from environment variables, with sensible
 | `DB_USERNAME` | `user` | Database username |
 | `DB_PASSWORD` | `changeme` (dev profile default) | Required outside the `dev` profile, or whenever your local DB password differs from the dev default |
 | `PORT` | `8080` | HTTP server port |
-| `JWT_SECRET` | *(dev default)* | Secret key used to sign JWT tokens |
-| `JWT_EXPIRATION` | `86400000` | Token expiry in milliseconds (24 h) |
+| `JWT_SECRET` | *(dev default)* | JWT signing secret defined in config; currently not used by active API endpoints (auth/JWT flow is not implemented yet) |
+| `JWT_EXPIRATION` | `86400000` | JWT expiration value defined in config; currently not used by active API endpoints |
 
 See `src/main/resources/application.properties.example` and the profile-specific `src/main/resources/application-*.properties` files for the full property list, and `infra/.env.example` for the Docker Compose variables.
 
@@ -287,6 +287,8 @@ MTGDeckbuilder/
 ├── docs/                           # Architecture decisions & technical context
 └── .github/workflows/              # CI/CD with GitHub Actions
 ```
+
+> **Note:** Source paths in this repository use lowercase `com/deckbuilder/mtgdeckbuilder`. Keep this exact casing on case-sensitive filesystems.
 
 > **Important:** Never manually edit files inside `target/generated-sources/` — they are auto-generated from `openapi.yml` on every build.
 
@@ -358,3 +360,4 @@ Testcontainers requires Docker Desktop to be running. Prefer Docker Desktop's de
 - Architecture & design decisions: [`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md)
 - Detailed technical context: [`docs/TECHNICAL_AGENT_CONTEXT.md`](docs/TECHNICAL_AGENT_CONTEXT.md)
 - Agent onboarding guide: [`docs/AGENT_QUICKSTART.md`](docs/AGENT_QUICKSTART.md)
+
