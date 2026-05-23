@@ -1,4 +1,10 @@
+# Build outputs
 target/
+build/
+out/
+dist/
+
+# Maven release / helper artifacts
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
@@ -7,18 +13,43 @@ release.properties
 dependency-reduced-pom.xml
 buildNumber.properties
 .mvn/timing.properties
-# https://maven.apache.org/wrapper/#usage-without-binary-jar
+
+# Maven wrapper binary (keep wrapper properties tracked)
 .mvn/wrapper/maven-wrapper.jar
 
-# Eclipse m2e generated files
-# Eclipse Core
+# IDEs - IntelliJ / JetBrains
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# IDEs - VS Code
+.vscode/
+
+# IDEs - Eclipse
 .project
-# JDT-specific (Eclipse Java Development Tools)
 .classpath
+.settings/
 
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local environment / secrets
 infra/.env
+.env
+.env.*
 
-# Local configuration with real credentials - use application.properties.example as template
+# Local Spring config template copy
 src/main/resources/application.properties
 
+# Local notes / backups
 Summary and improvement.txt
+*.bak
+*.orig
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
