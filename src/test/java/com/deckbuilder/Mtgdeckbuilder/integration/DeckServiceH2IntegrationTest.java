@@ -16,8 +16,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -26,14 +24,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Integration test using H2 in-memory database for basic functionality testing.
- * This test doesn't require Docker and can run in environments where Testcontainers is not available.
+ * Integration test using a real PostgreSQL database (via Testcontainers + pgvector image).
+ * Previously used H2; migrated to Testcontainers for accurate DB behaviour.
  */
-@SpringBootTest
-@ActiveProfiles("test")
 @Transactional
-@DisplayName("Deck Service Integration Tests with H2")
-class DeckServiceH2IntegrationTest {
+@DisplayName("Deck Service Integration Tests")
+class DeckServiceH2IntegrationTest extends PostgresIntegrationTest {
 
     @Autowired
     private DeckService deckService;

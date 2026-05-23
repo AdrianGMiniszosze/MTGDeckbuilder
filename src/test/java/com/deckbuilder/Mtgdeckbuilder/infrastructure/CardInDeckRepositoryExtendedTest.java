@@ -9,18 +9,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DataJpaTest
-@ActiveProfiles("test")
 @DisplayName("Card In Deck Repository Extended Tests")
-class CardInDeckRepositoryExtendedTest {
+class CardInDeckRepositoryExtendedTest extends PostgresDataJpaTest {
 
     @Autowired
     private TestEntityManager entityManager;
@@ -133,7 +129,7 @@ class CardInDeckRepositoryExtendedTest {
             testDeck.getId(), "main", card1.getId());
 
         // Then
-        assertThat(total).isEqualTo(0);
+        assertThat(total).isZero();
     }
 
     @Test
@@ -160,7 +156,7 @@ class CardInDeckRepositoryExtendedTest {
         Integer total = cardInDeckRepository.sumQuantityByDeckIdAndSection(testDeck.getId(), "main");
 
         // Then
-        assertThat(total).isEqualTo(0);
+        assertThat(total).isZero();
     }
 
     @Test
@@ -231,7 +227,7 @@ class CardInDeckRepositoryExtendedTest {
             testDeck.getId(), "main", 999L);
 
         // Then - Should return 0, not null
-        assertThat(total).isEqualTo(0);
-        assertThat(totalExcluding).isEqualTo(0);
+        assertThat(total).isZero();
+        assertThat(totalExcluding).isZero();
     }
 }

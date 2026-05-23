@@ -20,14 +20,12 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-@DisplayName("Full Workflow Integration Tests")
-class FullWorkflowIntegrationTest {
+@DisplayName("Full Workflow Mock Tests (controller contract tests using Mockito — no DB)")
+class FullWorkflowMockTest {
 
 	@Mock
 	private UserController userController;
@@ -354,3 +352,4 @@ class FullWorkflowIntegrationTest {
         };
 	}
 }
+

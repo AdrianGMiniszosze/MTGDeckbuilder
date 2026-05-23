@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # Generate sources must run before compile: OpenAPI codegen produces
+      # Java files that the main sources depend on.
+      - name: Generate sources (OpenAPI codegen)
+        run: ./mvnw generate-sources -q
+
+      - name: Compile
+        run: ./mvnw compile -q
+
+      # Unit tests only (no Testcontainers / Docker required)
+      - name: Run unit tests
+        run: >
+          ./mvnw test
+          -Dtest="*Test,!*IntegrationTest,!CardLegalityRepositoryTest,!CardInDeckRepositoryExtendedTest"
+          -DfailIfNoTests=false
+          -q
+
+      # Integration tests: SpringBootTest + DataJpaTest classes that rely on Testcontainers
+      - name: Run integration tests
+        run: >
+          ./mvnw test
+          -Dtest="*IntegrationTest,CardLegalityRepositoryTest,CardInDeckRepositoryExtendedTest"
+          -DfailIfNoTests=false
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "false"
+          DOCKER_HOST: "unix:///var/run/docker.sock"
+
+      - name: Upload Surefire test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: surefire-reports
+          path: target/surefire-reports/
+          retention-days: 7
