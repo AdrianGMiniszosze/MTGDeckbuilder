@@ -47,6 +47,8 @@ jobs:
           ./mvnw test
           -Dtest="*IntegrationTest,CardLegalityRepositoryTest,CardInDeckRepositoryExtendedTest"
           -DfailIfNoTests=false
+          -DforkCount=1
+          -DreuseForks=true
         env:
           TESTCONTAINERS_RYUK_DISABLED: "false"
           DOCKER_HOST: "unix:///var/run/docker.sock"
