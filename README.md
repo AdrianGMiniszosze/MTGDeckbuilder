@@ -102,7 +102,7 @@ This starts PostgreSQL (with `pgvector`) on **localhost:5433**. The schema is cr
 
 #### 3. Set the DB password for the app
 
-The app reads `DB_PASSWORD` from the environment. Set it to match what you put in `infra/.env`:
+The app reads `DB_PASSWORD` from the environment. If you keep the default `changeme` password used by the `dev` profile, you can skip this step. Otherwise, set `DB_PASSWORD` to match what you put in `infra/.env`:
 
 **macOS / Linux**
 ```bash
@@ -258,8 +258,6 @@ The application resolves configuration from environment variables, with sensible
 | `DB_USERNAME` | `user` | Database username |
 | `DB_PASSWORD` | `changeme` (dev profile default) | Required outside the `dev` profile, or whenever your local DB password differs from the dev default |
 | `PORT` | `8080` | HTTP server port |
-| `JWT_SECRET` | *(dev default)* | JWT signing secret defined in config; currently not used by active API endpoints (auth/JWT flow is not implemented yet) |
-| `JWT_EXPIRATION` | `86400000` | JWT expiration value defined in config; currently not used by active API endpoints |
 
 See `src/main/resources/application.properties.example` and the profile-specific `src/main/resources/application-*.properties` files for the full property list, and `infra/.env.example` for the Docker Compose variables.
 
