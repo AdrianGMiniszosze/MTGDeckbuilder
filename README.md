@@ -153,7 +153,7 @@ cd infra
 docker compose up -d
 ```
 
-Both the database and the app will start. The API is available at **http://localhost:8080/api**.
+Both the database and the app will start. The API is available at **http://localhost:8080/api/v1**.
 
 To stop everything:
 
