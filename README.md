@@ -74,12 +74,22 @@ There are two ways to run the application:
 
 #### 1. Set up environment variables
 
+**macOS / Linux / Git Bash**
 ```bash
-# From the repo root
 cp infra/.env.example infra/.env
 ```
 
-Open `infra/.env` and set a value for `POSTGRES_PASSWORD` and `SPRING_DATASOURCE_PASSWORD`. The other defaults work as-is.
+**Windows (PowerShell)**
+```powershell
+Copy-Item infra\.env.example infra\.env
+```
+
+**Windows (Command Prompt)**
+```cmd
+copy infra\.env.example infra\.env
+```
+
+Then open `infra/.env` and set a value for `POSTGRES_PASSWORD` and `SPRING_DATASOURCE_PASSWORD`. The other defaults work as-is.
 
 #### 2. Start the database
 
@@ -129,10 +139,22 @@ The API is now available at **http://localhost:8080/api/v1**.
 
 #### 1. Set up environment variables
 
+**macOS / Linux / Git Bash**
 ```bash
 cp infra/.env.example infra/.env
-# Edit infra/.env and set your passwords
 ```
+
+**Windows (PowerShell)**
+```powershell
+Copy-Item infra\.env.example infra\.env
+```
+
+**Windows (Command Prompt)**
+```cmd
+copy infra\.env.example infra\.env
+```
+
+Then open `infra/.env` and set your passwords.
 
 #### 2. Build the JAR first
 
