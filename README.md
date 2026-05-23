@@ -85,7 +85,7 @@ Open `infra/.env` and set a value for `POSTGRES_PASSWORD` and `SPRING_DATASOURCE
 
 ```bash
 cd infra
-docker compose up db -d
+docker compose up -d db
 ```
 
 This starts PostgreSQL (with `pgvector`) on **localhost:5433**. The schema is created automatically on first startup.
