@@ -246,7 +246,7 @@ The full API contract is defined in `src/main/resources/api/openapi.yml`.
 | `GET /tags` | List tags |
 | `POST /tags` | Create a tag |
 
-All list endpoints support pagination via `pageSize` and `pageNumber` query parameters.
+All list endpoints support pagination, but parameter names are not fully standardized in the current contract: some endpoints use `pageSize` / `pageNumber`, while others use `pagesize` / `pagenumber`. Check `src/main/resources/api/openapi.yml` per endpoint until the contract is unified.
 
 ---
 
@@ -258,7 +258,7 @@ The application resolves configuration from environment variables, with sensible
 |---|---|---|
 | `DB_URL` | `jdbc:postgresql://localhost:5433/mtg_db` | JDBC URL of the database |
 | `DB_USERNAME` | `user` | Database username |
-| `DB_PASSWORD` | *(required)* | Database password — never hardcode this |
+| `DB_PASSWORD` | `changeme` (dev profile default) | Required outside the `dev` profile, or whenever your local DB password differs from the dev default |
 | `PORT` | `8080` | HTTP server port |
 | `JWT_SECRET` | *(dev default)* | Secret key used to sign JWT tokens |
 | `JWT_EXPIRATION` | `86400000` | Token expiry in milliseconds (24 h) |
@@ -321,8 +321,8 @@ mvnw.cmd generate-sources
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | PRs and pushes to `main` | Codegen → compile → unit tests → integration tests |
-| `build-check.yml` | PRs to `main` | Verifies the JAR packages correctly |
+| `ci.yml` | PRs to `master` and `develop`; pushes to `master` | Codegen → compile → unit tests → integration tests |
+| `build-check.yml` | PRs to `master` and `develop` | Verifies the JAR packages correctly |
 
 Integration tests run on `ubuntu-latest` where Docker is natively available and Testcontainers works with zero extra configuration.
 
@@ -349,7 +349,7 @@ Another PostgreSQL instance may be running on your machine. Stop it, or change t
 Run `chmod +x mvnw` once from the project root.
 
 **Integration tests failing on Windows**  
-Testcontainers requires Docker Desktop to be running. Make sure WSL2 integration is enabled in Docker Desktop settings, or enable "Expose daemon on `tcp://localhost:2375`" (without TLS) for Testcontainers to detect the Docker socket.
+Testcontainers requires Docker Desktop to be running. Prefer Docker Desktop's default engine socket with WSL2 integration enabled. Avoid exposing the daemon on unauthenticated TCP (`tcp://localhost:2375` without TLS). If needed, configure `DOCKER_HOST` to a secure local engine endpoint supported by your Docker Desktop setup.
 
 ---
 
