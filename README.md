@@ -318,7 +318,7 @@ Integration tests run on `ubuntu-latest` where Docker is natively available and 
 ## Troubleshooting
 
 **`DB_PASSWORD` error on startup**  
-The application requires `DB_PASSWORD` to be set in the environment. Make sure you exported it in your current shell session (see Step 3 of Option A above).
+When running with the `dev` profile, `spring.datasource.password` defaults to `changeme`, so you only need to set `DB_PASSWORD` if your local database password is different or if you are running without the `dev` profile. If you do need it, make sure it is exported in your current shell session (see Step 3 of Option A above).
 
 **Port 5433 already in use**  
 Another PostgreSQL instance may be running on your machine. Stop it, or change the host port mapping in `infra/docker-compose.yml` and update `DB_URL` to match.
