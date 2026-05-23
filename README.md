@@ -198,7 +198,7 @@ docker compose down -v
 **macOS / Linux**
 ```bash
 ./mvnw test \
-  "-Dtest=*Test,!*IntegrationTest,!CardLegalityRepositoryTest,!CardInDeckRepositoryExtendedTest" \
+  '-Dtest=*Test,!*IntegrationTest,!CardLegalityRepositoryTest,!CardInDeckRepositoryExtendedTest' \
   -DfailIfNoTests=false
 ```
 
@@ -214,7 +214,7 @@ Testcontainers automatically spins up a temporary PostgreSQL instance — no man
 **macOS / Linux**
 ```bash
 ./mvnw test \
-  "-Dtest=*IntegrationTest,CardLegalityRepositoryTest,CardInDeckRepositoryExtendedTest" \
+  '-Dtest=*IntegrationTest,CardLegalityRepositoryTest,CardInDeckRepositoryExtendedTest' \
   -DfailIfNoTests=false
 ```
 
