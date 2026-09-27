@@ -95,6 +95,23 @@ Registro inicial de decisiones tecnicas (ADR lite) para `MTGDeckbuilder`.
   - Solo unit tests.
   - Solo end-to-end sin pruebas por capa.
 
+## ADR-006 - Flyway como fuente de verdad para migraciones de base de datos
+
+- **Estado**: Aceptada
+- **Fecha**: 2026-09-27
+- **Decision**: Adoptar migraciones versionadas con Flyway como mecanismo canonico de evolucion del esquema. Los scripts historicos quedan como referencia/bootstrap temporal, pero los cambios nuevos deben entrar como migraciones versionadas.
+- **Contexto**: Existe riesgo de deriva entre scripts SQL, entidades JPA y base de datos real. El nuevo roadmap de importacion masiva (Scryfall) requiere cambios frecuentes y auditables de esquema.
+- **Trade-offs**:
+  - Beneficio: historial reproducible, ordenado y trazable en PR/CI.
+  - Costo: curva inicial de adopcion y disciplina para no editar migraciones ya aplicadas.
+- **Consecuencias**:
+  - Todo cambio de esquema nuevo debe incluir archivo de migracion en `src/main/resources/db/migration/`.
+  - Estrategia de recuperacion preferida: roll-forward (nueva migracion correctiva).
+  - CI debe fallar si una migracion no aplica en base limpia.
+- **Alternativas consideradas**:
+  - Mantener solo scripts SQL manuales.
+  - Adoptar Liquibase en lugar de Flyway.
+
 ---
 
 ## Como usar este archivo
@@ -102,4 +119,3 @@ Registro inicial de decisiones tecnicas (ADR lite) para `MTGDeckbuilder`.
 - Agrega una nueva entrada cuando una decision cambie arquitectura, datos, contratos o estrategia de pruebas.
 - Si una decision se reemplaza, marca la anterior como `Reemplazada` y referencia la nueva.
 - Mantener entradas cortas y verificables en PRs.
-
