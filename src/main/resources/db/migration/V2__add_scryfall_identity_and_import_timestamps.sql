@@ -1,29 +1,47 @@
 -- Adds Scryfall identity columns and ingestion traceability timestamps to cards.
+-- Requires baseline schema provisioning (cards table must already exist).
 -- V2 is used so existing databases baselined at version 1 still execute this migration.
 
-ALTER TABLE IF EXISTS cards
+DO $$
+BEGIN
+    IF to_regclass('public.cards') IS NULL THEN
+        RAISE EXCEPTION 'Baseline schema missing: table "cards" not found. Provision schema baseline before running V2.';
+    END IF;
+END
+$$;
+
+ALTER TABLE cards
     ADD COLUMN IF NOT EXISTS scryfall_id UUID,
     ADD COLUMN IF NOT EXISTS oracle_id UUID,
     ADD COLUMN IF NOT EXISTS imported_at TIMESTAMP WITH TIME ZONE,
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE;
 
-ALTER TABLE IF EXISTS cards
+ALTER TABLE cards
     ALTER COLUMN imported_at SET DEFAULT CURRENT_TIMESTAMP,
     ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
 
-DO $$
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cards_scryfall_id
+    ON cards (scryfall_id)
+    WHERE scryfall_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS ix_cards_oracle_id
+    ON cards (oracle_id);
+
+CREATE INDEX IF NOT EXISTS ix_cards_updated_at
+    ON cards (updated_at);
+
+CREATE OR REPLACE FUNCTION set_cards_updated_at()
+RETURNS TRIGGER AS $$
 BEGIN
-    IF to_regclass('public.cards') IS NOT NULL THEN
-        CREATE UNIQUE INDEX IF NOT EXISTS ux_cards_scryfall_id
-            ON cards (scryfall_id)
-            WHERE scryfall_id IS NOT NULL;
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-        CREATE INDEX IF NOT EXISTS ix_cards_oracle_id
-            ON cards (oracle_id);
+DROP TRIGGER IF EXISTS trg_cards_updated_at ON cards;
 
-        CREATE INDEX IF NOT EXISTS ix_cards_updated_at
-            ON cards (updated_at);
-    END IF;
-END
-$$;
+CREATE TRIGGER trg_cards_updated_at
+BEFORE UPDATE ON cards
+FOR EACH ROW
+EXECUTE FUNCTION set_cards_updated_at();
 
