@@ -41,11 +41,23 @@ jobs:
           -DfailIfNoTests=false
           -q
 
+      # Migration smoke test: validates Flyway deltas against a clean DB baseline.
+      - name: Run Flyway migration smoke test
+        run: >
+          ./mvnw test
+          -Dtest="FlywayMigrationSmokeIntegrationTest"
+          -DfailIfNoTests=false
+          -DforkCount=1
+          -DreuseForks=true
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: "false"
+          DOCKER_HOST: "unix:///var/run/docker.sock"
+
       # Integration tests: SpringBootTest + DataJpaTest classes that rely on Testcontainers
       - name: Run integration tests
         run: >
           ./mvnw test
-          -Dtest="*IntegrationTest,CardLegalityRepositoryTest,CardInDeckRepositoryExtendedTest"
+          -Dtest="*IntegrationTest,!FlywayMigrationSmokeIntegrationTest,CardLegalityRepositoryTest,CardInDeckRepositoryExtendedTest"
           -DfailIfNoTests=false
           -DforkCount=1
           -DreuseForks=true

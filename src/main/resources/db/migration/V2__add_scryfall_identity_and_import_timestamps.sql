@@ -20,6 +20,12 @@ ALTER TABLE cards
     ALTER COLUMN imported_at SET DEFAULT CURRENT_TIMESTAMP,
     ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
 
+UPDATE cards
+SET imported_at = COALESCE(imported_at, CURRENT_TIMESTAMP),
+    updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)
+WHERE imported_at IS NULL
+   OR updated_at IS NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_cards_scryfall_id
     ON cards (scryfall_id)
     WHERE scryfall_id IS NOT NULL;
