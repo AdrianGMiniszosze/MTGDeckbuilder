@@ -6,6 +6,7 @@ This document defines the migration policy for schema changes in `MTGDeckbuilder
 
 - **Chosen source of truth**: Flyway versioned migrations.
 - **Current state**: existing SQL bootstrap scripts are still present for local bootstrap compatibility.
+- **Current bootstrap constraint**: until `V1__baseline_schema.sql` is introduced, clean databases must be provisioned with the schema bootstrap script before applying later Flyway migrations.
 - **Transition rule**: from this point, schema evolution must be done with new Flyway migrations, not by editing historical migration files.
 
 ## Goals
@@ -31,8 +32,8 @@ This document defines the migration policy for schema changes in `MTGDeckbuilder
 
 ### 3) CI
 
-1. CI runs tests against a clean database.
-2. Flyway must apply all migrations successfully before integration tests proceed.
+1. CI must provision a clean schema baseline (bootstrap script) before running Flyway deltas while no `V1__baseline_schema.sql` exists.
+2. Flyway must apply pending migrations successfully before integration tests proceed.
 3. PRs that introduce schema changes must include corresponding migration files.
 
 ### 4) Deployment and rollback policy
