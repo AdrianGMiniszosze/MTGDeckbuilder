@@ -295,6 +295,7 @@ MTGDeckbuilder/
 - Deck construction rules (4-copy limit, Commander restrictions, format legality) are enforced by a SQL trigger (`check_card_quantity`) in the database itself.
 - The `decks.last_modification` timestamp is updated automatically on any deck change.
 - Valid card sections in a deck: `main`, `sideboard`, `maybeboard`.
+- Database migration strategy and change policy: [`docs/DB_MIGRATION_STRATEGY.md`](docs/DB_MIGRATION_STRATEGY.md).
 
 ---
 
@@ -353,5 +354,6 @@ Testcontainers requires Docker Desktop to be running. Prefer Docker Desktop's de
 ## Further Documentation
 
 - Architecture & design decisions: [`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md)
+- Database migration strategy: [`docs/DB_MIGRATION_STRATEGY.md`](docs/DB_MIGRATION_STRATEGY.md)
 - Detailed technical context: [`docs/TECHNICAL_AGENT_CONTEXT.md`](docs/TECHNICAL_AGENT_CONTEXT.md)
 - Agent onboarding guide: [`docs/AGENT_QUICKSTART.md`](docs/AGENT_QUICKSTART.md)

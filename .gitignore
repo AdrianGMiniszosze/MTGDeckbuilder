@@ -56,3 +56,18 @@ Summary and improvement.txt
 *.tmp
 *.swp
 *.swo
+
+# Local Scryfall bulk data (downloaded/import staging files)
+docs/default-cards-*.jsonl
+docs/default-cards-*.jsonl.gz
+docs/rulings-*.jsonl
+docs/rulings-*.jsonl.gz
+
+# Local planning artifacts
+plan-*.prompt.md
+
+# Local Scryfall documentation snapshot
+docs/scryfall_api_completa.md
+
+# Local knowledge/study notes
+knowledge/
