@@ -105,4 +105,15 @@ API models are generated from OpenAPI spec:
    - Restricted/banned list handling
    - Basic land exceptions
 
-Remember to check database triggers when modifying card quantities or deck contents, as they enforce game rules and deck construction constraints.
+## Agent Workflow Guardrails (Mandatory)
+
+These rules apply to all agent sessions in this repository:
+
+1. Never run `git push`, open a Pull Request, merge a Pull Request, or close a Pull Request without explicit user approval in the current session.
+2. Before any sensitive git action (`push`, PR create/edit/close, merge, rebase, reset on shared branches), ask for a direct confirmation question and wait for `yes`.
+3. Never use admin overrides (`--admin`) or bypass protections/policies unless the user explicitly asks for that exact action.
+4. If branch protection or repository rules block an operation, stop and present options; do not continue automatically.
+5. Default behavior is local preparation only (edit, test, commit locally) until the user asks to publish.
+
+Suggested confirmation format:
+- `I am ready to <action>. Proceed? (yes/no)`
