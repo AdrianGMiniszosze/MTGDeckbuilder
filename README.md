@@ -123,12 +123,13 @@ Recursos principales:
 
 ## Base de datos
 
-El schema se crea con el script `src/main/resources/scripts/01-create-schema.sql`. Los aspectos más relevantes para desarrollo:
+El proyecto mantiene scripts SQL de bootstrap en `src/main/resources/scripts/` y adopta migraciones versionadas como estrategia de evolucion del esquema.
 
 - El campo `cards.embedding` es de tipo `VECTOR(1536)` y requiere la extensión `pgvector`.
 - Las reglas de construcción de mazos se validan mediante un trigger SQL (`check_card_quantity`): legalidad por formato, límite de 4 copias, restricciones de mazo Commander, etc.
 - La columna `decks.last_modification` se actualiza automáticamente con cada cambio.
 - Los sections válidos para cartas en un mazo son: `main`, `sideboard`, `maybeboard`.
+- Estrategia de migraciones y política de cambios: `docs/DB_MIGRATION_STRATEGY.md`.
 
 ## CI/CD
 
@@ -151,5 +152,6 @@ Los tests de integración corren en `ubuntu-latest`, donde Docker está disponib
 ## Documentación técnica
 
 - Arquitectura y decisiones de diseño: [`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md)
+- Estrategia de migraciones de base de datos: [`docs/DB_MIGRATION_STRATEGY.md`](docs/DB_MIGRATION_STRATEGY.md)
 - Contexto técnico detallado: [`docs/TECHNICAL_AGENT_CONTEXT.md`](docs/TECHNICAL_AGENT_CONTEXT.md)
 - Guía de onboarding rápido: [`docs/AGENT_QUICKSTART.md`](docs/AGENT_QUICKSTART.md)
