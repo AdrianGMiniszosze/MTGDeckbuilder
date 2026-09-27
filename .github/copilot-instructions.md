@@ -117,3 +117,9 @@ These rules apply to all agent sessions in this repository:
 
 Suggested confirmation format:
 - `I am ready to <action>. Proceed? (yes/no)`
+
+## PR Body Formatting Guardrail
+
+When using GitHub CLI from PowerShell, do not pass multiline PR descriptions with literal `\n` inside `--body`.
+Use a here-string written to a file and pass it with `--body-file` (for both `gh pr create` and `gh pr edit`) so markdown formatting is preserved.
+
