@@ -66,6 +66,10 @@ public interface CardMapper {
 	@Mapping(target = "types", ignore = true)              // NEW: Ignore types list mapping
 	@Mapping(target = "supertypes", ignore = true)         // NEW: Ignore supertypes list mapping
 	@Mapping(target = "colorIdentityColors", ignore = true)
+		@Mapping(target = "scryfallId", ignore = true)
+		@Mapping(target = "oracleId", ignore = true)
+		@Mapping(target = "importedAt", ignore = true)
+		@Mapping(target = "updatedAt", ignore = true)
 	Card toEntity(CardDTO cardDTO);
 
 	// List mapping methods
