@@ -123,13 +123,22 @@ public class CardServiceImpl implements CardService {
 	public Optional<Card> updateCard(Long id, Card card) {
 		log.info("Updating card with id={}", id);
 
-		if (!this.cardRepository.existsById(id)) {
+				final Optional<CardEntity> existingEntity = this.cardRepository.findById(id);
+				if (existingEntity.isEmpty()) {
 			log.warn("Card with id={} not found for update", id);
 			return Optional.empty();
 		}
 
 		CardEntity entity = this.cardEntityMapper.toEntity(card);
 		entity.setId(id);
+				if (entity.getScryfallId() == null) {
+						entity.setScryfallId(existingEntity.get().getScryfallId());
+				}
+				if (entity.getOracleId() == null) {
+						entity.setOracleId(existingEntity.get().getOracleId());
+				}
+				entity.setImportedAt(existingEntity.get().getImportedAt());
+				entity.setUpdatedAt(existingEntity.get().getUpdatedAt());
 		entity = this.cardRepository.save(entity);
 
 		log.info("Card with id={} updated successfully", id);

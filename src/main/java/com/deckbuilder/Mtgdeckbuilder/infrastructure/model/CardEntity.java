@@ -6,7 +6,9 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "cards")
@@ -84,6 +86,18 @@ public class CardEntity {
 
 	@Column(name = "collector_number")
 	private String collectorNumber;
+
+		@Column(name = "scryfall_id")
+		private UUID scryfallId;
+
+		@Column(name = "oracle_id")
+		private UUID oracleId;
+
+		@Column(name = "imported_at", insertable = false, updatable = false)
+		private OffsetDateTime importedAt;
+
+		@Column(name = "updated_at", insertable = false, updatable = false)
+		private OffsetDateTime updatedAt;
 
 	@Column(name = "promo")
 	private Boolean promo = false;

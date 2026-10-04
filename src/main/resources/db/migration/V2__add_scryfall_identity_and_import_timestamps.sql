@@ -26,6 +26,10 @@ SET imported_at = COALESCE(imported_at, CURRENT_TIMESTAMP),
 WHERE imported_at IS NULL
    OR updated_at IS NULL;
 
+ALTER TABLE cards
+    ALTER COLUMN imported_at SET NOT NULL,
+    ALTER COLUMN updated_at SET NOT NULL;
+
 CREATE UNIQUE INDEX IF NOT EXISTS ux_cards_scryfall_id
     ON cards (scryfall_id)
     WHERE scryfall_id IS NOT NULL;

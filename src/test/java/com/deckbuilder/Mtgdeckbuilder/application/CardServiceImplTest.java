@@ -13,6 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -23,6 +24,8 @@ import org.springframework.data.domain.PageRequest;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -192,7 +195,16 @@ class CardServiceImplTest {
 		final Card savedCard = Card.builder().id(1L).name("Lightning Bolt Updated").manaCost("{R}").typeLine("Instant")
 				.build();
 
-		when(this.cardRepository.existsById(1L)).thenReturn(true);
+				final UUID scryfallId = UUID.randomUUID();
+				final UUID oracleId = UUID.randomUUID();
+				final OffsetDateTime importedAt = OffsetDateTime.parse("2026-09-27T10:00:00Z");
+				final OffsetDateTime updatedAt = OffsetDateTime.parse("2026-09-28T10:00:00Z");
+				this.testCardEntity.setScryfallId(scryfallId);
+				this.testCardEntity.setOracleId(oracleId);
+				this.testCardEntity.setImportedAt(importedAt);
+				this.testCardEntity.setUpdatedAt(updatedAt);
+
+				when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.testCardEntity));
 		when(this.cardEntityMapper.toEntity(updatedCard)).thenReturn(updatedEntity);
 		when(this.cardRepository.save(any(CardEntity.class))).thenReturn(savedEntity);
 		when(this.cardEntityMapper.toModel(savedEntity)).thenReturn(savedCard);
@@ -204,8 +216,13 @@ class CardServiceImplTest {
 		assertThat(result).isPresent();
 		assertThat(result.get().getId()).isEqualTo(1L);
 		assertThat(result.get().getName()).isEqualTo("Lightning Bolt Updated");
-		verify(this.cardRepository, times(1)).existsById(1L);
-		verify(this.cardRepository, times(1)).save(any(CardEntity.class));
+				final ArgumentCaptor<CardEntity> savedEntityCaptor = ArgumentCaptor.forClass(CardEntity.class);
+				verify(this.cardRepository).findById(1L);
+				verify(this.cardRepository).save(savedEntityCaptor.capture());
+				assertThat(savedEntityCaptor.getValue().getScryfallId()).isEqualTo(scryfallId);
+				assertThat(savedEntityCaptor.getValue().getOracleId()).isEqualTo(oracleId);
+				assertThat(savedEntityCaptor.getValue().getImportedAt()).isEqualTo(importedAt);
+				assertThat(savedEntityCaptor.getValue().getUpdatedAt()).isEqualTo(updatedAt);
 	}
 
 	@Test
@@ -213,14 +230,14 @@ class CardServiceImplTest {
 	void shouldReturnEmptyWhenUpdatingNonExistentCard() {
 		// Given
 		final Card updatedCard = Card.builder().name("Non-existent Card").build();
-		when(this.cardRepository.existsById(999L)).thenReturn(false);
+				when(this.cardRepository.findById(999L)).thenReturn(Optional.empty());
 
 		// When
 		final Optional<Card> result = this.cardService.updateCard(999L, updatedCard);
 
 		// Then
 		assertThat(result).isEmpty();
-		verify(this.cardRepository, times(1)).existsById(999L);
+				verify(this.cardRepository, times(1)).findById(999L);
 		verify(this.cardRepository, never()).save(any(CardEntity.class));
 	}
 

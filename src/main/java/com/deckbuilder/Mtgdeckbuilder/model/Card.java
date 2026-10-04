@@ -5,7 +5,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
@@ -36,6 +38,10 @@ public class Card {
 	private String archetype;
 	private Long cardSet;
 	private String collectorNumber;
+		private UUID scryfallId;
+		private UUID oracleId;
+		private OffsetDateTime importedAt;
+		private OffsetDateTime updatedAt;
 	private Boolean promo;
 	private Boolean variation;
 	private List<String> colors;
