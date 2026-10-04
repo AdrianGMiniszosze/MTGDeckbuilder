@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -87,17 +89,19 @@ public class CardEntity {
 	@Column(name = "collector_number")
 	private String collectorNumber;
 
-		@Column(name = "scryfall_id")
-		private UUID scryfallId;
+	@Column(name = "scryfall_id")
+	private UUID scryfallId;
 
-		@Column(name = "oracle_id")
-		private UUID oracleId;
+	@Column(name = "oracle_id")
+	private UUID oracleId;
 
-		@Column(name = "imported_at", insertable = false, updatable = false)
-		private OffsetDateTime importedAt;
+	@Generated(event = EventType.INSERT)
+	@Column(name = "imported_at", insertable = false, updatable = false)
+	private OffsetDateTime importedAt;
 
-		@Column(name = "updated_at", insertable = false, updatable = false)
-		private OffsetDateTime updatedAt;
+	@Generated(event = { EventType.INSERT, EventType.UPDATE })
+	@Column(name = "updated_at", insertable = false, updatable = false)
+	private OffsetDateTime updatedAt;
 
 	@Column(name = "promo")
 	private Boolean promo = false;

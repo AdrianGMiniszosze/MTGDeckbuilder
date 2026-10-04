@@ -160,7 +160,7 @@ class CardServiceImplTest {
 		final Card savedCard = Card.builder().id(3L).name("New Card").manaCost("{1}{G}").typeLine("Creature").build();
 
 		when(this.cardEntityMapper.toEntity(newCard)).thenReturn(newEntity);
-		when(this.cardRepository.save(newEntity)).thenReturn(savedEntity);
+		when(this.cardRepository.saveAndFlush(newEntity)).thenReturn(savedEntity);
 		when(this.cardEntityMapper.toModel(savedEntity)).thenReturn(savedCard);
 
 		// When
@@ -171,7 +171,7 @@ class CardServiceImplTest {
 		assertThat(result.getId()).isEqualTo(3L);
 		assertThat(result.getName()).isEqualTo("New Card");
 		verify(this.cardEntityMapper, times(1)).toEntity(newCard);
-		verify(this.cardRepository, times(1)).save(newEntity);
+		verify(this.cardRepository, times(1)).saveAndFlush(newEntity);
 		verify(this.cardEntityMapper, times(1)).toModel(savedEntity);
 	}
 
@@ -195,18 +195,18 @@ class CardServiceImplTest {
 		final Card savedCard = Card.builder().id(1L).name("Lightning Bolt Updated").manaCost("{R}").typeLine("Instant")
 				.build();
 
-				final UUID scryfallId = UUID.randomUUID();
-				final UUID oracleId = UUID.randomUUID();
-				final OffsetDateTime importedAt = OffsetDateTime.parse("2026-09-27T10:00:00Z");
-				final OffsetDateTime updatedAt = OffsetDateTime.parse("2026-09-28T10:00:00Z");
-				this.testCardEntity.setScryfallId(scryfallId);
-				this.testCardEntity.setOracleId(oracleId);
-				this.testCardEntity.setImportedAt(importedAt);
-				this.testCardEntity.setUpdatedAt(updatedAt);
+		final UUID scryfallId = UUID.randomUUID();
+		final UUID oracleId = UUID.randomUUID();
+		final OffsetDateTime importedAt = OffsetDateTime.parse("2026-09-27T10:00:00Z");
+		final OffsetDateTime updatedAt = OffsetDateTime.parse("2026-09-28T10:00:00Z");
+		this.testCardEntity.setScryfallId(scryfallId);
+		this.testCardEntity.setOracleId(oracleId);
+		this.testCardEntity.setImportedAt(importedAt);
+		this.testCardEntity.setUpdatedAt(updatedAt);
 
-				when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.testCardEntity));
+		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.testCardEntity));
 		when(this.cardEntityMapper.toEntity(updatedCard)).thenReturn(updatedEntity);
-		when(this.cardRepository.save(any(CardEntity.class))).thenReturn(savedEntity);
+		when(this.cardRepository.saveAndFlush(any(CardEntity.class))).thenReturn(savedEntity);
 		when(this.cardEntityMapper.toModel(savedEntity)).thenReturn(savedCard);
 
 		// When
@@ -216,13 +216,13 @@ class CardServiceImplTest {
 		assertThat(result).isPresent();
 		assertThat(result.get().getId()).isEqualTo(1L);
 		assertThat(result.get().getName()).isEqualTo("Lightning Bolt Updated");
-				final ArgumentCaptor<CardEntity> savedEntityCaptor = ArgumentCaptor.forClass(CardEntity.class);
-				verify(this.cardRepository).findById(1L);
-				verify(this.cardRepository).save(savedEntityCaptor.capture());
-				assertThat(savedEntityCaptor.getValue().getScryfallId()).isEqualTo(scryfallId);
-				assertThat(savedEntityCaptor.getValue().getOracleId()).isEqualTo(oracleId);
-				assertThat(savedEntityCaptor.getValue().getImportedAt()).isEqualTo(importedAt);
-				assertThat(savedEntityCaptor.getValue().getUpdatedAt()).isEqualTo(updatedAt);
+		final ArgumentCaptor<CardEntity> savedEntityCaptor = ArgumentCaptor.forClass(CardEntity.class);
+		verify(this.cardRepository).findById(1L);
+		verify(this.cardRepository).saveAndFlush(savedEntityCaptor.capture());
+		assertThat(savedEntityCaptor.getValue().getScryfallId()).isEqualTo(scryfallId);
+		assertThat(savedEntityCaptor.getValue().getOracleId()).isEqualTo(oracleId);
+		assertThat(savedEntityCaptor.getValue().getImportedAt()).isEqualTo(importedAt);
+		assertThat(savedEntityCaptor.getValue().getUpdatedAt()).isEqualTo(updatedAt);
 	}
 
 	@Test
@@ -230,15 +230,15 @@ class CardServiceImplTest {
 	void shouldReturnEmptyWhenUpdatingNonExistentCard() {
 		// Given
 		final Card updatedCard = Card.builder().name("Non-existent Card").build();
-				when(this.cardRepository.findById(999L)).thenReturn(Optional.empty());
+		when(this.cardRepository.findById(999L)).thenReturn(Optional.empty());
 
 		// When
 		final Optional<Card> result = this.cardService.updateCard(999L, updatedCard);
 
 		// Then
 		assertThat(result).isEmpty();
-				verify(this.cardRepository, times(1)).findById(999L);
-		verify(this.cardRepository, never()).save(any(CardEntity.class));
+		verify(this.cardRepository, times(1)).findById(999L);
+		verify(this.cardRepository, never()).saveAndFlush(any(CardEntity.class));
 	}
 
 	@Test
