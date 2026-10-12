@@ -137,12 +137,40 @@ public class CardServiceImpl implements CardService {
 		if (entity.getOracleId() == null) {
 			entity.setOracleId(existingEntity.get().getOracleId());
 		}
+		preserveImportFieldsWhenAbsent(entity, existingEntity.get());
 		entity.setImportedAt(existingEntity.get().getImportedAt());
 		entity.setUpdatedAt(existingEntity.get().getUpdatedAt());
 		entity = this.cardRepository.saveAndFlush(entity);
 
 		log.info("Card with id={} updated successfully", id);
 		return Optional.of(this.cardEntityMapper.toModel(entity));
+	}
+
+	private void preserveImportFieldsWhenAbsent(CardEntity entity, CardEntity existingEntity) {
+		if (entity.getUsd() == null) {
+			entity.setUsd(existingEntity.getUsd());
+		}
+		if (entity.getUsdFoil() == null) {
+			entity.setUsdFoil(existingEntity.getUsdFoil());
+		}
+		if (entity.getUsdEtched() == null) {
+			entity.setUsdEtched(existingEntity.getUsdEtched());
+		}
+		if (entity.getEur() == null) {
+			entity.setEur(existingEntity.getEur());
+		}
+		if (entity.getEurFoil() == null) {
+			entity.setEurFoil(existingEntity.getEurFoil());
+		}
+		if (entity.getEurEtched() == null) {
+			entity.setEurEtched(existingEntity.getEurEtched());
+		}
+		if (entity.getTix() == null) {
+			entity.setTix(existingEntity.getTix());
+		}
+		if (entity.getPriceObservedAt() == null) {
+			entity.setPriceObservedAt(existingEntity.getPriceObservedAt());
+		}
 	}
 
 	@Override

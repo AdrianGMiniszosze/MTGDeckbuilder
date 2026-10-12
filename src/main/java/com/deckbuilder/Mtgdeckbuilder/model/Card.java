@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -42,6 +43,15 @@ public class Card {
 		private UUID oracleId;
 		private OffsetDateTime importedAt;
 		private OffsetDateTime updatedAt;
+	private BigDecimal usd;
+	private BigDecimal usdFoil;
+	private BigDecimal usdEtched;
+	private BigDecimal eur;
+	private BigDecimal eurFoil;
+	private BigDecimal eurEtched;
+	private BigDecimal tix;
+	private OffsetDateTime priceObservedAt;
+	private List<CardFace> faces;
 	private Boolean promo;
 	private Boolean variation;
 	private List<String> colors;

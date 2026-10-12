@@ -24,6 +24,7 @@ import org.springframework.data.domain.PageRequest;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -203,6 +204,9 @@ class CardServiceImplTest {
 		this.testCardEntity.setOracleId(oracleId);
 		this.testCardEntity.setImportedAt(importedAt);
 		this.testCardEntity.setUpdatedAt(updatedAt);
+		this.testCardEntity.setUsd(new BigDecimal("1.2500"));
+		this.testCardEntity.setUsdFoil(new BigDecimal("2.2500"));
+		this.testCardEntity.setPriceObservedAt(OffsetDateTime.parse("2026-09-29T10:00:00Z"));
 
 		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.testCardEntity));
 		when(this.cardEntityMapper.toEntity(updatedCard)).thenReturn(updatedEntity);
@@ -223,6 +227,10 @@ class CardServiceImplTest {
 		assertThat(savedEntityCaptor.getValue().getOracleId()).isEqualTo(oracleId);
 		assertThat(savedEntityCaptor.getValue().getImportedAt()).isEqualTo(importedAt);
 		assertThat(savedEntityCaptor.getValue().getUpdatedAt()).isEqualTo(updatedAt);
+		assertThat(savedEntityCaptor.getValue().getUsd()).isEqualByComparingTo("1.2500");
+		assertThat(savedEntityCaptor.getValue().getUsdFoil()).isEqualByComparingTo("2.2500");
+		assertThat(savedEntityCaptor.getValue().getPriceObservedAt())
+				.isEqualTo(OffsetDateTime.parse("2026-09-29T10:00:00Z"));
 	}
 
 	@Test
