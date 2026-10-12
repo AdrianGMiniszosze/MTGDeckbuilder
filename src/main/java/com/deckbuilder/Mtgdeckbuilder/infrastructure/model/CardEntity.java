@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -102,6 +103,30 @@ public class CardEntity {
 	@Generated(event = { EventType.INSERT, EventType.UPDATE })
 	@Column(name = "updated_at", insertable = false, updatable = false)
 	private OffsetDateTime updatedAt;
+
+	@Column(precision = 12, scale = 4)
+	private BigDecimal usd;
+
+	@Column(name = "usd_foil", precision = 12, scale = 4)
+	private BigDecimal usdFoil;
+
+	@Column(name = "usd_etched", precision = 12, scale = 4)
+	private BigDecimal usdEtched;
+
+	@Column(precision = 12, scale = 4)
+	private BigDecimal eur;
+
+	@Column(name = "eur_foil", precision = 12, scale = 4)
+	private BigDecimal eurFoil;
+
+	@Column(name = "eur_etched", precision = 12, scale = 4)
+	private BigDecimal eurEtched;
+
+	@Column(precision = 12, scale = 4)
+	private BigDecimal tix;
+
+	@Column(name = "price_observed_at")
+	private OffsetDateTime priceObservedAt;
 
 	@Column(name = "promo")
 	private Boolean promo = false;

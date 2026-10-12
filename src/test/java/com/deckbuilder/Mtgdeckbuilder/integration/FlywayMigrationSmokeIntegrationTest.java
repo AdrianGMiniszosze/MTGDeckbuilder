@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FlywayMigrationSmokeIntegrationTest {
 
     @Test
-    void appliesV2ThroughV4AfterBootstrapBaselineOnCleanDatabase() throws Exception {
+    void appliesV2ThroughV5AndPreservesExistingPricesAfterBootstrapBaseline() throws Exception {
         try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg16")
                 .withDatabaseName("mtg_test")
                 .withUsername("test")
@@ -59,6 +59,7 @@ class FlywayMigrationSmokeIntegrationTest {
                     .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
                     .locations("classpath:db/migration")
                     .baselineOnMigrate(true)
+                    .target(MigrationVersion.fromVersion("4"))
                     .load();
             v4Flyway.migrate();
 
@@ -70,11 +71,31 @@ class FlywayMigrationSmokeIntegrationTest {
                     postgres.getJdbcUrl(),
                     postgres.getUsername(),
                     postgres.getPassword())) {
+                insertCardPrice(connection, getCardIdByName(connection, "pre_v2_card"));
+            }
+
+            Flyway v5Flyway = Flyway.configure()
+                    .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                    .locations("classpath:db/migration")
+                    .baselineOnMigrate(true)
+                    .load();
+            v5Flyway.migrate();
+
+            assertThat(v5Flyway.info().applied())
+                    .extracting(migration -> migration.getVersion().getVersion())
+                    .contains("3", "4", "5");
+
+            try (Connection connection = DriverManager.getConnection(
+                    postgres.getJdbcUrl(),
+                    postgres.getUsername(),
+                    postgres.getPassword())) {
                 assertCardTimestampSchema(connection);
                 assertImportSchema(connection);
 
                 long seededCardId = getCardIdByName(connection, "pre_v2_card");
                 assertThat(readUpdatedAt(connection, seededCardId)).isNotNull();
+                assertThat(readUsd(connection, seededCardId)).isEqualByComparingTo("1.25");
+                assertThat(readPriceObservedAt(connection, seededCardId)).isNotNull();
 
                 UUID sharedOracleId = UUID.randomUUID();
                 long cardWithScryfall = assertScryfallIdentityBehavior(connection, sharedOracleId);
@@ -101,8 +122,10 @@ class FlywayMigrationSmokeIntegrationTest {
     }
 
     private static void assertImportSchema(Connection connection) throws Exception {
-        assertThat(hasColumn(connection, "card_prices", "usd")).isTrue();
-        assertThat(hasColumn(connection, "card_prices", "price_observed_at")).isTrue();
+        assertThat(hasTable(connection, "card_prices")).isFalse();
+        assertThat(hasColumn(connection, "cards", "usd")).isTrue();
+        assertThat(hasColumn(connection, "cards", "usd_foil")).isTrue();
+        assertThat(hasColumn(connection, "cards", "price_observed_at")).isTrue();
         assertThat(hasColumn(connection, "card_faces", "face_index")).isTrue();
         assertThat(hasColumn(connection, "card_faces", "face_data")).isTrue();
         assertThat(hasColumn(connection, "card_rulings", "oracle_id")).isTrue();
@@ -124,8 +147,10 @@ class FlywayMigrationSmokeIntegrationTest {
     }
 
     private static void assertNewSchemaBehavior(Connection connection, long cardId, UUID oracleId) throws Exception {
-        insertCardPrice(connection, cardId);
-        assertThat(countRows(connection, "card_prices", "card_id", cardId)).isEqualTo(1);
+        updateCardPrice(connection, cardId);
+        assertThat(readUsd(connection, cardId)).isEqualByComparingTo("1.25");
+        assertThatThrownBy(() -> updateCardPriceToNegative(connection, cardId))
+                .isInstanceOf(SQLException.class);
         insertCardFace(connection, cardId, 0, "Front");
         insertCardFace(connection, cardId, 1, "Back");
         assertThat(countRows(connection, "card_faces", "card_id", cardId)).isEqualTo(2);
@@ -217,6 +242,22 @@ class FlywayMigrationSmokeIntegrationTest {
         }
     }
 
+    private static void updateCardPrice(Connection connection, long cardId) throws Exception {
+        String sql = "UPDATE cards SET usd = 1.25, price_observed_at = CURRENT_TIMESTAMP WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, cardId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void updateCardPriceToNegative(Connection connection, long cardId) throws Exception {
+        String sql = "UPDATE cards SET usd = -1 WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, cardId);
+            statement.executeUpdate();
+        }
+    }
+
     private static void insertCardFace(Connection connection, long cardId, int faceIndex, String name) throws Exception {
         String sql = "INSERT INTO card_faces(card_id, face_index, name, face_data) VALUES (?, ?, ?, '{\"name\":\"test\"}'::jsonb)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -243,6 +284,38 @@ class FlywayMigrationSmokeIntegrationTest {
             try (ResultSet resultSet = statement.executeQuery()) {
                 resultSet.next();
                 return resultSet.getLong(1);
+            }
+        }
+    }
+
+    private static boolean hasTable(Connection connection, String table) throws Exception {
+        String sql = "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, table);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
+    private static java.math.BigDecimal readUsd(Connection connection, long cardId) throws Exception {
+        String sql = "SELECT usd FROM cards WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, cardId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getBigDecimal(1);
+            }
+        }
+    }
+
+    private static OffsetDateTime readPriceObservedAt(Connection connection, long cardId) throws Exception {
+        String sql = "SELECT price_observed_at FROM cards WHERE id = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, cardId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getObject(1, OffsetDateTime.class);
             }
         }
     }

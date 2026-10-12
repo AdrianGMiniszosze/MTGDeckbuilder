@@ -66,10 +66,19 @@ public interface CardMapper {
 	@Mapping(target = "types", ignore = true)              // NEW: Ignore types list mapping
 	@Mapping(target = "supertypes", ignore = true)         // NEW: Ignore supertypes list mapping
 	@Mapping(target = "colorIdentityColors", ignore = true)
-		@Mapping(target = "scryfallId", ignore = true)
-		@Mapping(target = "oracleId", ignore = true)
-		@Mapping(target = "importedAt", ignore = true)
-		@Mapping(target = "updatedAt", ignore = true)
+	@Mapping(target = "scryfallId", ignore = true)
+	@Mapping(target = "oracleId", ignore = true)
+	@Mapping(target = "importedAt", ignore = true)
+	@Mapping(target = "updatedAt", ignore = true)
+	@Mapping(target = "usd", ignore = true)
+	@Mapping(target = "usdFoil", ignore = true)
+	@Mapping(target = "usdEtched", ignore = true)
+	@Mapping(target = "eur", ignore = true)
+	@Mapping(target = "eurFoil", ignore = true)
+	@Mapping(target = "eurEtched", ignore = true)
+	@Mapping(target = "tix", ignore = true)
+	@Mapping(target = "priceObservedAt", ignore = true)
+	@Mapping(target = "faces", ignore = true)
 	Card toEntity(CardDTO cardDTO);
 
 	// List mapping methods
