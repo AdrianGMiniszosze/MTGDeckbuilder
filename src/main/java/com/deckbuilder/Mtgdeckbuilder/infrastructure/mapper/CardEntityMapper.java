@@ -51,13 +51,11 @@ public interface CardEntityMapper {
 		return faces.stream().map(face -> {
 			CardFaceEntity entity = toEntity(face);
 			entity.setCardId(card.getId());
-			entity.setCard(card);
 			return entity;
 		}).toList();
 	}
 
 	@Mapping(target = "cardId", ignore = true)
-	@Mapping(target = "card", ignore = true)
 	CardFaceEntity toEntity(CardFace face);
 
 	CardFace toModel(CardFaceEntity face);

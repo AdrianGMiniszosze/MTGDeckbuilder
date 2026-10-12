@@ -56,6 +56,7 @@ class CardImportEntityMapperTest {
 				.build();
 
 		CardEntity entity = mapper.toImportEntity(model);
+		entity.setId(42L);
 		List<CardFaceEntity> faceEntities = mapper.toImportFaces(model.getFaces(), entity);
 
 		assertThat(entity.getUsd()).isEqualByComparingTo("1.2500");
@@ -78,7 +79,7 @@ class CardImportEntityMapperTest {
 			assertThat(face.getDefense()).isEqualTo("4");
 			assertThat(face.getImageUris()).isEqualTo(imageUris);
 			assertThat(face.getFaceData()).isEqualTo(faceData);
-			assertThat(face.getCard()).isSameAs(entity);
+			assertThat(face.getCardId()).isEqualTo(entity.getId());
 		});
 
 		Card mappedBack = mapper.toImportModel(entity, faceEntities);
