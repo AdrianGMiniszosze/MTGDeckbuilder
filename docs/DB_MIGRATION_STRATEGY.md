@@ -9,6 +9,14 @@ This document defines the migration policy for schema changes in `MTGDeckbuilder
 - **Current bootstrap constraint**: until `V1__baseline_schema.sql` is introduced, clean databases must be provisioned with the schema bootstrap script before applying later Flyway migrations.
 - **Transition rule**: from this point, schema evolution must be done with new Flyway migrations, not by editing historical migration files.
 
+## Scryfall import schema (V4)
+
+- `card_legality` stores one status per card printing and format; the status values support Scryfall's `legal`, `not_legal`, `restricted`, and `banned` values.
+- `card_prices` stores the latest nullable USD, EUR, and MTGO TIX price values per printing with `price_observed_at`.
+- `card_faces` stores ordered face records per printing. Frequently queried face fields are columns; `face_data` retains the complete Scryfall face object for forward-compatible fields.
+- `card_rulings` stores rulings by `oracle_id`, publication date, comment, and source, so identical rulings are deduplicated while multiple rulings and reprints remain supported.
+- These objects are introduced by `V4__add_scryfall_legality_price_face_and_ruling_schema.sql`; do not modify earlier migrations.
+
 ## Goals
 
 1. Eliminate schema drift between runtime DB, SQL scripts, and JPA entities.
