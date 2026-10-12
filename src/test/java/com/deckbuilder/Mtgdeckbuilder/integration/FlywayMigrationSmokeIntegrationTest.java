@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class FlywayMigrationSmokeIntegrationTest {
 
     @Test
-    void appliesV2ThenV3AfterBootstrapBaselineOnCleanDatabase() throws Exception {
+    void appliesV2ThroughV4AfterBootstrapBaselineOnCleanDatabase() throws Exception {
         try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg16")
                 .withDatabaseName("mtg_test")
                 .withUsername("test")
@@ -55,57 +55,95 @@ class FlywayMigrationSmokeIntegrationTest {
                 assertThat(isNotNullable(connection, "cards", "updated_at")).isFalse();
             }
 
-            Flyway v3Flyway = Flyway.configure()
+            Flyway v4Flyway = Flyway.configure()
                     .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
                     .locations("classpath:db/migration")
                     .baselineOnMigrate(true)
                     .load();
-            v3Flyway.migrate();
+            v4Flyway.migrate();
 
-            assertThat(v3Flyway.info().applied())
+            assertThat(v4Flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .contains("3");
+                    .contains("3", "4");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
                     postgres.getUsername(),
                     postgres.getPassword())) {
-                assertThat(hasColumn(connection, "cards", "scryfall_id")).isTrue();
-                assertThat(hasColumn(connection, "cards", "oracle_id")).isTrue();
-                assertThat(hasColumn(connection, "cards", "imported_at")).isTrue();
-                assertThat(hasColumn(connection, "cards", "updated_at")).isTrue();
-                assertThat(hasTrigger(connection, "cards", "trg_cards_updated_at")).isTrue();
-                assertThat(hasIndex(connection, "ux_cards_scryfall_id")).isTrue();
-                assertThat(hasIndex(connection, "ix_cards_oracle_id")).isTrue();
-                assertThat(hasIndex(connection, "ix_cards_updated_at")).isTrue();
-                assertThat(hasDefault(connection, "cards", "imported_at", "CURRENT_TIMESTAMP")).isTrue();
-                assertThat(hasDefault(connection, "cards", "updated_at", "CURRENT_TIMESTAMP")).isTrue();
-                assertThat(isNotNullable(connection, "cards", "imported_at")).isTrue();
-                assertThat(isNotNullable(connection, "cards", "updated_at")).isTrue();
-                assertThat(countCardsWithMissingTimestamps(connection)).isZero();
+                assertCardTimestampSchema(connection);
+                assertImportSchema(connection);
 
                 long seededCardId = getCardIdByName(connection, "pre_v2_card");
                 assertThat(readUpdatedAt(connection, seededCardId)).isNotNull();
 
-                UUID duplicateScryfallId = UUID.randomUUID();
-                long cardWithScryfall = insertCardAfterV2(connection, "scryfall_unique_1", duplicateScryfallId, null);
-                assertThat(readImportedAt(connection, cardWithScryfall)).isNotNull();
-                assertThat(readUpdatedAt(connection, cardWithScryfall)).isNotNull();
-
-                assertThatThrownBy(() -> insertCardAfterV2(connection, "scryfall_unique_2", duplicateScryfallId, null))
-                        .isInstanceOf(SQLException.class);
-
                 UUID sharedOracleId = UUID.randomUUID();
-                insertCardAfterV2(connection, "oracle_reprint_1", UUID.randomUUID(), sharedOracleId);
-                insertCardAfterV2(connection, "oracle_reprint_2", UUID.randomUUID(), sharedOracleId);
-                assertThat(countCardsWithOracleId(connection, sharedOracleId)).isEqualTo(2);
-
-                OffsetDateTime beforeUpdate = readUpdatedAt(connection, cardWithScryfall);
-                updateCardText(connection, cardWithScryfall);
-                OffsetDateTime afterUpdate = readUpdatedAt(connection, cardWithScryfall);
-                assertThat(afterUpdate).isAfter(beforeUpdate);
+                long cardWithScryfall = assertScryfallIdentityBehavior(connection, sharedOracleId);
+                assertNewSchemaBehavior(connection, cardWithScryfall, sharedOracleId);
+                assertUpdatedAtChangesOnUpdate(connection, cardWithScryfall);
             }
         }
+    }
+
+    private static void assertCardTimestampSchema(Connection connection) throws Exception {
+        assertThat(hasColumn(connection, "cards", "scryfall_id")).isTrue();
+        assertThat(hasColumn(connection, "cards", "oracle_id")).isTrue();
+        assertThat(hasColumn(connection, "cards", "imported_at")).isTrue();
+        assertThat(hasColumn(connection, "cards", "updated_at")).isTrue();
+        assertThat(hasTrigger(connection, "cards", "trg_cards_updated_at")).isTrue();
+        assertThat(hasIndex(connection, "ux_cards_scryfall_id")).isTrue();
+        assertThat(hasIndex(connection, "ix_cards_oracle_id")).isTrue();
+        assertThat(hasIndex(connection, "ix_cards_updated_at")).isTrue();
+        assertThat(hasDefault(connection, "cards", "imported_at", "CURRENT_TIMESTAMP")).isTrue();
+        assertThat(hasDefault(connection, "cards", "updated_at", "CURRENT_TIMESTAMP")).isTrue();
+        assertThat(isNotNullable(connection, "cards", "imported_at")).isTrue();
+        assertThat(isNotNullable(connection, "cards", "updated_at")).isTrue();
+        assertThat(countCardsWithMissingTimestamps(connection)).isZero();
+    }
+
+    private static void assertImportSchema(Connection connection) throws Exception {
+        assertThat(hasColumn(connection, "card_prices", "usd")).isTrue();
+        assertThat(hasColumn(connection, "card_prices", "price_observed_at")).isTrue();
+        assertThat(hasColumn(connection, "card_faces", "face_index")).isTrue();
+        assertThat(hasColumn(connection, "card_faces", "face_data")).isTrue();
+        assertThat(hasColumn(connection, "card_rulings", "oracle_id")).isTrue();
+        assertThat(hasIndex(connection, "ix_card_rulings_oracle_id")).isTrue();
+    }
+
+    private static long assertScryfallIdentityBehavior(Connection connection, UUID sharedOracleId) throws Exception {
+        UUID duplicateScryfallId = UUID.randomUUID();
+        long cardWithScryfall = insertCardAfterV2(connection, "scryfall_unique_1", duplicateScryfallId, null);
+        assertThat(readImportedAt(connection, cardWithScryfall)).isNotNull();
+        assertThat(readUpdatedAt(connection, cardWithScryfall)).isNotNull();
+        assertThatThrownBy(() -> insertCardAfterV2(connection, "scryfall_unique_2", duplicateScryfallId, null))
+                .isInstanceOf(SQLException.class);
+
+        insertCardAfterV2(connection, "oracle_reprint_1", UUID.randomUUID(), sharedOracleId);
+        insertCardAfterV2(connection, "oracle_reprint_2", UUID.randomUUID(), sharedOracleId);
+        assertThat(countCardsWithOracleId(connection, sharedOracleId)).isEqualTo(2);
+        return cardWithScryfall;
+    }
+
+    private static void assertNewSchemaBehavior(Connection connection, long cardId, UUID oracleId) throws Exception {
+        insertCardPrice(connection, cardId);
+        assertThat(countRows(connection, "card_prices", "card_id", cardId)).isEqualTo(1);
+        insertCardFace(connection, cardId, 0, "Front");
+        insertCardFace(connection, cardId, 1, "Back");
+        assertThat(countRows(connection, "card_faces", "card_id", cardId)).isEqualTo(2);
+        assertThatThrownBy(() -> insertCardFace(connection, cardId, 1, "Duplicate"))
+                .isInstanceOf(SQLException.class);
+
+        insertRuling(connection, oracleId, "This ruling applies to multiple printings.");
+        assertThatThrownBy(() -> insertRuling(connection, oracleId, "This ruling applies to multiple printings."))
+                .isInstanceOf(SQLException.class);
+        insertRuling(connection, oracleId, "A second ruling for the same oracle identity.");
+        assertThat(countRows(connection, "card_rulings", "oracle_id", oracleId)).isEqualTo(2);
+    }
+
+    private static void assertUpdatedAtChangesOnUpdate(Connection connection, long cardId) throws Exception {
+        OffsetDateTime beforeUpdate = readUpdatedAt(connection, cardId);
+        updateCardText(connection, cardId);
+        OffsetDateTime afterUpdate = readUpdatedAt(connection, cardId);
+        assertThat(afterUpdate).isAfter(beforeUpdate);
     }
 
     private static long insertCardBeforeV2(Connection connection, String cardName) throws Exception {
@@ -164,6 +202,44 @@ class FlywayMigrationSmokeIntegrationTest {
         String sql = "SELECT COUNT(*) FROM cards WHERE oracle_id = ?";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setObject(1, oracleId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
+        }
+    }
+
+    private static void insertCardPrice(Connection connection, long cardId) throws Exception {
+        String sql = "INSERT INTO card_prices(card_id, usd, price_observed_at) VALUES (?, 1.25, CURRENT_TIMESTAMP)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, cardId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertCardFace(Connection connection, long cardId, int faceIndex, String name) throws Exception {
+        String sql = "INSERT INTO card_faces(card_id, face_index, name, face_data) VALUES (?, ?, ?, '{\"name\":\"test\"}'::jsonb)";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, cardId);
+            statement.setInt(2, faceIndex);
+            statement.setString(3, name);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertRuling(Connection connection, UUID oracleId, String comment) throws Exception {
+        String sql = "INSERT INTO card_rulings(oracle_id, published_at, comment, source) VALUES (?, DATE '2026-01-01', ?, 'wotc')";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, oracleId);
+            statement.setString(2, comment);
+            statement.executeUpdate();
+        }
+    }
+
+    private static long countRows(Connection connection, String table, String column, Object value) throws Exception {
+        String sql = "SELECT COUNT(*) FROM " + table + " WHERE " + column + " = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, value);
             try (ResultSet resultSet = statement.executeQuery()) {
                 resultSet.next();
                 return resultSet.getLong(1);
