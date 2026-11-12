@@ -3,11 +3,14 @@ package com.deckbuilder.mtgdeckbuilder.contract.mapper;
 import com.deckbuilder.apigenerator.openapi.api.model.CardDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.Deck.CardInDeck;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.Named;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Mapper(componentModel = "spring")
@@ -52,13 +55,31 @@ public interface DeckMapper {
 
 	@Mapping(source = "cardId", target = "card_id")
 	@Mapping(source = "deckId", target = "deck_id")
+	@Mapping(source = "section", target = "section", qualifiedByName = "stringToSection")
 	CardDeckDTO toCardDeckDTO(CardInDeck cardInDeck);
 
 	@Mapping(target = "id", ignore = true)
 	@Mapping(source = "card_id", target = "cardId")
 	@Mapping(source = "deck_id", target = "deckId")
-	@Mapping(target = "section", defaultValue = "MAIN")
+	@Mapping(source = "section", target = "section", qualifiedByName = "sectionToString")
 	CardInDeck toCardInDeck(CardDeckDTO cardDeckDTO);
+
+	@Named("sectionToString")
+	default String sectionToString(CardDeckDTO.Section section) {
+		return section != null ? section.getValue() : null;
+	}
+
+	@Named("stringToSection")
+	default CardDeckDTO.Section stringToSection(String section) {
+		if (section == null) {
+			return null;
+		}
+		return Arrays.stream(CardDeckDTO.Section.values())
+			.filter(value -> value.getValue().equalsIgnoreCase(section))
+			.findFirst()
+			.orElseThrow(() -> new InvalidDeckCompositionException(
+					"Invalid section. Must be 'main', 'sideboard', or 'maybeboard'"));
+	}
 
 	// Helper method to filter cards by section
 	default List<CardDeckDTO> getCardsBySection(List<CardInDeck> cards, String section) {

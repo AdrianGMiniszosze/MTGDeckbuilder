@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -58,22 +60,28 @@ public class DeckServiceImpl implements DeckService {
 
 		DeckEntity entity = this.deckEntityMapper.toEntity(deck);
 		entity = this.deckRepository.save(entity);
-		return this.deckEntityMapper.toModel(entity);
+
+		this.replaceDeckCards(entity.getId(), deck.getCards());
+
+		return this.buildDeckWithCards(entity);
 	}
 
 	@Override
 	@Transactional
 	public Deck update(Long id, Deck deck) {
-		if (!this.deckRepository.existsById(id)) {
-			throw new DeckNotFoundException(id);
-		}
+		final DeckEntity existing = this.deckRepository.findById(id)
+				.orElseThrow(() -> new DeckNotFoundException(id));
 
 		final LocalDateTime now = LocalDateTime.now();
-		deck = deck.toBuilder().id(id).modified(now).build();
+		deck = deck.toBuilder().id(id).created(existing.getCreated()).modified(now).build();
 
 		DeckEntity entity = this.deckEntityMapper.toEntity(deck);
+		entity.setCreated(existing.getCreated());
 		entity = this.deckRepository.save(entity);
-		return this.deckEntityMapper.toModel(entity);
+
+		this.replaceDeckCards(id, deck.getCards());
+
+		return this.buildDeckWithCards(entity);
 	}
 
 	@Override
@@ -162,6 +170,66 @@ public class DeckServiceImpl implements DeckService {
 
 		// Return updated deck with cards
 		return this.findById(deckId).orElseThrow(() -> new DeckNotFoundException(deckId));
+	}
+
+	/**
+	 * Replaces the deck contents when the payload includes them. A null list means
+	 * the caller did not send deck_contents, so existing rows are preserved.
+	 */
+	private void replaceDeckCards(Long deckId, List<Deck.CardInDeck> cards) {
+		if (cards == null) {
+			return;
+		}
+
+		this.cardInDeckRepository.deleteByDeckId(deckId);
+
+		for (final Deck.CardInDeck card : this.normalizeCards(deckId, cards)) {
+			this.cardInDeckRepository.save(CardInDeckEntity.builder()
+				.cardId(card.getCardId())
+				.deckId(deckId)
+				.quantity(card.getQuantity())
+				.section(card.getSection())
+				.build());
+		}
+	}
+
+	/**
+	 * Validates card entries and merges duplicates of the same card and section.
+	 */
+	private List<Deck.CardInDeck> normalizeCards(Long deckId, List<Deck.CardInDeck> cards) {
+		final Map<String, Deck.CardInDeck> merged = new LinkedHashMap<>();
+		for (final Deck.CardInDeck card : cards) {
+			final String section = card.getSection() != null ? card.getSection() : "main";
+			if (!this.isValidSection(section)) {
+				throw new InvalidDeckCompositionException(
+						"Invalid section. Must be 'main', 'sideboard', or 'maybeboard'");
+			}
+			if (card.getCardId() == null) {
+				throw new InvalidDeckCompositionException("Card id is required in deck contents");
+			}
+			if (card.getQuantity() <= 0) {
+				throw new InvalidDeckCompositionException("Quantity must be greater than 0");
+			}
+
+			final Deck.CardInDeck normalized = new Deck.CardInDeck(card.getId(), card.getCardId(), deckId,
+					card.getQuantity(), section);
+			merged.merge(card.getCardId() + ":" + section, normalized,
+					(existing, duplicate) -> new Deck.CardInDeck(existing.getId(), existing.getCardId(),
+							existing.getDeckId(), existing.getQuantity() + duplicate.getQuantity(),
+							existing.getSection()));
+		}
+		return List.copyOf(merged.values());
+	}
+
+	/**
+	 * Builds the returned deck from the persisted row and its current card rows.
+	 */
+	private Deck buildDeckWithCards(DeckEntity entity) {
+		final List<Deck.CardInDeck> cards = this.cardInDeckRepository.findByDeckId(entity.getId()).stream()
+			.map(card -> new Deck.CardInDeck(card.getId(), card.getCardId(), card.getDeckId(), card.getQuantity(),
+					card.getSection()))
+			.toList();
+		return this.deckEntityMapper.toModel(entity).toBuilder().cards(cards).build();
 	}
 
 	/**
