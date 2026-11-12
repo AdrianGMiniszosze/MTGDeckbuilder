@@ -25,6 +25,12 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
+      # docker-java (via Testcontainers 1.21.x) defaults to Docker API 1.32,
+      # which Docker 29+ rejects (minimum 1.40). Read the daemon's API version
+      # instead of hardcoding one, so this works on older and newer runners.
+      - name: Detect Docker API version
+        run: echo "DOCKER_API_VERSION=$(docker version --format '{{.Server.APIVersion}}')" >> "$GITHUB_ENV"
+
       # Generate sources must run before compile: OpenAPI codegen produces
       # Java files that the main sources depend on.
       - name: Generate sources (OpenAPI codegen)
@@ -49,6 +55,7 @@ jobs:
           -DfailIfNoTests=false
           -DforkCount=1
           -DreuseForks=true
+          -Dapi.version=$DOCKER_API_VERSION
         env:
           TESTCONTAINERS_RYUK_DISABLED: "false"
           DOCKER_HOST: "unix:///var/run/docker.sock"
@@ -61,6 +68,7 @@ jobs:
           -DfailIfNoTests=false
           -DforkCount=1
           -DreuseForks=true
+          -Dapi.version=$DOCKER_API_VERSION
         env:
           TESTCONTAINERS_RYUK_DISABLED: "false"
           DOCKER_HOST: "unix:///var/run/docker.sock"
