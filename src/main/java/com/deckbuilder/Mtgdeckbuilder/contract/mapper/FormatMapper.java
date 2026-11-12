@@ -11,7 +11,7 @@ import java.util.List;
 public interface FormatMapper {
 
 	@Mapping(source = "name", target = "format_name")
-	@Mapping(source = "maxDeckSize", target = "deck_size")
+	@Mapping(target = "deck_size", expression = "java(format.getMaxDeckSize() != null ? format.getMaxDeckSize() : format.getMinDeckSize())")
 	FormatDTO toDto(Format format);
 
 	@Mapping(target = "name", source = "format_name")
@@ -19,8 +19,9 @@ public interface FormatMapper {
 	@Mapping(target = "minDeckSize", ignore = true)
 	@Mapping(target = "description", ignore = true)
 	@Mapping(target = "maxSideboardSize", ignore = true)
-	@Mapping(target = "bannedCards", ignore = true)
-	@Mapping(target = "restrictedCards", ignore = true)
+	@Mapping(target = "maxCopies", ignore = true)
+	@Mapping(target = "singleton", ignore = true)
+	@Mapping(target = "requiresCommander", ignore = true)
 	Format toModel(FormatDTO dto);
 
 	List<FormatDTO> toDtoList(List<Format> formats);

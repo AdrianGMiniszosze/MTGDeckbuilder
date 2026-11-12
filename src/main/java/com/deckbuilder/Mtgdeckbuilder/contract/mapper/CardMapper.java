@@ -4,13 +4,7 @@ import com.deckbuilder.apigenerator.openapi.api.model.CardDTO;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
-import org.mapstruct.Named;
 import org.mapstruct.NullValuePropertyMappingStrategy;
-
-import java.math.BigDecimal;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 
 @Mapper(componentModel = "spring", nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
 public interface CardMapper {
@@ -19,12 +13,12 @@ public interface CardMapper {
 	@Mapping(source = "cardType", target = "card_type")
 	@Mapping(source = "cardSupertype", target = "card_supertype")
 	@Mapping(source = "cardText", target = "card_text")
-	@Mapping(source = "cardSet", target = "card_set")
+	@Mapping(source = "cardSetId", target = "card_set")
 	@Mapping(source = "imageUrl", target = "image_url")
 	@Mapping(source = "manaCost", target = "mana_cost")
 	@Mapping(source = "flavorText", target = "flavor_text")
-	@Mapping(source = "embedding", target = "embedding", qualifiedByName = "stringToEmbedding")
-	@Mapping(source = "relatedCard", target = "related_card")
+	@Mapping(target = "embedding", ignore = true)
+	@Mapping(source = "relatedCardId", target = "related_card")
 	@Mapping(source = "power", target = "power")
 	@Mapping(source = "toughness", target = "toughness")
 	@Mapping(source = "colorIdentity", target = "color_identity")
@@ -43,18 +37,18 @@ public interface CardMapper {
 	@Mapping(target = "cardType", source = "card_type")
 	@Mapping(target = "cardSupertype", source = "card_supertype")
 	@Mapping(target = "cardText", source = "card_text")
-	@Mapping(target = "cardSet", source = "card_set")
+	@Mapping(target = "cardSetId", source = "card_set")
 	@Mapping(target = "imageUrl", source = "image_url")
 	@Mapping(target = "manaCost", source = "mana_cost")
 	@Mapping(target = "flavorText", source = "flavor_text")
-	@Mapping(target = "embedding", source = "embedding", qualifiedByName = "embeddingToString")
-	@Mapping(target = "relatedCard", source = "related_card")
+	@Mapping(target = "relatedCardId", source = "related_card")
 	@Mapping(target = "power", source = "power")
 	@Mapping(target = "toughness", source = "toughness")
 	@Mapping(target = "colorIdentity", source = "color_identity")
 	@Mapping(target = "language", source = "language")
 	@Mapping(target = "rarity", source = "rarity")
 	@Mapping(target = "unlimitedCopies", source = "unlimited_copies")
+	@Mapping(target = "isBasicLand", ignore = true)
 	@Mapping(target = "gameChanger", source = "game_changer")
 	@Mapping(target = "collectorNumber", source = "collector_number")
 	@Mapping(target = "promo", source = "promo")
@@ -63,8 +57,8 @@ public interface CardMapper {
 	@Mapping(target = "colors", ignore = true)
 	@Mapping(target = "keywords", ignore = true)
 	@Mapping(target = "subtypes", ignore = true)
-	@Mapping(target = "types", ignore = true)              // NEW: Ignore types list mapping
-	@Mapping(target = "supertypes", ignore = true)         // NEW: Ignore supertypes list mapping
+	@Mapping(target = "types", ignore = true)
+	@Mapping(target = "supertypes", ignore = true)
 	@Mapping(target = "colorIdentityColors", ignore = true)
 	@Mapping(target = "scryfallId", ignore = true)
 	@Mapping(target = "oracleId", ignore = true)
@@ -83,30 +77,4 @@ public interface CardMapper {
 
 	// List mapping methods
 	java.util.List<CardDTO> toDtoList(java.util.List<Card> cards);
-
-	// Custom mapping methods for embedding conversion
-	@Named("stringToEmbedding")
-	default List<BigDecimal> stringToEmbedding(String value) {
-		if (value == null || value.trim().isEmpty()) {
-			return Collections.emptyList();
-		}
-		try {
-			return Arrays.stream(value.split(","))
-					.map(String::trim)
-					.map(BigDecimal::new)
-					.toList();
-		} catch (Exception e) {
-			return Collections.emptyList();
-		}
-	}
-
-	@Named("embeddingToString")
-	default String embeddingToString(List<BigDecimal> value) {
-		if (value == null || value.isEmpty()) {
-			return null;
-		}
-		return String.join(",", value.stream()
-				.map(BigDecimal::toString)
-				.toList());
-	}
 }

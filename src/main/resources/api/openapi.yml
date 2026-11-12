@@ -1353,7 +1353,6 @@ components:
       type: object
       required:
         - deck_name
-        - deck_type
         - user_id
       properties:
         id:
@@ -1372,11 +1371,6 @@ components:
           type: string
           format: date-time
           readOnly: true
-        deck_type:
-          type: string
-          enum: [main, sideboard, maybeboard]
-          default: main
-          example: "main"
         description:
           type: string
           maxLength: 999
@@ -1519,6 +1513,11 @@ components:
           minimum: 1
           maximum: 99
           example: 4
+        section:
+          type: string
+          enum: [main, sideboard, maybeboard]
+          default: main
+          example: "main"
 
     CardTag:
       type: object

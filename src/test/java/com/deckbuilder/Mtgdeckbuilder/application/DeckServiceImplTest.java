@@ -54,7 +54,7 @@ class DeckServiceImplTest {
 	@BeforeEach
 	void setUp() {
 		this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
-				.deckType("main").isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
+				.isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
 
 		this.testDeckEntity = new DeckEntity();
 		this.testDeckEntity.setId(1L);
@@ -62,7 +62,6 @@ class DeckServiceImplTest {
 		this.testDeckEntity.setDescription("A test deck");
 		this.testDeckEntity.setUserId(1L);
 		this.testDeckEntity.setFormatId(1L);
-		this.testDeckEntity.setDeckType("main");
 		this.testDeckEntity.setIsPrivate(false);
 		this.testDeckEntity.setCreated(LocalDateTime.now());
 		this.testDeckEntity.setModified(LocalDateTime.now());

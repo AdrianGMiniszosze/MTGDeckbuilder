@@ -6,8 +6,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
-
 @Entity
 @Table(name = "formats")
 @Data
@@ -24,22 +22,24 @@ public class FormatEntity {
 
 	private String description;
 
-	@Column(name = "min_deck_size")
+	@Column(name = "min_deck_size", nullable = false)
 	private int minDeckSize;
 
 	@Column(name = "max_deck_size")
-	private int maxDeckSize;
+	private Integer maxDeckSize;
 
 	@Column(name = "max_sideboard_size")
-	private int maxSideboardSize;
+	private Integer maxSideboardSize;
 
-	@ElementCollection
-	@CollectionTable(name = "format_banned_cards", joinColumns = @JoinColumn(name = "format_id"))
-	@Column(name = "card_name")
-	private List<String> bannedCards;
+	@Builder.Default
+	@Column(name = "max_copies", nullable = false)
+	private int maxCopies = 4;
 
-	@ElementCollection
-	@CollectionTable(name = "format_restricted_cards", joinColumns = @JoinColumn(name = "format_id"))
-	@Column(name = "card_name")
-	private List<String> restrictedCards;
+	@Builder.Default
+	@Column(nullable = false)
+	private boolean singleton = false;
+
+	@Builder.Default
+	@Column(name = "requires_commander", nullable = false)
+	private boolean requiresCommander = false;
 }

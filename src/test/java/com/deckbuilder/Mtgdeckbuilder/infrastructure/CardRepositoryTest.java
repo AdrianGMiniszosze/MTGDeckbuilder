@@ -40,7 +40,7 @@ class CardRepositoryTest {
         this.testCardEntity.setCardType("Artifact");
         this.testCardEntity.setCardText("Add three mana of any one color.");
         this.testCardEntity.setRarity("Mythic Rare");
-        this.testCardEntity.setCardSet(1L);
+        this.testCardEntity.setCardSetId(1L);
         this.testCardEntity.setImageUrl("http://example.com/black-lotus.jpg");
         this.testCardEntity.setFoil(false);
         this.testCardEntity.setUnlimitedCopies(false);
@@ -173,7 +173,7 @@ class CardRepositoryTest {
 		regularCard.setName("Lightning Bolt");
 		regularCard.setCollectorNumber("001");
 		regularCard.setFoil(false);
-		regularCard.setCardSet(1L);
+		regularCard.setCardSetId(1L);
 
 		// Given - Foil version
 		final CardEntity foilCard = new CardEntity();
@@ -181,7 +181,7 @@ class CardRepositoryTest {
 		foilCard.setName("Lightning Bolt");
 		foilCard.setCollectorNumber("001★");
 		foilCard.setFoil(true);
-		foilCard.setCardSet(1L);
+		foilCard.setCardSetId(1L);
 
 		when(this.cardRepository.save(regularCard)).thenReturn(regularCard);
 		when(this.cardRepository.save(foilCard)).thenReturn(foilCard);
@@ -252,28 +252,28 @@ class CardRepositoryTest {
 		final CardEntity forest1 = new CardEntity();
 		forest1.setName("Forest");
 		forest1.setCollectorNumber("264");
-		forest1.setCardSet(1L);
+		forest1.setCardSetId(1L);
 
 		final CardEntity forest2 = new CardEntity();
 		forest2.setName("Forest");
 		forest2.setCollectorNumber("265");
-		forest2.setCardSet(1L);
+		forest2.setCardSetId(1L);
 
 		final CardEntity forest3 = new CardEntity();
 		forest3.setName("Forest");
 		forest3.setCollectorNumber("266");
-		forest3.setCardSet(1L);
+		forest3.setCardSetId(1L);
 
 		final List<CardEntity> variants = Arrays.asList(forest1, forest2, forest3);
-		when(this.cardRepository.findByNameAndCardSet("Forest", 1L)).thenReturn(variants);
+		when(this.cardRepository.findByNameAndCardSetId("Forest", 1L)).thenReturn(variants);
 
 		// When
-		final List<CardEntity> result = this.cardRepository.findByNameAndCardSet("Forest", 1L);
+		final List<CardEntity> result = this.cardRepository.findByNameAndCardSetId("Forest", 1L);
 
 		// Then
 		assertThat(result).hasSize(3);
 		assertThat(result).allMatch(card -> card.getName().equals("Forest"));
-		assertThat(result).allMatch(card -> card.getCardSet().equals(1L));
+		assertThat(result).allMatch(card -> card.getCardSetId().equals(1L));
 		assertThat(result.stream().map(CardEntity::getCollectorNumber)).containsExactlyInAnyOrder("264", "265", "266");
 	}
 
@@ -316,12 +316,12 @@ class CardRepositoryTest {
 		final CardEntity originalPrint = new CardEntity();
 		originalPrint.setName("Lightning Bolt");
 		originalPrint.setCollectorNumber("001");
-		originalPrint.setCardSet(1L); // Alpha set
+		originalPrint.setCardSetId(1L); // Alpha set
 
 		final CardEntity reprint = new CardEntity();
 		reprint.setName("Lightning Bolt");
 		reprint.setCollectorNumber("001");
-		reprint.setCardSet(2L); // Beta set
+		reprint.setCardSetId(2L); // Beta set
 
 		final List<CardEntity> cards = Arrays.asList(originalPrint, reprint);
 		when(this.cardRepository.findByCollectorNumber("001")).thenReturn(cards);
@@ -333,6 +333,6 @@ class CardRepositoryTest {
 		assertThat(result).hasSize(2);
 		assertThat(result).allMatch(card -> card.getCollectorNumber().equals("001"));
 		assertThat(result).allMatch(card -> card.getName().equals("Lightning Bolt"));
-		assertThat(result.stream().map(CardEntity::getCardSet)).containsExactlyInAnyOrder(1L, 2L);
+		assertThat(result.stream().map(CardEntity::getCardSetId)).containsExactlyInAnyOrder(1L, 2L);
 	}
 }

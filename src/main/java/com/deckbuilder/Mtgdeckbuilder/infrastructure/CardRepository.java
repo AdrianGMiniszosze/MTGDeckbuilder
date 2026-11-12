@@ -19,7 +19,7 @@ public interface CardRepository extends JpaRepository<CardEntity, Long>, CardRep
 	List<CardEntity> findByCollectorNumber(String collectorNumber);
 
 	/**
-	 * Find cards by name and card set
+	 * Find cards by name and set
 	 */
-	List<CardEntity> findByNameAndCardSet(String name, Long cardSet);
+	List<CardEntity> findByNameAndCardSetId(String name, Long cardSetId);
 }

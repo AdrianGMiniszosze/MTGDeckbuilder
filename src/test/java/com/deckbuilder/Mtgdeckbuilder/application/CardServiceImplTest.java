@@ -329,7 +329,7 @@ class CardServiceImplTest {
 		// Given
 		final String cardName = "Lightning Bolt";
 		final Long setId = 1L;
-		when(this.cardRepository.findByNameAndCardSet(cardName, setId)).thenReturn(List.of(this.testCardEntity));
+		when(this.cardRepository.findByNameAndCardSetId(cardName, setId)).thenReturn(List.of(this.testCardEntity));
 		when(this.cardEntityMapper.toModel(this.testCardEntity)).thenReturn(this.testCard);
 
 		// When
@@ -338,7 +338,7 @@ class CardServiceImplTest {
 		// Then
 		assertThat(result).hasSize(1);
 		assertThat(result.get(0).getName()).isEqualTo("Lightning Bolt");
-		verify(this.cardRepository, times(1)).findByNameAndCardSet(cardName, setId);
+		verify(this.cardRepository, times(1)).findByNameAndCardSetId(cardName, setId);
 	}
 
 	@Test

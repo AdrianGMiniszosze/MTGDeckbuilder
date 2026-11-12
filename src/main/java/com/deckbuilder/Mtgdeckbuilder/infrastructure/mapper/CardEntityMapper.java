@@ -26,6 +26,13 @@ public interface CardEntityMapper {
 	@Mapping(target = "eurEtched", ignore = true)
 	@Mapping(target = "tix", ignore = true)
 	@Mapping(target = "priceObservedAt", ignore = true)
+	@Mapping(target = "isBasicLand", defaultValue = "false")
+	@Mapping(target = "unlimitedCopies", defaultValue = "false")
+	@Mapping(target = "foil", defaultValue = "false")
+	@Mapping(target = "gameChanger", defaultValue = "false")
+	@Mapping(target = "promo", defaultValue = "false")
+	@Mapping(target = "variation", defaultValue = "false")
+	@Mapping(target = "collectorNumber", defaultValue = "unknown")
 	@Named("crudEntity")
 	CardEntity toEntity(Card model);
 
@@ -33,6 +40,13 @@ public interface CardEntityMapper {
 	@Named("crudModel")
 	Card toModel(CardEntity entity);
 
+	@Mapping(target = "isBasicLand", defaultValue = "false")
+	@Mapping(target = "unlimitedCopies", defaultValue = "false")
+	@Mapping(target = "foil", defaultValue = "false")
+	@Mapping(target = "gameChanger", defaultValue = "false")
+	@Mapping(target = "promo", defaultValue = "false")
+	@Mapping(target = "variation", defaultValue = "false")
+	@Mapping(target = "collectorNumber", defaultValue = "unknown")
 	CardEntity toImportEntity(Card model);
 
 	default Card toImportModel(CardEntity entity, List<CardFaceEntity> faces) {

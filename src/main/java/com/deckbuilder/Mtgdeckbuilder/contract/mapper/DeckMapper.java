@@ -15,7 +15,6 @@ public interface DeckMapper {
 	@Mapping(source = "name", target = "deck_name")
 	@Mapping(source = "parentDeckId", target = "parent_deck_id")
 	@Mapping(source = "isPrivate", target = "is_private")
-	@Mapping(source = "deckType", target = "deck_type")
 	@Mapping(source = "created", target = "creation_date")
 	@Mapping(source = "formatId", target = "format")
 	@Mapping(source = "modified", target = "last_modification")
@@ -27,7 +26,6 @@ public interface DeckMapper {
 	@Mapping(source = "deck_name", target = "name")
 	@Mapping(source = "parent_deck_id", target = "parentDeckId")
 	@Mapping(source = "is_private", target = "isPrivate")
-	@Mapping(source = "deck_type", target = "deckType")
 	@Mapping(source = "creation_date", target = "created")
 	@Mapping(source = "format", target = "formatId")
 	@Mapping(source = "last_modification", target = "modified")
@@ -59,7 +57,7 @@ public interface DeckMapper {
 	@Mapping(target = "id", ignore = true)
 	@Mapping(source = "card_id", target = "cardId")
 	@Mapping(source = "deck_id", target = "deckId")
-	@Mapping(target = "section", ignore = true)
+	@Mapping(target = "section", defaultValue = "MAIN")
 	CardInDeck toCardInDeck(CardDeckDTO cardDeckDTO);
 
 	// Helper method to filter cards by section

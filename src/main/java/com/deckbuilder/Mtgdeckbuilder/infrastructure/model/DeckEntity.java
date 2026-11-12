@@ -30,16 +30,13 @@ public class DeckEntity {
 	@Column(name = "is_private")
 	private Boolean isPrivate;
 
-	@Column(name = "deck_type")
-	private String deckType;
-
-	@Column(name = "creation_date", nullable = false)
+	@Column(name = "created_at", nullable = false)
 	private LocalDateTime created;
 
 	@Column(name = "format_id", nullable = false)
 	private Long formatId;
 
-	@Column(name = "last_modification", nullable = false)
+	@Column(name = "updated_at", nullable = false)
 	private LocalDateTime modified;
 
 	@Column(name = "user_id", nullable = false)

@@ -1,6 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.FormatService;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
@@ -29,6 +30,7 @@ public class FormatServiceImpl implements FormatService {
 	private final FormatEntityMapper formatEntityMapper;
 	private final CardRepository cardRepository;
 	private final CardEntityMapper cardEntityMapper;
+	private final CardLegalityRepository cardLegalityRepository;
 
 	@Override
 	public List<Format> getAll() {
@@ -94,36 +96,31 @@ public class FormatServiceImpl implements FormatService {
 
 	@Override
 	public boolean isCardLegal(Long cardId, Long formatId) {
-		final Optional<FormatEntity> format = this.formatRepository.findById(formatId);
-		return format.map(formatEntity -> formatEntity.getBannedCards().stream()
-				.noneMatch(bannedCard -> bannedCard.equals(cardId.toString()))).orElse(false);
+		if (!this.formatRepository.existsById(formatId)) {
+			return false;
+		}
+
+		return this.cardLegalityRepository.findByCardIdAndFormatId(cardId, formatId)
+				.map(legality -> !"banned".equals(legality.getLegalityStatus())
+						&& !"not_legal".equals(legality.getLegalityStatus()))
+				.orElse(true);
 	}
 
 	@Override
 	public boolean isCardRestricted(Long cardId, Long formatId) {
-		final Optional<FormatEntity> format = this.formatRepository.findById(formatId);
-		if (format.isEmpty()) {
+		if (!this.formatRepository.existsById(formatId)) {
 			return false;
 		}
 
-		final List<String> restrictedCards = format.get().getRestrictedCards();
-		if (restrictedCards == null) {
-			return false;
-		}
-
-		// Check if card ID is in the restricted list
-		return restrictedCards.stream()
-				.anyMatch(restrictedCard -> restrictedCard.equals(cardId.toString()));
+		return this.cardLegalityRepository.isCardRestricted(cardId, formatId);
 	}
 
 	@Override
 	public List<String> getRestrictedCards(Long formatId) {
-		final Optional<FormatEntity> format = this.formatRepository.findById(formatId);
-		if (format.isEmpty()) {
+		if (!this.formatRepository.existsById(formatId)) {
 			throw new FormatNotFoundException(formatId);
 		}
 
-		final List<String> restrictedCards = format.get().getRestrictedCards();
-		return restrictedCards != null ? restrictedCards : List.of();
+		return this.cardLegalityRepository.findRestrictedCardNamesByFormatId(formatId);
 	}
 }

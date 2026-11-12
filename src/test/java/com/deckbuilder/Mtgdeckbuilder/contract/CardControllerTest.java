@@ -366,7 +366,7 @@ class CardControllerTest {
 		final Card cardWithCollector = Card.builder()
 				.name("Lightning Bolt")
 				.collectorNumber("001")
-				.cardSet(1L)
+				.cardSetId(1L)
 				.build();
 
 		final Card savedCard = cardWithCollector.toBuilder().id(1L).build();

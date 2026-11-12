@@ -62,7 +62,7 @@ class DeckServiceH2IntegrationTest extends PostgresIntegrationTest {
         testUser.setName("Test User");
         testUser.setHashedPassword("hashedpassword123");
         testUser.setCountry("US");
-        testUser.setRegistrationDate(LocalDateTime.now());
+        testUser.setCreatedAt(LocalDateTime.now());
         testUser = userRepository.save(testUser);
 
         // Create test format

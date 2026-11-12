@@ -67,6 +67,7 @@ class DeckValidationServiceTest {
 		this.basicLand.setName("Mountain");
 		this.basicLand.setCardType("Land");
 		this.basicLand.setCardSupertype("Basic");
+		this.basicLand.setIsBasicLand(true);
 		this.basicLand.setUnlimitedCopies(false);
 
 		// Banned card

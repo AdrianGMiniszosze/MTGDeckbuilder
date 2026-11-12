@@ -36,7 +36,7 @@ class CardInDeckRepositoryExtendedTest extends PostgresDataJpaTest {
         user.setName("Test User");
         user.setHashedPassword("hashedpassword123");
         user.setCountry("US");
-        user.setRegistrationDate(LocalDateTime.now());
+        user.setCreatedAt(LocalDateTime.now());
         entityManager.persist(user);
 
         // Create test format

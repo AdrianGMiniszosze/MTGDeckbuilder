@@ -120,7 +120,7 @@ class FullWorkflowMockTest {
 				.description("Aggressive red deck")
 				.user_id(1)
 				.format(1) // Standard format
-				.deck_type(DeckDTO.Deck_type.MAIN)
+				
 				.is_private(false)
 				.build();
 
@@ -130,7 +130,7 @@ class FullWorkflowMockTest {
 				.description(newDeck.getDescription())
 				.user_id(newDeck.getUser_id())
 				.format(newDeck.getFormat())
-				.deck_type(newDeck.getDeck_type())
+				
 				.is_private(newDeck.getIs_private())
 				.build();
 
@@ -234,7 +234,7 @@ class FullWorkflowMockTest {
 				.description("My secret deck")
 				.user_id(1)
 				.format(1)
-				.deck_type(DeckDTO.Deck_type.MAIN)
+				
 				.is_private(true)
 				.share_url(null) // No share URL for private decks
 				.build();
@@ -246,7 +246,7 @@ class FullWorkflowMockTest {
 				.description(privateDeck.getDescription())
 				.user_id(privateDeck.getUser_id())
 				.format(privateDeck.getFormat())
-				.deck_type(privateDeck.getDeck_type())
+				
 				.is_private(false)
 				.share_url("https://deckbuilder.com/shared/abc123")
 				.build();

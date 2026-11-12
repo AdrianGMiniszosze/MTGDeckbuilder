@@ -1,12 +1,14 @@
 package com.deckbuilder.mtgdeckbuilder.application;
 
 import com.deckbuilder.mtgdeckbuilder.application.implement.FormatServiceImpl;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.CardEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.FormatEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
 import com.deckbuilder.mtgdeckbuilder.model.Format;
@@ -47,6 +49,9 @@ class FormatServiceImplTest {
 	@Mock
 	private CardEntityMapper cardEntityMapper;
 
+	@Mock
+	private CardLegalityRepository cardLegalityRepository;
+
 	@InjectMocks
 	private FormatServiceImpl formatService;
 
@@ -56,8 +61,7 @@ class FormatServiceImplTest {
 	@BeforeEach
 	void setUp() {
 		this.testFormat = Format.builder().id(1L).name("Standard").description("Standard format").minDeckSize(60)
-				.maxDeckSize(60).maxSideboardSize(15).bannedCards(Arrays.asList("123", "456"))
-				.restrictedCards(List.of("789")).build();
+				.maxDeckSize(60).maxSideboardSize(15).maxCopies(4).singleton(false).requiresCommander(false).build();
 
 		this.testFormatEntity = new FormatEntity();
 		this.testFormatEntity.setId(1L);
@@ -66,8 +70,9 @@ class FormatServiceImplTest {
 		this.testFormatEntity.setMinDeckSize(60);
 		this.testFormatEntity.setMaxDeckSize(60);
 		this.testFormatEntity.setMaxSideboardSize(15);
-		this.testFormatEntity.setBannedCards(Arrays.asList("123", "456"));
-		this.testFormatEntity.setRestrictedCards(List.of("789"));
+		this.testFormatEntity.setMaxCopies(4);
+		this.testFormatEntity.setSingleton(false);
+		this.testFormatEntity.setRequiresCommander(false);
 	}
 
 	@Test
@@ -241,94 +246,103 @@ class FormatServiceImplTest {
 	void shouldReturnTrue_WhenCardIsLegal() {
 		// Given
 		final Long cardId = 100L;
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.testFormatEntity));
+		final CardLegalityEntity legal = new CardLegalityEntity(cardId, 1L, "legal", null, null);
+		when(this.formatRepository.existsById(1L)).thenReturn(true);
+		when(this.cardLegalityRepository.findByCardIdAndFormatId(cardId, 1L)).thenReturn(Optional.of(legal));
 
 		// When
 		final boolean result = this.formatService.isCardLegal(cardId, 1L);
 
 		// Then
 		assertThat(result).isTrue();
-		verify(this.formatRepository).findById(1L);
+		verify(this.formatRepository).existsById(1L);
+		verify(this.cardLegalityRepository).findByCardIdAndFormatId(cardId, 1L);
 	}
 
 	@Test
 	@DisplayName("Should return false when card is banned in format")
 	void shouldReturnFalse_WhenCardIsBanned() {
 		// Given
-		final Long cardId = 123L; // This is in the banned list
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.testFormatEntity));
+		final Long cardId = 123L;
+		final CardLegalityEntity banned = new CardLegalityEntity(cardId, 1L, "banned", null, null);
+		when(this.formatRepository.existsById(1L)).thenReturn(true);
+		when(this.cardLegalityRepository.findByCardIdAndFormatId(cardId, 1L)).thenReturn(Optional.of(banned));
 
 		// When
 		final boolean result = this.formatService.isCardLegal(cardId, 1L);
 
 		// Then
 		assertThat(result).isFalse();
-		verify(this.formatRepository).findById(1L);
 	}
 
 	@Test
 	@DisplayName("Should return false when format not found for card legality check")
 	void shouldReturnFalse_WhenFormatNotFoundForCardLegality() {
 		// Given
-		when(this.formatRepository.findById(999L)).thenReturn(Optional.empty());
+		when(this.formatRepository.existsById(999L)).thenReturn(false);
 
 		// When
 		final boolean result = this.formatService.isCardLegal(100L, 999L);
 
 		// Then
 		assertThat(result).isFalse();
-		verify(this.formatRepository).findById(999L);
+		verify(this.formatRepository).existsById(999L);
+		verifyNoInteractions(this.cardLegalityRepository);
 	}
 
 	@Test
-	@DisplayName("Should return true when card is not restricted")
+	@DisplayName("Should return false when card is not restricted")
 	void shouldReturnTrue_WhenCardIsNotRestricted() {
 		// Given
-		final Long cardId = 100L; // Not in restricted list
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.testFormatEntity));
+		final Long cardId = 100L;
+		when(this.formatRepository.existsById(1L)).thenReturn(true);
+		when(this.cardLegalityRepository.isCardRestricted(cardId, 1L)).thenReturn(false);
 
 		// When
 		final boolean result = this.formatService.isCardRestricted(cardId, 1L);
 
 		// Then
 		assertThat(result).isFalse();
-		verify(this.formatRepository).findById(1L);
+		verify(this.cardLegalityRepository).isCardRestricted(cardId, 1L);
 	}
 
 	@Test
 	@DisplayName("Should return true when card is restricted")
 	void shouldReturnTrue_WhenCardIsRestricted() {
 		// Given
-		final Long cardId = 789L; // This is in the restricted list
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.testFormatEntity));
+		final Long cardId = 789L;
+		when(this.formatRepository.existsById(1L)).thenReturn(true);
+		when(this.cardLegalityRepository.isCardRestricted(cardId, 1L)).thenReturn(true);
 
 		// When
 		final boolean result = this.formatService.isCardRestricted(cardId, 1L);
 
 		// Then
 		assertThat(result).isTrue();
-		verify(this.formatRepository).findById(1L);
+		verify(this.cardLegalityRepository).isCardRestricted(cardId, 1L);
 	}
 
 	@Test
 	@DisplayName("Should return false when format not found for card restricted check")
 	void shouldReturnFalse_WhenFormatNotFoundForCardRestricted() {
 		// Given
-		when(this.formatRepository.findById(999L)).thenReturn(Optional.empty());
+		when(this.formatRepository.existsById(999L)).thenReturn(false);
 
 		// When
 		final boolean result = this.formatService.isCardRestricted(100L, 999L);
 
 		// Then
 		assertThat(result).isFalse();
-		verify(this.formatRepository).findById(999L);
+		verify(this.formatRepository).existsById(999L);
+		verifyNoInteractions(this.cardLegalityRepository);
 	}
 
 	@Test
 	@DisplayName("Should return restricted cards list for format")
 	void shouldReturnRestrictedCardsList() {
 		// Given
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.testFormatEntity));
+		when(this.formatRepository.existsById(1L)).thenReturn(true);
+		when(this.cardLegalityRepository.findRestrictedCardNamesByFormatId(1L)).thenReturn(List.of("789"));
 
 		// When
 		final List<String> result = this.formatService.getRestrictedCards(1L);
@@ -336,40 +350,37 @@ class FormatServiceImplTest {
 		// Then
 		assertThat(result).hasSize(1);
 		assertThat(result).contains("789");
-		verify(this.formatRepository).findById(1L);
+		verify(this.cardLegalityRepository).findRestrictedCardNamesByFormatId(1L);
 	}
 
 	@Test
 	@DisplayName("Should return empty list when format has no restricted cards")
 	void shouldReturnEmptyList_WhenFormatHasNoRestrictedCards() {
 		// Given
-		final FormatEntity formatWithoutRestricted = new FormatEntity();
-		formatWithoutRestricted.setId(2L);
-		formatWithoutRestricted.setName("Commander");
-		formatWithoutRestricted.setRestrictedCards(null);
-
-		when(this.formatRepository.findById(2L)).thenReturn(Optional.of(formatWithoutRestricted));
+		when(this.formatRepository.existsById(2L)).thenReturn(true);
+		when(this.cardLegalityRepository.findRestrictedCardNamesByFormatId(2L)).thenReturn(List.of());
 
 		// When
 		final List<String> result = this.formatService.getRestrictedCards(2L);
 
 		// Then
 		assertThat(result).isEmpty();
-		verify(this.formatRepository).findById(2L);
+		verify(this.cardLegalityRepository).findRestrictedCardNamesByFormatId(2L);
 	}
 
 	@Test
 	@DisplayName("Should throw exception when getting restricted cards for non-existent format")
 	void shouldThrowException_WhenGettingRestrictedCardsForNonExistentFormat() {
 		// Given
-		when(this.formatRepository.findById(999L)).thenReturn(Optional.empty());
+		when(this.formatRepository.existsById(999L)).thenReturn(false);
 
 		// When/Then
 		assertThatThrownBy(() -> this.formatService.getRestrictedCards(999L))
 				.isInstanceOf(FormatNotFoundException.class)
 				.hasMessageContaining("Format not found with id: 999");
 
-		verify(this.formatRepository).findById(999L);
+		verify(this.formatRepository).existsById(999L);
+		verifyNoInteractions(this.cardLegalityRepository);
 	}
 
 	@Test
