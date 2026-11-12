@@ -1,6 +1,6 @@
 services:
   db:
-    image: ankane/pgvector
+    image: pgvector/pgvector:pg16
     container_name: mtgdeckbuilder_db
     restart: always
     environment:
@@ -10,7 +10,7 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - ../src/main/resources/scripts/01-create-schema-ENHANCED.sql:/docker-entrypoint-initdb.d/01-create-schema.sql
+      # Schema is owned by Flyway (classpath:db/migration); no bootstrap scripts.
       - postgres_data:/var/lib/postgresql/data
 
   app:
