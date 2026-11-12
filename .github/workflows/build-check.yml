@@ -30,7 +30,7 @@ jobs:
 
       - name: Verify JAR exists
         run: |
-          $jar = Get-ChildItem target/*.jar -ErrorAction Stop | Select-Object -First 1
-          Write-Host "JAR built: $($jar.Name) ($([math]::Round($jar.Length / 1MB, 1)) MB)"
-        shell: pwsh
+          jar=$(ls -1 target/*.jar 2>/dev/null | head -n1)
+          test -n "$jar" || { echo "No JAR found in target/"; exit 1; }
+          echo "JAR built: $(basename "$jar") ($(du -h "$jar" | cut -f1))"
 
