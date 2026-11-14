@@ -15,6 +15,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      # Path casing is part of the package contract. On Windows the checkout is
+      # case-insensitive, so a drifted index is invisible locally but produces
+      # duplicate directories for one package on this runner.
+      - name: Check tracked directory casing
+        run: |
+          if git ls-files | grep -Eq '(^|/)[^/]*[A-Z][^/]*/'; then
+            echo "::error::Tracked paths must use lowercase directory names:"
+            git ls-files | grep -E '(^|/)[^/]*[A-Z][^/]*/' | head -20
+            exit 1
+          fi
+
       - name: Make Maven wrapper executable
         run: chmod +x mvnw
 

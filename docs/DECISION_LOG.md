@@ -37,6 +37,7 @@ ni del historial de chat.
 | D-008 | 2026-11-14 | Importación: script manual ahora, CLI Java después | Aceptada |
 | D-009 | 2026-11-14 | Colecciones y wishlist no viven en `decks` | Aceptada (sin fecha de inicio) |
 | D-010 | 2026-11-14 | Este registro de decisiones existe | Aceptada |
+| D-011 | 2026-11-14 | Directorios en minúsculas, verificados en CI | Aceptada |
 
 ## 4. Entradas
 
@@ -214,3 +215,27 @@ ni del historial de chat.
   señal de revisión. Las arquitectónicas apuntan a su ADR.
 - **Revisar si:** el archivo crece hasta ser incómodo; entonces se parte por año o por
   área.
+
+### D-011 - Directorios en minúsculas, verificados en CI
+
+- **Fecha:** 2026-11-14
+- **Estado:** Aceptada
+- **Decisión:** Todo segmento de directorio de una ruta versionada va en minúsculas y
+  coincide con el `package` declarado. CI lo comprueba y falla si encuentra una mayúscula.
+- **Contexto:** El índice guardaba 120 rutas como `com/deckbuilder/Mtgdeckbuilder/`
+  mientras el disco y los `package` usaban `mtgdeckbuilder`; otras 7 ya estaban en
+  minúsculas. Con `core.ignorecase=true` el desajuste es invisible en Windows, pero un
+  checkout en Linux crea dos directorios para el mismo paquete. Ya obligó a añadir
+  `DeckStatus.java` con `git update-index --cacheinfo`.
+- **Por qué:** Un árbol que se ve distinto según el sistema operativo no es un contrato
+  fiable: duplica clases, esconde la mitad del código a los refactors y obliga a un truco
+  manual por cada fichero nuevo. El truco recurrente cuesta más que el arreglo único.
+- **Alternativas descartadas:** dejar el caso y convivir con él (empeora con cada fichero
+  nuevo); renombrar el paquete a algo más corto (cambio interno sin beneficio funcional,
+  sigue siendo posible después); confiar en `.gitattributes` (no controla el caso de las
+  rutas).
+- **Consecuencias:** Commit `c7876a2` con 120 renombrados y cero cambios de contenido.
+  Paso nuevo en `ci.yml`. En Windows, un renombrado solo de caso se hace con nombre
+  temporal o re-indexando desde disco.
+- **Revisar si:** se adopta un mono-repo con otros lenguajes y la regla necesita
+  excepciones.

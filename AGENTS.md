@@ -10,6 +10,14 @@ Spring Boot REST API for Magic: The Gathering deck building. One Maven module, J
 - `AGENT_QUICKSTART.md` and `TECHNICAL_AGENT_CONTEXT.md` are Spanish and partly outdated (they suggest bare `mvn`); prefer this file and executable config. `docs/DB_MIGRATION_STRATEGY.md` and `docs/ARCHITECTURE_DECISIONS.md` are still relevant for schema decisions.
 - `docs/DECISION_LOG.md` records product and scope decisions with their reasons and when to revisit them; check it before re-opening a settled choice. `docs/DATA_IMPORT.md` covers how card data is loaded.
 
+## Naming and paths
+
+- Every directory segment of a tracked path is lowercase and matches the declared `package`. CI fails on any uppercase directory segment; `src/main/java/com/deckbuilder/mtgdeckbuilder` is the only valid form.
+- Case-only renames are invisible to Windows (`core.ignorecase=true`). Rename through a temporary name (`git mv A _tmp` then `git mv _tmp a`), or re-stage from disk with `git rm -r --cached` + `git add` when the worktree already has the right casing.
+- Java: `PascalCase` types, `camelCase` methods/fields, `SCREAMING_SNAKE_CASE` constants. No capitalized package segments, no second package tree.
+- SQL: `snake_case`; tables plural (`cards`, `decks`), join tables `a_b` (`card_deck`, `card_tag`), foreign keys `<entity>_id` (`card_id`, `format_id`, `scryfall_id`).
+- API names come from `openapi.yml`, including its deliberate `pagesize`/`pagenumber` vs `pageSize`/`pageNumber` split. DTO fields keep the generated snake_case names.
+
 ## Commands (PowerShell, repo root)
 
 Use the wrapper; a global Maven install is not required.
