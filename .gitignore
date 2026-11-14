@@ -71,3 +71,8 @@ docs/scryfall_api_completa.md
 
 # Local knowledge/study notes
 knowledge/
+
+# Python bytecode from local helper scripts
+__pycache__/
+*.pyc
+

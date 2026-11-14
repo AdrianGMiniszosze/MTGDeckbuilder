@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """
 MTG Card Import Script
-Reads cards from JSON and inserts them into PostgreSQL database.
+Reads Scryfall bulk data (one JSON card per line) and inserts it into PostgreSQL.
+
+The stopgap loader, not the production importer: it targets the post-V3 schema
+(scryfall_id, oracle_id, copies_limit, is_basic_land, card_legality) and is meant
+to be run by hand against a freshly migrated database. See docs/DATA_IMPORT.md.
+
+- Keeps one printing per card name (duplicates are skipped by name).
+- Derives cards.copies_limit from rule text ("any number / up to N cards named").
+- Maps Scryfall legalities onto the formats seeded by Flyway.
 - Extracts keywords and adds them to the tags table (cached to avoid duplicates)
 - Inserts card data into the cards table with proper color mappings
 """
@@ -10,6 +18,7 @@ import json
 import psycopg2
 from psycopg2.extras import execute_batch
 from typing import Dict, List, Set
+import re
 import sys
 import random
 
@@ -33,6 +42,50 @@ COLOR_MAP = {
     'G': 'G'   # Green
 }
 
+# Scryfall legality keys -> formats.format_name seeded by Flyway.
+# Keys without a seeded format are ignored on purpose: the API reports those
+# cards as LEGALITY_UNKNOWN instead of failing the import.
+LEGALITY_FORMAT_MAP = {
+    'standard': 'Standard',
+    'modern': 'Modern',
+    'legacy': 'Legacy',
+    'vintage': 'Vintage',
+    'pauper': 'Pauper',
+    'commander': 'Commander',
+}
+
+# cards.copies_limit: NULL defers to the format, 0 means no limit, N is an
+# exact cap. Scryfall exposes no such field, so it is derived from rule text.
+_ANY_NUMBER_RE = re.compile(r'any number of cards named', re.IGNORECASE)
+_UP_TO_NUMBER_RE = re.compile(
+    r'up to (one|two|three|four|five|six|seven|eight|nine|ten|\d+) cards named',
+    re.IGNORECASE,
+)
+_NUMBER_WORDS = {
+    'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
+    'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
+}
+
+
+def detect_copies_limit(oracle_text: str):
+    """Map 'any number / up to N cards named X' rule text to copies_limit."""
+    if not oracle_text:
+        return None
+    if _ANY_NUMBER_RE.search(oracle_text):
+        return 0
+    match = _UP_TO_NUMBER_RE.search(oracle_text)
+    if match:
+        token = match.group(1).lower()
+        return int(token) if token.isdigit() else _NUMBER_WORDS[token]
+    return None
+
+
+def is_basic_land(supertype: str, card_type: str) -> bool:
+    """Basic lands are exempt from the copies limit."""
+    supertypes = (supertype or '').lower().split()
+    types = (card_type or '').lower().split()
+    return 'basic' in supertypes and 'land' in types
+
 
 class CardImporter:
     def __init__(self):
@@ -40,6 +93,7 @@ class CardImporter:
         self.cursor = None
         self.tag_cache: Dict[str, int] = {}  # keyword -> tag_id
         self.set_cache: Dict[str, int] = {}  # set_code -> set_id
+        self.format_cache: Dict[str, int] = {}  # lowercase format name -> format_id
         self.cards_inserted = 0
         self.cards_skipped = 0
         self.tags_created = 0
@@ -90,6 +144,47 @@ class CardImporter:
         for set_id, name in self.cursor.fetchall():
             self.set_cache[name] = set_id
         print(f"✓ Loaded {len(self.set_cache)} existing sets into cache")
+
+    def load_format_cache(self):
+        """Load formats seeded by Flyway (V2 and V3)."""
+        self.cursor.execute("SELECT id, format_name FROM formats")
+        for format_id, name in self.cursor.fetchall():
+            self.format_cache[name.lower()] = format_id
+        print(f"✓ Loaded {len(self.format_cache)} formats into cache")
+
+    def insert_card_legalities(self, card_id: int, legalities: dict) -> int:
+        """Store per-format legality for one printing.
+
+        Legality is not required to save a deck: a card with no rows is
+        reported as LEGALITY_UNKNOWN by the API. So this is best effort and
+        never aborts the card insert.
+        """
+        if not legalities:
+            return 0
+
+        rows = []
+        for key, status in legalities.items():
+            format_name = LEGALITY_FORMAT_MAP.get(key.lower())
+            if not format_name:
+                continue
+            format_id = self.format_cache.get(format_name.lower())
+            if not format_id:
+                print(f"    ! Format '{format_name}' is not seeded; skipping legality")
+                continue
+            if status not in ('legal', 'not_legal', 'restricted', 'banned'):
+                continue
+            rows.append((card_id, format_id, status))
+
+        if not rows:
+            return 0
+
+        execute_batch(self.cursor, """
+            INSERT INTO card_legality (card_id, format_id, legality_status)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (card_id, format_id) DO UPDATE
+                SET legality_status = EXCLUDED.legality_status
+        """, rows)
+        return len(rows)
     
     def get_or_create_tag(self, keyword: str) -> int:
         """Get tag ID from cache or create new tag"""
@@ -258,6 +353,11 @@ class CardImporter:
                 'power': face.get('power'),
                 'toughness': face.get('toughness'),
 
+                # Printing identity: a face has no Scryfall id of its own
+                'scryfall_id': None,
+                'oracle_id': card_data.get('oracle_id'),
+                'legalities': card_data.get('legalities', {}),
+
                 # Common data from main card
                 'set_name': set_name,
                 'rarity': rarity,
@@ -292,6 +392,9 @@ class CardImporter:
 
         combined_card_data = {
             'name': card_name,  # Full combined name with //
+            'scryfall_id': card_data.get('id'),
+            'oracle_id': card_data.get('oracle_id'),
+            'legalities': card_data.get('legalities', {}),
             'mana_cost': card_faces[0].get('mana_cost', ''),  # Use first face mana cost
             'type_line': card_data.get('type_line', ''),  # Full combined type line
             'oracle_text': combined_oracle_text,
@@ -476,15 +579,18 @@ class CardImporter:
             # INSERT THE CARD and GET ID
             self.cursor.execute("""
                 INSERT INTO cards (
-                    card_name, mana_cost, cmc, color_identity, type_line, card_type,
-                    card_supertype, rarity, card_text, flavor_text,
-                    power, toughness, unlimited_copies, image_url, foil,
+                    card_name, scryfall_id, oracle_id, mana_cost, cmc, color_identity,
+                    type_line, card_type, card_supertype, rarity, card_text, flavor_text,
+                    power, toughness, copies_limit, is_basic_land, image_url, foil,
                     game_changer, language, card_set, collector_number, promo, variation
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 ) RETURNING id
             """, (
                 card_name,
+                card_data.get('scryfall_id'),
+                card_data.get('oracle_id'),
                 mana_cost or None,
                 cmc,
                 color_identity_str or None,
@@ -496,7 +602,8 @@ class CardImporter:
                 flavor_text or None,
                 power,
                 toughness,
-                False,
+                detect_copies_limit(oracle_text),
+                is_basic_land(card_supertype, card_type),
                 image_url,
                 foil,
                 game_changer,
@@ -508,6 +615,7 @@ class CardImporter:
             ))
 
             card_id = self.cursor.fetchone()[0]
+            self.insert_card_legalities(card_id, card_data.get('legalities'))
 
             # Insert related data (same as insert_card)
             colors = card_data.get('colors', [])
@@ -766,10 +874,13 @@ class CardImporter:
                     keyword_tag_ids.append((tag_id, keyword.strip()))
 
             # FINAL VALIDATION before INSERT
+            copies_limit = detect_copies_limit(oracle_text)
+            basic_land = is_basic_land(card_supertype, card_type)
             insert_values = (
-                card_name, mana_cost, cmc, color_identity_str, type_line, card_type,
+                card_name, card_data.get('scryfall_id'), card_data.get('oracle_id'),
+                mana_cost, cmc, color_identity_str, type_line, card_type,
                 card_supertype or None, rarity, oracle_text, flavor_text or None,
-                power, toughness, False, image_url, foil,
+                power, toughness, copies_limit, basic_land, image_url, foil,
                 game_changer, language, set_id, collector_number, promo, variation
             )
 
@@ -777,18 +888,14 @@ class CardImporter:
             if card_name and ('Cardboard' in card_name or self.cards_inserted == 0):
                 print(f"🔍 PRE-INSERT DEBUG for '{card_name}':")
                 field_names = [
-                    'card_name', 'mana_cost', 'cmc', 'color_identity', 'type_line', 'card_type',
-                    'card_supertype', 'rarity', 'card_text', 'flavor_text',
-                    'power', 'toughness', 'unlimited_copies', 'image_url', 'foil',
-                    'game_changer', 'language', 'card_set', 'collector_number', 'promo', 'variation'
+                    'card_name', 'scryfall_id', 'oracle_id', 'mana_cost', 'cmc',
+                    'color_identity', 'type_line', 'card_type', 'card_supertype',
+                    'rarity', 'card_text', 'flavor_text', 'power', 'toughness',
+                    'copies_limit', 'is_basic_land', 'image_url', 'foil',
+                    'game_changer', 'language', 'card_set', 'collector_number',
+                    'promo', 'variation'
                 ]
-                insert_values_debug = (
-                    card_name, mana_cost, cmc, color_identity_str, type_line, card_type,
-                    card_supertype or None, rarity, oracle_text, flavor_text or None,
-                    power, toughness, False, image_url, foil,
-                    game_changer, language, set_id, collector_number, promo, variation
-                )
-                for i, (field_name, value) in enumerate(zip(field_names, insert_values_debug)):
+                for i, (field_name, value) in enumerate(zip(field_names, insert_values)):
                     value_str = str(value) if value is not None else 'NULL'
                     if len(value_str) > 50:
                         value_str = value_str[:47] + '...'
@@ -798,38 +905,18 @@ class CardImporter:
             # Using ENHANCED schema structure: only card_name (no 'name') and card_text (no 'oracle_text')
             self.cursor.execute("""
                 INSERT INTO cards (
-                    card_name, mana_cost, cmc, color_identity, type_line, card_type,
-                    card_supertype, rarity, card_text, flavor_text,
-                    power, toughness, unlimited_copies, image_url, foil,
+                    card_name, scryfall_id, oracle_id, mana_cost, cmc, color_identity,
+                    type_line, card_type, card_supertype, rarity, card_text, flavor_text,
+                    power, toughness, copies_limit, is_basic_land, image_url, foil,
                     game_changer, language, card_set, collector_number, promo, variation
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 ) RETURNING id
-            """, (
-                card_name,                   # card_name (only name field in ENHANCED schema)
-                mana_cost or None,           # mana_cost (can be null)
-                cmc,                         # cmc
-                color_identity_str or None,  # color_identity (can be null)
-                type_line,                   # type_line
-                card_type,                   # card_type
-                card_supertype or None,      # card_supertype
-                rarity,                      # rarity
-                oracle_text,                 # card_text (only text field in ENHANCED schema)
-                flavor_text or None,         # flavor_text
-                power,                       # power
-                toughness,                   # toughness
-                False,                       # unlimited_copies
-                image_url,                   # image_url
-                foil,                        # foil
-                game_changer,                # game_changer
-                language,                    # language
-                set_id,                      # card_set
-                collector_number,            # collector_number
-                promo,                       # promo
-                variation                    # variation
-            ))
+            """, insert_values)
 
             card_id = self.cursor.fetchone()[0]
+            self.insert_card_legalities(card_id, card_data.get('legalities'))
             
             # NOW INSERT RELATED DATA (after card exists)
 
@@ -1090,10 +1177,12 @@ class CardImporter:
 
             # Columns that our INSERT statement expects
             script_expects = [
-                'card_name', 'mana_cost', 'cmc', 'color_identity', 'type_line', 'card_type',
-                'card_supertype', 'rarity', 'card_text', 'flavor_text',
-                'power', 'toughness', 'unlimited_copies', 'image_url', 'foil',
-                'game_changer', 'language', 'card_set', 'collector_number', 'promo', 'variation'
+                'card_name', 'scryfall_id', 'oracle_id', 'mana_cost', 'cmc',
+                'color_identity', 'type_line', 'card_type', 'card_supertype',
+                'rarity', 'card_text', 'flavor_text', 'power', 'toughness',
+                'copies_limit', 'is_basic_land', 'image_url', 'foil',
+                'game_changer', 'language', 'card_set', 'collector_number',
+                'promo', 'variation'
             ]
 
             missing_columns = []
@@ -1376,6 +1465,7 @@ JSON File: {json_file}
         # Load caches and start import
         importer.load_tag_cache()
         importer.load_set_cache()
+        importer.load_format_cache()
         importer.import_cards(json_file, batch_size=100)
     except KeyboardInterrupt:
         print("\n\n⚠ Import cancelled by user")

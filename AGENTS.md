@@ -8,6 +8,7 @@ Spring Boot REST API for Magic: The Gathering deck building. One Maven module, J
 - Layers: `contract` (controllers, DTO mappers) → `application` (services + business rules) → `infrastructure` (JPA entities, repositories, entity mappers) → `model` (domain). Both mapper layers are intentional: `contract/mapper` maps domain ↔ generated DTO, `infrastructure/mapper` maps domain ↔ entity.
 - Keep business logic in `application`/`model`, persistence in `infrastructure`, controllers thin.
 - `AGENT_QUICKSTART.md` and `TECHNICAL_AGENT_CONTEXT.md` are Spanish and partly outdated (they suggest bare `mvn`); prefer this file and executable config. `docs/DB_MIGRATION_STRATEGY.md` and `docs/ARCHITECTURE_DECISIONS.md` are still relevant for schema decisions.
+- `docs/DECISION_LOG.md` records product and scope decisions with their reasons and when to revisit them; check it before re-opening a settled choice. `docs/DATA_IMPORT.md` covers how card data is loaded.
 
 ## Commands (PowerShell, repo root)
 
