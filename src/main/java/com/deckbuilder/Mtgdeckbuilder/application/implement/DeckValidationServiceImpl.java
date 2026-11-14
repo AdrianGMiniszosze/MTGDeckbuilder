@@ -110,9 +110,11 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 	 * known.
 	 */
 	private int getMaxAllowedQuantity(CardEntity card, CardLegalityEntity cardLegality, Long formatId) {
-		// Check if card has unlimited copies flag
-		if (Boolean.TRUE.equals(card.getUnlimitedCopies())) {
-			return UNLIMITED_QUANTITY;
+		// The card's own rule text wins over the format: "any number of cards
+		// named X" (0) or "up to N cards named X" (N).
+		final Integer copiesLimit = card.getCopiesLimit();
+		if (copiesLimit != null) {
+			return copiesLimit == 0 ? UNLIMITED_QUANTITY : copiesLimit;
 		}
 
 		// Check if it's a basic land

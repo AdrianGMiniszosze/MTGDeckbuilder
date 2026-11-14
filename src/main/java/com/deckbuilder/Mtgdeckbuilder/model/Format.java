@@ -21,4 +21,5 @@ public class Format {
 	private Integer maxCopies;
 	private Boolean singleton;
 	private Boolean requiresCommander;
+	private Boolean tracksLegality;
 }

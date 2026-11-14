@@ -58,7 +58,7 @@ class CardServiceImplTest {
 		this.testCard = Card.builder().id(1L).name("Lightning Bolt").manaCost("{R}").cmc(1).colorIdentity("R")
 				.typeLine("Instant").cardType("Instant").cardText("Lightning Bolt deals 3 damage to any target.")
 				.rarity("Common").power(null).toughness(null).imageUrl("http://example.com/lightning-bolt.jpg")
-				.foil(false).unlimitedCopies(false).gameChanger(false).language("en").build();
+				.foil(false).copiesLimit(null).gameChanger(false).language("en").build();
 
 		this.testCardEntity = new CardEntity();
 		this.testCardEntity.setId(1L);
@@ -72,7 +72,7 @@ class CardServiceImplTest {
 		this.testCardEntity.setRarity("Common");
 		this.testCardEntity.setImageUrl("http://example.com/lightning-bolt.jpg");
 		this.testCardEntity.setFoil(false);
-		this.testCardEntity.setUnlimitedCopies(false);
+		this.testCardEntity.setCopiesLimit(null);
 		this.testCardEntity.setGameChanger(false);
 		this.testCardEntity.setLanguage("en");
 	}

@@ -59,7 +59,7 @@ class DeckValidationServiceTest {
 		this.regularCard.setName("Lightning Bolt");
 		this.regularCard.setCardType("Instant");
 		this.regularCard.setCardSupertype(null);
-		this.regularCard.setUnlimitedCopies(false);
+		this.regularCard.setCopiesLimit(null);
 
 		// Basic land (Mountain)
 		this.basicLand = new CardEntity();
@@ -68,7 +68,7 @@ class DeckValidationServiceTest {
 		this.basicLand.setCardType("Land");
 		this.basicLand.setCardSupertype("Basic");
 		this.basicLand.setIsBasicLand(true);
-		this.basicLand.setUnlimitedCopies(false);
+		this.basicLand.setCopiesLimit(null);
 
 		// Banned card
 		this.bannedCard = new CardEntity();
@@ -76,7 +76,7 @@ class DeckValidationServiceTest {
 		this.bannedCard.setName("Black Lotus");
 		this.bannedCard.setCardType("Artifact");
 		this.bannedCard.setCardSupertype(null);
-		this.bannedCard.setUnlimitedCopies(false);
+		this.bannedCard.setCopiesLimit(null);
 
 		// Restricted card (local)
 		final CardEntity restrictedCard = new CardEntity();
@@ -84,7 +84,7 @@ class DeckValidationServiceTest {
 		restrictedCard.setName("Ancestral Recall");
 		restrictedCard.setCardType("Instant");
 		restrictedCard.setCardSupertype(null);
-		restrictedCard.setUnlimitedCopies(false);
+		restrictedCard.setCopiesLimit(null);
 
 		// Formats
 		this.standardFormat = FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).maxSideboardSize(15)

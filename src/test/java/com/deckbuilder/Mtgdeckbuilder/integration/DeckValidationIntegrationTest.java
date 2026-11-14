@@ -121,7 +121,7 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
         card.setImageUrl("http://example.com/image.jpg");
         card.setLanguage("en");
         card.setCollectorNumber("001");
-        card.setUnlimitedCopies(unlimited);
+        card.setCopiesLimit(unlimited ? 0 : null);
         card.setFoil(false);
         card.setGameChanger(false);
         card.setPromo(false);

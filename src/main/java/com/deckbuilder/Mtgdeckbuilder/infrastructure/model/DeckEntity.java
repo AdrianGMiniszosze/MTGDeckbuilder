@@ -48,6 +48,12 @@ public class DeckEntity {
 	@Column(name = "companion_card_id")
 	private Long companionCardId;
 
+	@Column(name = "status", nullable = false)
+	private String status;
+
+	@Column(name = "published_at")
+	private LocalDateTime publishedAt;
+
 	@OneToMany(mappedBy = "deck", cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<CardInDeckEntity> cards = new ArrayList<>();
 
@@ -55,6 +61,9 @@ public class DeckEntity {
 	protected void onCreate() {
 		this.created = LocalDateTime.now();
 		this.modified = this.created;
+		if (this.status == null) {
+			this.status = "draft";
+		}
 	}
 
 	@PreUpdate

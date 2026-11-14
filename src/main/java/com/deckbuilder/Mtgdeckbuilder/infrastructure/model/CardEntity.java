@@ -57,8 +57,8 @@ public class CardEntity {
 
 	private String toughness;
 
-	@Column(name = "unlimited_copies", nullable = false)
-	private Boolean unlimitedCopies = false;
+	@Column(name = "copies_limit")
+	private Integer copiesLimit;
 
 	@Column(name = "is_basic_land", nullable = false)
 	private Boolean isBasicLand = false;

@@ -25,6 +25,8 @@ public class Deck {
 	private Long formatId;
 	private Long userId;
 	private Long companionCardId;
+	private DeckStatus status;
+	private LocalDateTime publishedAt;
 	private List<CardInDeck> cards;
 
 	@Data

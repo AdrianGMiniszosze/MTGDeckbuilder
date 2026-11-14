@@ -81,7 +81,7 @@ class CardInDeckRepositoryExtendedTest extends PostgresDataJpaTest {
         card.setImageUrl("http://example.com/image.jpg");
         card.setLanguage("en");
         card.setCollectorNumber("001");
-        card.setUnlimitedCopies(false);
+        card.setCopiesLimit(null);
         card.setFoil(false);
         card.setGameChanger(false);
         card.setPromo(false);

@@ -43,7 +43,7 @@ class CardRepositoryTest {
         this.testCardEntity.setCardSetId(1L);
         this.testCardEntity.setImageUrl("http://example.com/black-lotus.jpg");
         this.testCardEntity.setFoil(false);
-        this.testCardEntity.setUnlimitedCopies(false);
+        this.testCardEntity.setCopiesLimit(null);
         this.testCardEntity.setGameChanger(false);
         this.testCardEntity.setLanguage("en");
 	}

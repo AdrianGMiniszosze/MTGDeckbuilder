@@ -28,7 +28,7 @@ public class Card {
 	private String flavorText;
 	private String power;
 	private String toughness;
-	private Boolean unlimitedCopies;
+	private Integer copiesLimit;
 	private Boolean isBasicLand;
 	private String imageUrl;
 	private Boolean foil;

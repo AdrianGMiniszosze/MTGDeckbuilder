@@ -35,6 +35,8 @@ public interface DeckMapper {
 	@Mapping(source = "user_id", target = "userId")
 	@Mapping(source = "share_url", target = "shareUrl")
 	@Mapping(source = "deck_contents", target = "cards")
+	@Mapping(target = "status", ignore = true)
+	@Mapping(target = "publishedAt", ignore = true)
 	Deck toDeck(DeckDTO deckDTO);
 
 	// Complete deck mappings

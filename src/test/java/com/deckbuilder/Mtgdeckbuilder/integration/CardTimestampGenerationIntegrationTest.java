@@ -58,7 +58,7 @@ class CardTimestampGenerationIntegrationTest extends PostgresIntegrationTest {
                 .language("en")
                 .foil(false)
                 .gameChanger(false)
-                .unlimitedCopies(false)
+                .copiesLimit(null)
                 .scryfallId(scryfallId)
                 .oracleId(oracleId)
                 .build());
@@ -78,7 +78,7 @@ class CardTimestampGenerationIntegrationTest extends PostgresIntegrationTest {
                 .language("en")
                 .foil(false)
                 .gameChanger(false)
-                .unlimitedCopies(false)
+                .copiesLimit(null)
                 .build()).orElseThrow();
 
         assertThat(updated.getScryfallId()).isEqualTo(scryfallId);

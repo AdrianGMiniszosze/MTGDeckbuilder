@@ -42,4 +42,8 @@ public class FormatEntity {
 	@Builder.Default
 	@Column(name = "requires_commander", nullable = false)
 	private boolean requiresCommander = false;
+
+	@Builder.Default
+	@Column(name = "tracks_legality", nullable = false)
+	private boolean tracksLegality = true;
 }

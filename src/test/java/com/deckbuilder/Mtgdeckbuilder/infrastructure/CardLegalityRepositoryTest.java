@@ -41,7 +41,7 @@ class CardLegalityRepositoryTest extends PostgresDataJpaTest {
         testCard.setImageUrl("http://example.com/image.jpg");
         testCard.setLanguage("en");
         testCard.setCollectorNumber("001");
-        testCard.setUnlimitedCopies(false);
+        testCard.setCopiesLimit(null);
         testCard.setFoil(false);
         testCard.setGameChanger(false);
         testCard.setPromo(false);

@@ -88,7 +88,7 @@ class DeckServiceH2IntegrationTest extends PostgresIntegrationTest {
         testCard.setImageUrl("http://example.com/lightning-bolt.jpg");
         testCard.setLanguage("en");
         testCard.setCollectorNumber("001");
-        testCard.setUnlimitedCopies(false);
+        testCard.setCopiesLimit(null);
         testCard.setFoil(false);
         testCard.setGameChanger(false);
         testCard.setPromo(false);

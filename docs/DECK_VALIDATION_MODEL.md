@@ -1,6 +1,6 @@
 # Modelo de validación de mazos
 
-- **Estado:** aprobado para implementación
+- **Estado:** aprobado; fase 1 (`V3__deck_validation_model.sql`) implementada
 - **Alcance:** estados de mazo, diagnóstico de legalidad, contrato y esquema
 - **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`
 

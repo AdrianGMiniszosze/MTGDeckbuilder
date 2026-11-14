@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies that a completely empty database can be provisioned by Flyway alone
- * (V1 baseline + V2 format seed) and that the resulting schema enforces the
- * core deck rules.
+ * (V1 baseline + V2 format seed + V3 deck validation model) and that the
+ * resulting schema keeps data shape while format policy lives in Java.
  */
 class FlywayMigrationSmokeIntegrationTest {
 
@@ -35,10 +35,10 @@ class FlywayMigrationSmokeIntegrationTest {
 
             var result = flyway.migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(2);
+            assertThat(result.migrationsExecuted).isEqualTo(3);
             assertThat(flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .containsExactly("1", "2");
+                    .containsExactly("1", "2", "3");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
@@ -48,7 +48,12 @@ class FlywayMigrationSmokeIntegrationTest {
                 assertCanonicalColumns(connection);
                 assertLegacyColumnsAreGone(connection);
                 assertSeedFormats(connection);
-                assertDeckRulesTrigger(connection);
+
+                long userId = insertUser(connection);
+                long standardFormatId = formatId(connection, "Standard");
+
+                assertDeckStateConstraints(connection, standardFormatId, userId);
+                assertCardDeckIntegrity(connection, standardFormatId, userId);
             }
         }
     }
@@ -69,16 +74,20 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(hasColumn(connection, "cards", "is_basic_land")).isTrue();
         assertThat(hasColumn(connection, "cards", "scryfall_id")).isTrue();
         assertThat(hasColumn(connection, "cards", "oracle_id")).isTrue();
+        assertThat(hasColumn(connection, "cards", "copies_limit")).isTrue();
 
         assertThat(hasColumn(connection, "decks", "format_id")).isTrue();
         assertThat(hasColumn(connection, "decks", "is_private")).isTrue();
         assertThat(hasColumn(connection, "decks", "created_at")).isTrue();
         assertThat(hasColumn(connection, "decks", "updated_at")).isTrue();
+        assertThat(hasColumn(connection, "decks", "status")).isTrue();
+        assertThat(hasColumn(connection, "decks", "published_at")).isTrue();
 
         assertThat(hasColumn(connection, "formats", "max_copies")).isTrue();
         assertThat(hasColumn(connection, "formats", "singleton")).isTrue();
         assertThat(hasColumn(connection, "formats", "requires_commander")).isTrue();
         assertThat(hasColumn(connection, "formats", "max_sideboard_size")).isTrue();
+        assertThat(hasColumn(connection, "formats", "tracks_legality")).isTrue();
 
         assertThat(hasColumn(connection, "card_legality", "format_id")).isTrue();
         assertThat(hasColumn(connection, "users", "role")).isTrue();
@@ -90,10 +99,11 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(hasColumn(connection, "decks", "private")).isFalse();
         assertThat(hasColumn(connection, "cards", "card_set")).isFalse();
         assertThat(hasColumn(connection, "cards", "embedding")).isFalse();
+        assertThat(hasColumn(connection, "cards", "unlimited_copies")).isFalse();
     }
 
     private static void assertSeedFormats(Connection connection) throws Exception {
-        assertThat(countFormats(connection)).isEqualTo(6);
+        assertThat(countFormats(connection)).isEqualTo(7);
 
         FormatRules standard = readFormat(connection, "Standard");
         assertThat(standard.minDeckSize()).isEqualTo(60);
@@ -102,6 +112,7 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(standard.maxCopies()).isEqualTo(4);
         assertThat(standard.singleton()).isFalse();
         assertThat(standard.requiresCommander()).isFalse();
+        assertThat(standard.tracksLegality()).isTrue();
 
         FormatRules commander = readFormat(connection, "Commander");
         assertThat(commander.minDeckSize()).isEqualTo(100);
@@ -109,44 +120,90 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(commander.maxCopies()).isEqualTo(1);
         assertThat(commander.singleton()).isTrue();
         assertThat(commander.requiresCommander()).isTrue();
+        assertThat(commander.tracksLegality()).isTrue();
+
+        FormatRules casual = readFormat(connection, "Casual");
+        assertThat(casual.minDeckSize()).isZero();
+        assertThat(casual.maxDeckSize()).isNull();
+        assertThat(casual.maxSideboardSize()).isNull();
+        assertThat(casual.maxCopies()).isEqualTo(4);
+        assertThat(casual.singleton()).isFalse();
+        assertThat(casual.requiresCommander()).isFalse();
+        assertThat(casual.tracksLegality()).isFalse();
 
         for (String name : new String[]{"Modern", "Legacy", "Vintage", "Pauper"}) {
             FormatRules rules = readFormat(connection, name);
             assertThat(rules.minDeckSize()).as(name).isEqualTo(60);
             assertThat(rules.maxCopies()).as(name).isEqualTo(4);
+            assertThat(rules.tracksLegality()).as(name).isTrue();
         }
     }
 
-    private static void assertDeckRulesTrigger(Connection connection) throws Exception {
-        assertThat(hasTrigger(connection, "card_deck", "enforce_card_quantity_limit")).isTrue();
+    private static void assertDeckStateConstraints(Connection connection, long formatId, long userId)
+            throws Exception {
+        long deckId = insertDeck(connection, "Draft Deck", formatId, userId);
 
-        long userId = insertUser(connection);
-        long standardFormatId = formatId(connection, "Standard");
-        long deckId = insertDeck(connection, "Smoke Deck", standardFormatId, userId);
+        // New decks are drafts and have no publication timestamp.
+        assertThat(readString(connection, "SELECT status FROM decks WHERE id = " + deckId)).isEqualTo("draft");
+        assertThat(readString(connection, "SELECT published_at::text FROM decks WHERE id = " + deckId)).isNull();
 
-        long legalCard = insertCard(connection, "Legal Card", false, false);
-        long bannedCard = insertCard(connection, "Banned Card", false, false);
-        long basicLand = insertCard(connection, "Plains", true, false);
-
-        insertLegality(connection, legalCard, standardFormatId, "legal");
-        insertLegality(connection, bannedCard, standardFormatId, "banned");
-
-        // Four copies are accepted.
-        insertDeckCard(connection, deckId, legalCard, 4, "main");
-
-        // A fifth copy is rejected.
-        assertThatThrownBy(() -> insertDeckCard(connection, deckId, legalCard, 1, "sideboard"))
+        // Only the two known states are accepted.
+        assertThatThrownBy(() -> execute(connection,
+                "UPDATE decks SET status = 'archived' WHERE id = " + deckId))
                 .isInstanceOf(SQLException.class);
 
-        // Banned cards are rejected.
-        assertThatThrownBy(() -> insertDeckCard(connection, deckId, bannedCard, 1, "main"))
+        // Published requires a timestamp, and the timestamp requires published.
+        assertThatThrownBy(() -> execute(connection,
+                "UPDATE decks SET status = 'published' WHERE id = " + deckId))
                 .isInstanceOf(SQLException.class);
 
-        // Basic lands are exempt from the copy limit.
-        insertDeckCard(connection, deckId, basicLand, 20, "main");
+        execute(connection, "UPDATE decks SET status = 'published', published_at = now() WHERE id = " + deckId);
+        assertThat(readString(connection, "SELECT status FROM decks WHERE id = " + deckId)).isEqualTo("published");
 
-        // Maybeboard is a scratch area.
-        insertDeckCard(connection, deckId, bannedCard, 10, "maybeboard");
+        assertThatThrownBy(() -> execute(connection,
+                "UPDATE decks SET published_at = NULL WHERE id = " + deckId))
+                .isInstanceOf(SQLException.class);
+    }
+
+    private static void assertCardDeckIntegrity(Connection connection, long formatId, long userId)
+            throws Exception {
+        // Format policy no longer lives in the database.
+        assertThat(hasTrigger(connection, "card_deck", "enforce_card_quantity_limit")).isFalse();
+        assertThat(hasFunction(connection, "check_card_quantity")).isFalse();
+
+        long deckId = insertDeck(connection, "Draft Deck", formatId, userId);
+        long legalCard = insertCard(connection, "Legal Card", false, null);
+        long bannedCard = insertCard(connection, "Banned Card", false, null);
+        long basicLand = insertCard(connection, "Plains", true, null);
+
+        insertLegality(connection, legalCard, formatId, "legal");
+        insertLegality(connection, bannedCard, formatId, "banned");
+
+        // Shape is still enforced: quantity and section.
+        assertThatThrownBy(() -> insertDeckCard(connection, deckId, legalCard, 0, "main"))
+                .isInstanceOf(SQLException.class);
+        assertThatThrownBy(() -> insertDeckCard(connection, deckId, legalCard, 1, "banana"))
+                .isInstanceOf(SQLException.class);
+
+        // A draft may be illegal and incomplete: the database accepts it.
+        insertDeckCard(connection, deckId, legalCard, 5, "main");
+        insertDeckCard(connection, deckId, bannedCard, 3, "main");
+        insertDeckCard(connection, deckId, basicLand, 40, "main");
+
+        // One row per (deck, card, section) is still guaranteed.
+        assertThatThrownBy(() -> insertDeckCard(connection, deckId, legalCard, 1, "main"))
+                .isInstanceOf(SQLException.class);
+
+        // copies_limit expresses NULL (defer), 0 (no limit) and N (exact cap).
+        long unlimitedCard = insertCard(connection, "Persistent Petitioners", false, 0);
+        long cappedCard = insertCard(connection, "Seven Dwarves", false, 7);
+        assertThat(readInt(connection, "SELECT copies_limit FROM cards WHERE id = " + unlimitedCard)).isZero();
+        assertThat(readInt(connection, "SELECT copies_limit FROM cards WHERE id = " + cappedCard)).isEqualTo(7);
+        assertThat(readString(connection, "SELECT copies_limit::text FROM cards WHERE id = " + legalCard)).isNull();
+
+        assertThatThrownBy(() -> execute(connection,
+                "UPDATE cards SET copies_limit = -1 WHERE id = " + cappedCard))
+                .isInstanceOf(SQLException.class);
     }
 
     private static long insertUser(Connection connection) throws Exception {
@@ -190,16 +247,17 @@ class FlywayMigrationSmokeIntegrationTest {
         }
     }
 
-    private static long insertCard(Connection connection, String name, boolean basicLand, boolean unlimited) throws Exception {
+    private static long insertCard(Connection connection, String name, boolean basicLand, Integer copiesLimit)
+            throws Exception {
         String sql = """
-                INSERT INTO cards(card_name, cmc, type_line, card_type, rarity, image_url, is_basic_land, unlimited_copies)
+                INSERT INTO cards(card_name, cmc, type_line, card_type, rarity, image_url, is_basic_land, copies_limit)
                 VALUES (?, 1, 'Creature - Test', 'Creature', 'common', 'https://img', ?, ?)
                 RETURNING id
                 """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, name);
             statement.setBoolean(2, basicLand);
-            statement.setBoolean(3, unlimited);
+            statement.setObject(3, copiesLimit);
             try (ResultSet resultSet = statement.executeQuery()) {
                 resultSet.next();
                 return resultSet.getLong(1);
@@ -228,6 +286,12 @@ class FlywayMigrationSmokeIntegrationTest {
         }
     }
 
+    private static void execute(Connection connection, String sql) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.executeUpdate();
+        }
+    }
+
     private static long countFormats(Connection connection) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM formats");
              ResultSet resultSet = statement.executeQuery()) {
@@ -238,7 +302,8 @@ class FlywayMigrationSmokeIntegrationTest {
 
     private static FormatRules readFormat(Connection connection, String formatName) throws Exception {
         String sql = """
-                SELECT min_deck_size, max_deck_size, max_sideboard_size, max_copies, singleton, requires_commander
+                SELECT min_deck_size, max_deck_size, max_sideboard_size, max_copies, singleton, requires_commander,
+                       tracks_legality
                 FROM formats
                 WHERE format_name = ?
                 """;
@@ -246,20 +311,37 @@ class FlywayMigrationSmokeIntegrationTest {
             statement.setString(1, formatName);
             try (ResultSet resultSet = statement.executeQuery()) {
                 assertThat(resultSet.next()).as("format %s exists", formatName).isTrue();
-                Integer maxDeckSize = resultSet.getObject("max_deck_size", Integer.class);
                 return new FormatRules(
                         resultSet.getInt("min_deck_size"),
-                        maxDeckSize,
+                        resultSet.getObject("max_deck_size", Integer.class),
                         resultSet.getObject("max_sideboard_size", Integer.class),
                         resultSet.getInt("max_copies"),
                         resultSet.getBoolean("singleton"),
-                        resultSet.getBoolean("requires_commander"));
+                        resultSet.getBoolean("requires_commander"),
+                        resultSet.getBoolean("tracks_legality"));
             }
         }
     }
 
     private record FormatRules(int minDeckSize, Integer maxDeckSize, Integer maxSideboardSize,
-                               int maxCopies, boolean singleton, boolean requiresCommander) {
+                               int maxCopies, boolean singleton, boolean requiresCommander,
+                               boolean tracksLegality) {
+    }
+
+    private static String readString(Connection connection, String sql) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getString(1);
+        }
+    }
+
+    private static Integer readInt(Connection connection, String sql) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getObject(1, Integer.class);
+        }
     }
 
     private static boolean hasTable(Connection connection, String table) throws Exception {
@@ -303,6 +385,22 @@ class FlywayMigrationSmokeIntegrationTest {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, table);
             statement.setString(2, trigger);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
+    private static boolean hasFunction(Connection connection, String function) throws Exception {
+        String sql = """
+                SELECT 1
+                FROM pg_proc p
+                JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = 'public'
+                  AND p.proname = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, function);
             try (ResultSet resultSet = statement.executeQuery()) {
                 return resultSet.next();
             }

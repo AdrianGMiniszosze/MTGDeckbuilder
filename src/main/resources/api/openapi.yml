@@ -1237,9 +1237,13 @@ components:
           type: string
           maxLength: 10
           pattern: '^[0-9*+\\-X]+$'
-        unlimited_copies:
-          type: boolean
-          default: false
+        copies_limit:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: >-
+            Per-card copy cap. null defers to the format, 0 means no limit,
+            and a positive value overrides the format cap.
         image_url:
           type: string
           format: uri

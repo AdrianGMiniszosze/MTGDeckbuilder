@@ -114,7 +114,7 @@ Registro inicial de decisiones tecnicas (ADR lite) para `MTGDeckbuilder`.
 
 ## ADR-007 - Mazos en borrador permisivos y publicacion estricta
 
-- **Estado**: Propuesta
+- **Estado**: Aceptada
 - **Fecha**: 2026-11-14
 - **Decision**: Introducir `decks.status` (`draft` | `published`). Guardar un mazo nunca aplica reglas de formato; la legalidad se calcula como diagnostico (`GET /decks/{id}/validation`) y solo bloquea en `POST /decks/{id}/publish`. El trigger `check_card_quantity` aplica reglas de formato unicamente a mazos publicados y conserva siempre las comprobaciones de integridad.
 - **Contexto**: El veto actual impide guardar mazos en construccion y devuelve un unico mensaje sin identificar la carta culpable, lo que no permite a la interfaz mostrar que cartas son ilegales. La validacion Java existia pero no estaba cableada.

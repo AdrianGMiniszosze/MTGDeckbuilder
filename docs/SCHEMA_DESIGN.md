@@ -1,5 +1,10 @@
 # Diseño canónico del esquema
 
+> **Aviso (2026-11-14):** este documento describe la Fase 0. Su parte de política de
+> mazos (trigger `check_card_quantity`, `cards.unlimited_copies`) quedó reemplazada por
+> ADR-007 y `V3__deck_validation_model.sql`. Para el modelo vigente ver
+> `docs/DECK_VALIDATION_MODEL.md`.
+
 - **Estado:** propuesta para validación (Fase 0)
 - **Alcance:** esquema PostgreSQL, reglas de validación y estrategia de migración
 - **Fuera de alcance:** lógica de recomendación, embeddings definitivos, agente

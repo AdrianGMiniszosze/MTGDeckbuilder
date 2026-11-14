@@ -27,7 +27,6 @@ public interface CardEntityMapper {
 	@Mapping(target = "tix", ignore = true)
 	@Mapping(target = "priceObservedAt", ignore = true)
 	@Mapping(target = "isBasicLand", defaultValue = "false")
-	@Mapping(target = "unlimitedCopies", defaultValue = "false")
 	@Mapping(target = "foil", defaultValue = "false")
 	@Mapping(target = "gameChanger", defaultValue = "false")
 	@Mapping(target = "promo", defaultValue = "false")
@@ -41,7 +40,6 @@ public interface CardEntityMapper {
 	Card toModel(CardEntity entity);
 
 	@Mapping(target = "isBasicLand", defaultValue = "false")
-	@Mapping(target = "unlimitedCopies", defaultValue = "false")
 	@Mapping(target = "foil", defaultValue = "false")
 	@Mapping(target = "gameChanger", defaultValue = "false")
 	@Mapping(target = "promo", defaultValue = "false")
