@@ -70,7 +70,7 @@ public final class CompanionRules {
 	private static boolean isLand(CardEntity c) {
 		return c.getCardType() != null && c.getCardType().contains("Land");
 	}
-	private static boolean isPermanent(CardEntity c) {
+	public static boolean isPermanent(CardEntity c) {
 		final String t = c.getCardType();
 		if (t == null)
 			return false;

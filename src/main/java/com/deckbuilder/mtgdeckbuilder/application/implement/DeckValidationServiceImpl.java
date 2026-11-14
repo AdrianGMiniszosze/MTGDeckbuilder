@@ -2,22 +2,61 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.CompanionRules;
 import com.deckbuilder.mtgdeckbuilder.application.DeckValidationService;
-import com.deckbuilder.mtgdeckbuilder.infrastructure.*;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
-import com.deckbuilder.mtgdeckbuilder.infrastructure.model.*;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssueCode;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
+import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
+import com.deckbuilder.mtgdeckbuilder.model.IssueSeverity;
+import com.deckbuilder.mtgdeckbuilder.model.ValidationStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
+/**
+ * Evaluates deck composition and reports every problem it finds instead of
+ * throwing on the first one.
+ *
+ * <p>
+ * Copy limits are counted by {@code oracle_id}: a card is the same card across
+ * printings, so four copies of two printings are eight copies. Basic lands are
+ * exempt and {@code cards.copies_limit} wins over the format (0 = any number,
+ * N = exact cap). {@code maybeboard} is ignored for both counts and sizes.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class DeckValidationServiceImpl implements DeckValidationService {
+
+	private static final int UNLIMITED_QUANTITY = 9999;
+	private static final String MAIN = "main";
+	private static final String SIDEBOARD = "sideboard";
+	private static final String MAYBEBOARD = "maybeboard";
+	private static final Set<String> COUNTED_SECTIONS = Set.of(MAIN, SIDEBOARD);
 
 	private final DeckRepository deckRepository;
 	private final CardRepository cardRepository;
@@ -25,48 +64,338 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 	private final CardLegalityRepository cardLegalityRepository;
 	private final CardInDeckRepository cardInDeckRepository;
 
-	private static final int UNLIMITED_QUANTITY = 9999;
-
 	@Override
-	public void validateCardAddition(Long deckId, Long cardId, Integer quantity, String section, boolean isUpdate) {
-		log.debug("Validating card addition: deckId={}, cardId={}, quantity={}, section={}, isUpdate={}", deckId,
-				cardId, quantity, section, isUpdate);
+	@Transactional(readOnly = true)
+	public DeckValidationResult evaluate(Long deckId) {
+		log.debug("Evaluating deck {}", deckId);
 
-		// Skip validation for maybeboard cards
-		if ("maybeboard".equals(section)) {
+		final DeckEntity deck = this.deckRepository.findById(deckId)
+			.orElseThrow(() -> new DeckNotFoundException(deckId));
+
+		final Long formatId = deck.getFormatId();
+		if (formatId == null) {
+			throw new InvalidDeckCompositionException("Deck format is not specified");
+		}
+		final FormatEntity format = this.formatRepository.findById(formatId)
+			.orElseThrow(() -> new FormatNotFoundException(formatId));
+
+		final List<CardInDeckEntity> entries = this.cardInDeckRepository.findByDeckId(deckId);
+		final Map<Long, CardEntity> cardsById = this.cardsById(entries);
+		final List<DeckIssue> issues = new ArrayList<>();
+
+		this.checkCopyLimits(entries, cardsById, format, issues);
+		if (format.isTracksLegality()) {
+			this.checkLegality(entries, cardsById, format, issues);
+		}
+		this.checkSectionSizes(entries, format, issues);
+		if (deck.getCompanionCardId() != null) {
+			this.checkCompanionRules(deck, entries, cardsById, format, issues);
+		}
+
+		return this.buildResult(deck, issues);
+	}
+
+	// ---------------------------------------------------------------------
+	// Copy limits
+	// ---------------------------------------------------------------------
+
+	private void checkCopyLimits(List<CardInDeckEntity> entries, Map<Long, CardEntity> cardsById,
+			FormatEntity format, List<DeckIssue> issues) {
+		final Map<String, List<CardInDeckEntity>> byCardIdentity = new LinkedHashMap<>();
+		for (final CardInDeckEntity entry : entries) {
+			if (!COUNTED_SECTIONS.contains(entry.getSection())) {
+				continue;
+			}
+			final CardEntity card = cardsById.get(entry.getCardId());
+			if (card == null) {
+				continue;
+			}
+			byCardIdentity.computeIfAbsent(this.cardIdentity(card), key -> new ArrayList<>()).add(entry);
+		}
+		if (byCardIdentity.isEmpty()) {
 			return;
 		}
 
-		this.validateRequestedQuantity(quantity);
+		final Map<Long, String> legality = format.isTracksLegality()
+				? this.legalityByCardId(format.getId(), cardsById.keySet())
+				: Map.of();
 
-		final DeckEntity deck = this.getDeckOrThrow(deckId);
-		if (deck.getFormatId() == null) {
-			throw new InvalidDeckCompositionException("Deck format is not specified");
+		for (final List<CardInDeckEntity> group : byCardIdentity.values()) {
+			final int total = group.stream().mapToInt(CardInDeckEntity::getQuantity).sum();
+			final CopyLimit limit = this.resolveCopyLimit(group, cardsById, format, legality);
+			if (limit.unlimited() || total <= limit.max()) {
+				continue;
+			}
+
+			final CardInDeckEntity reference = group.get(0);
+			final CardEntity card = cardsById.get(reference.getCardId());
+			final boolean singleSection = group.stream().map(CardInDeckEntity::getSection).distinct().count() == 1;
+
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(limit.exceededCode())
+				.message(String.format("%s: %d copies exceed the limit of %d for this format.", card.getName(), total,
+						limit.max()))
+				.cardId(card.getId())
+				.deckContentId(group.size() == 1 ? reference.getId() : null)
+				.section(singleSection ? reference.getSection() : null)
+				.build());
 		}
-
-		final CardEntity card = this.getCardOrThrow(cardId);
-
-		// Apply companion constraints only when adding to main deck
-		if ("main".equals(section) && deck.getCompanionCardId() != null) {
-			this.applyCompanionConstraints(deck, card, quantity);
-		}
-
-		// Legality and quantity checks
-		final Optional<CardLegalityEntity> cardLegalityOpt = this.cardLegalityRepository.findByCardIdAndFormatId(cardId,
-				deck.getFormatId());
-		this.validateCardLegality(cardLegalityOpt.orElse(null), deck.getFormatId());
-
-		final int maxAllowedQuantity = this.getMaxAllowedQuantity(card, cardLegalityOpt.orElse(null),
-				deck.getFormatId());
-		if (quantity > maxAllowedQuantity) {
-			throw new InvalidDeckCompositionException(
-					String.format("Card quantity limit exceeded. Max allowed is %d, attempted to add %d",
-							maxAllowedQuantity, quantity));
-		}
-
-		// Deck size limit check
-		this.validateDeckSizeLimit(deckId, quantity, section, deck.getFormatId(), isUpdate ? cardId : null);
 	}
+
+	private CopyLimit resolveCopyLimit(List<CardInDeckEntity> group, Map<Long, CardEntity> cardsById,
+			FormatEntity format, Map<Long, String> legality) {
+		final List<CardEntity> cards = group.stream()
+			.map(entry -> cardsById.get(entry.getCardId()))
+			.filter(Objects::nonNull)
+			.toList();
+
+		// Card text wins over the format: "any number of cards named X" (0) or
+		// "up to N cards named X" (N).
+		final List<Integer> explicitLimits = cards.stream()
+			.map(CardEntity::getCopiesLimit)
+			.filter(Objects::nonNull)
+			.toList();
+		if (explicitLimits.contains(0)) {
+			return CopyLimit.noLimit();
+		}
+		if (!explicitLimits.isEmpty()) {
+			return new CopyLimit(explicitLimits.stream().min(Integer::compare).orElseThrow(), false,
+					DeckIssueCode.MAX_COPIES_EXCEEDED);
+		}
+
+		if (cards.stream().anyMatch(card -> Boolean.TRUE.equals(card.getIsBasicLand()))) {
+			return CopyLimit.noLimit();
+		}
+
+		if (group.stream().anyMatch(entry -> "restricted".equals(legality.get(entry.getCardId())))) {
+			return new CopyLimit(1, false, DeckIssueCode.MAX_COPIES_EXCEEDED);
+		}
+
+		if (format.isSingleton()) {
+			return new CopyLimit(1, false, DeckIssueCode.SINGLETON_VIOLATION);
+		}
+
+		return new CopyLimit(format.getMaxCopies(), false, DeckIssueCode.MAX_COPIES_EXCEEDED);
+	}
+
+	/**
+	 * Identity used to group copies: the oracle id when the import provided it,
+	 * the printing otherwise. Grouping by null oracle ids would merge unrelated
+	 * cards.
+	 */
+	private String cardIdentity(CardEntity card) {
+		return card.getOracleId() != null ? "oracle:" + card.getOracleId() : "card:" + card.getId();
+	}
+
+	// ---------------------------------------------------------------------
+	// Legality
+	// ---------------------------------------------------------------------
+
+	private void checkLegality(List<CardInDeckEntity> entries, Map<Long, CardEntity> cardsById, FormatEntity format,
+			List<DeckIssue> issues) {
+		final Map<Long, String> legality = this.legalityByCardId(format.getId(), cardsById.keySet());
+
+		for (final CardInDeckEntity entry : entries) {
+			if (MAYBEBOARD.equals(entry.getSection())) {
+				continue;
+			}
+			final CardEntity card = cardsById.get(entry.getCardId());
+			if (card == null) {
+				continue;
+			}
+
+			final String status = legality.get(entry.getCardId());
+			if (status == null) {
+				issues.add(this.cardIssue(IssueSeverity.WARNING, DeckIssueCode.LEGALITY_UNKNOWN, card, entry,
+						String.format("%s has no legality data for this format; treated as unknown.", card.getName())));
+			} else if ("banned".equals(status)) {
+				issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.CARD_BANNED, card, entry,
+						String.format("%s is banned in this format.", card.getName())));
+			} else if ("not_legal".equals(status)) {
+				issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.CARD_NOT_LEGAL, card, entry,
+						String.format("%s is not legal in this format.", card.getName())));
+			}
+		}
+	}
+
+	private Map<Long, String> legalityByCardId(Long formatId, Collection<Long> cardIds) {
+		if (cardIds.isEmpty()) {
+			return Map.of();
+		}
+		return this.cardLegalityRepository.findByFormatIdAndCardIdIn(formatId, cardIds)
+			.stream()
+			.collect(Collectors.toMap(CardLegalityEntity::getCardId, CardLegalityEntity::getLegalityStatus,
+					(first, second) -> first));
+	}
+
+	// ---------------------------------------------------------------------
+	// Section sizes
+	// ---------------------------------------------------------------------
+
+	private void checkSectionSizes(List<CardInDeckEntity> entries, FormatEntity format, List<DeckIssue> issues) {
+		final int mainSize = this.sectionSize(entries, MAIN);
+		final Integer maxDeckSize = format.getMaxDeckSize();
+		if (maxDeckSize != null && mainSize > maxDeckSize) {
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.DECK_TOO_LARGE)
+				.message(String.format("Main deck has %d cards; the format allows at most %d.", mainSize, maxDeckSize))
+				.section(MAIN)
+				.build());
+		}
+		if (mainSize < format.getMinDeckSize()) {
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.DECK_TOO_SMALL)
+				.message(String.format("Main deck has %d cards; the format requires at least %d.", mainSize,
+						format.getMinDeckSize()))
+				.section(MAIN)
+				.build());
+		}
+
+		final int sideboardSize = this.sectionSize(entries, SIDEBOARD);
+		final Integer maxSideboardSize = format.getMaxSideboardSize();
+		if (maxSideboardSize != null && sideboardSize > maxSideboardSize) {
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.SIDEBOARD_TOO_LARGE)
+				.message(String.format("Sideboard has %d cards; the format allows at most %d.", sideboardSize,
+						maxSideboardSize))
+				.section(SIDEBOARD)
+				.build());
+		}
+	}
+
+	private int sectionSize(List<CardInDeckEntity> entries, String section) {
+		return entries.stream()
+			.filter(entry -> section.equals(entry.getSection()))
+			.mapToInt(CardInDeckEntity::getQuantity)
+			.sum();
+	}
+
+	// ---------------------------------------------------------------------
+	// Companion rules
+	// ---------------------------------------------------------------------
+
+	private void checkCompanionRules(DeckEntity deck, List<CardInDeckEntity> entries,
+			Map<Long, CardEntity> cardsById, FormatEntity format, List<DeckIssue> issues) {
+		final Optional<CardEntity> companion = this.cardRepository.findById(deck.getCompanionCardId());
+		if (companion.isEmpty()) {
+			log.warn("Deck {} references companion card {} which does not exist", deck.getId(),
+					deck.getCompanionCardId());
+			return;
+		}
+		final String companionName = companion.get().getName();
+		final String normalizedName = companionName != null ? companionName.toLowerCase() : "";
+		final List<CardInDeckEntity> mainEntries = entries.stream()
+			.filter(entry -> MAIN.equals(entry.getSection()))
+			.toList();
+
+		for (final CardInDeckEntity entry : mainEntries) {
+			final CardEntity card = cardsById.get(entry.getCardId());
+			if (card == null) {
+				continue;
+			}
+			final String violation = CompanionRules.validateByCompanionName(companionName, card);
+			if (violation != null) {
+				issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.COMPANION_RULE_VIOLATION, card, entry,
+						violation));
+			}
+		}
+
+		if (normalizedName.contains("umori")) {
+			this.checkUmori(mainEntries, cardsById, issues);
+		}
+		if (normalizedName.contains("yorion")) {
+			this.checkYorion(entries, format, issues);
+		}
+		if (normalizedName.contains("zirda")) {
+			this.checkZirda(mainEntries, cardsById, issues);
+		}
+	}
+
+	private void checkUmori(List<CardInDeckEntity> mainEntries, Map<Long, CardEntity> cardsById,
+			List<DeckIssue> issues) {
+		final Set<String> nonlandTypes = new HashSet<>();
+		for (final CardInDeckEntity entry : mainEntries) {
+			final CardEntity card = cardsById.get(entry.getCardId());
+			if (card == null || card.getCardType() == null || card.getCardType().contains("Land")) {
+				continue;
+			}
+			nonlandTypes.add(card.getCardType());
+		}
+		if (nonlandTypes.size() > 1) {
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.COMPANION_RULE_VIOLATION)
+				.message(String.format(
+						"Companion Umori: all nonland cards must share the same card type, found %s.", nonlandTypes))
+				.section(MAIN)
+				.build());
+		}
+	}
+
+	private void checkYorion(List<CardInDeckEntity> entries, FormatEntity format, List<DeckIssue> issues) {
+		final int required = format.getMinDeckSize() + 20;
+		final int mainSize = this.sectionSize(entries, MAIN);
+		if (mainSize < required) {
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.COMPANION_RULE_VIOLATION)
+				.message(String.format("Companion Yorion: main deck must have at least %d cards (%d + 20).", required,
+						format.getMinDeckSize()))
+				.section(MAIN)
+				.build());
+		}
+	}
+
+	private void checkZirda(List<CardInDeckEntity> mainEntries, Map<Long, CardEntity> cardsById,
+			List<DeckIssue> issues) {
+		for (final CardInDeckEntity entry : mainEntries) {
+			final CardEntity card = cardsById.get(entry.getCardId());
+			if (card != null && CompanionRules.isPermanent(card) && !this.hasActivatedAbility(card)) {
+				issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.COMPANION_RULE_VIOLATION, card, entry,
+						"Companion Zirda: each permanent card in the main deck must have an activated ability."));
+			}
+		}
+	}
+
+	// ---------------------------------------------------------------------
+	// Result
+	// ---------------------------------------------------------------------
+
+	private DeckValidationResult buildResult(DeckEntity deck, List<DeckIssue> issues) {
+		final boolean hasError = issues.stream().anyMatch(issue -> issue.getSeverity() == IssueSeverity.ERROR);
+		final boolean hasUnknownLegality = issues.stream()
+			.anyMatch(issue -> issue.getCode() == DeckIssueCode.LEGALITY_UNKNOWN);
+
+		final ValidationStatus validationStatus = hasError ? ValidationStatus.ILLEGAL
+				: hasUnknownLegality ? ValidationStatus.UNKNOWN : ValidationStatus.LEGAL;
+
+		return DeckValidationResult.builder()
+			.deckId(deck.getId())
+			.status(DeckStatus.fromValue(deck.getStatus()))
+			.validationStatus(validationStatus)
+			.issues(List.copyOf(issues))
+			.build();
+	}
+
+	private DeckIssue cardIssue(IssueSeverity severity, DeckIssueCode code, CardEntity card, CardInDeckEntity entry,
+			String message) {
+		return DeckIssue.builder()
+			.severity(severity)
+			.code(code)
+			.message(message)
+			.cardId(card.getId())
+			.deckContentId(entry.getId())
+			.section(entry.getSection())
+			.build();
+	}
+
+	// ---------------------------------------------------------------------
+	// Helpers kept for callers that only need a single answer
+	// ---------------------------------------------------------------------
 
 	@Override
 	public void validateCardRemoval(Long deckId, Long cardId, Integer quantity, String section) {
@@ -77,9 +406,8 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 			throw new InvalidDeckCompositionException("Quantity must be greater than 0");
 		}
 
-		// Check if card exists in this section
 		final Optional<CardInDeckEntity> existingCard = this.cardInDeckRepository
-				.findByDeckIdAndCardIdAndSection(deckId, cardId, section);
+			.findByDeckIdAndCardIdAndSection(deckId, cardId, section);
 
 		if (existingCard.isEmpty()) {
 			throw new InvalidDeckCompositionException("Card not found in deck section");
@@ -94,42 +422,31 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 
 	@Override
 	public int getMaxAllowedQuantity(Long cardId, Long formatId) {
-		// Get card details and legality
 		final CardEntity card = this.cardRepository.findById(cardId)
-				.orElseThrow(() -> new InvalidDeckCompositionException("Card not found with id: " + cardId));
+			.orElseThrow(() -> new InvalidDeckCompositionException("Card not found with id: " + cardId));
 
-		final Optional<CardLegalityEntity> cardLegality = this.cardLegalityRepository.findByCardIdAndFormatId(cardId,
-				formatId);
+		final Optional<CardLegalityEntity> cardLegality = this.cardLegalityRepository
+			.findByCardIdAndFormatId(cardId, formatId);
 
 		return this.getMaxAllowedQuantity(card, cardLegality.orElse(null), formatId);
 	}
 
-	/**
-	 * Internal method that calculates max allowed quantity using pre-fetched
-	 * entities to avoid redundant database calls when card and legality are already
-	 * known.
-	 */
 	private int getMaxAllowedQuantity(CardEntity card, CardLegalityEntity cardLegality, Long formatId) {
-		// The card's own rule text wins over the format: "any number of cards
-		// named X" (0) or "up to N cards named X" (N).
 		final Integer copiesLimit = card.getCopiesLimit();
 		if (copiesLimit != null) {
 			return copiesLimit == 0 ? UNLIMITED_QUANTITY : copiesLimit;
 		}
 
-		// Check if it's a basic land
 		if (Boolean.TRUE.equals(card.getIsBasicLand())) {
 			return UNLIMITED_QUANTITY;
 		}
 
-		// Check if card is restricted in this format
 		if (cardLegality != null && "restricted".equals(cardLegality.getLegalityStatus())) {
 			return 1;
 		}
 
-		// Check format-specific rules
 		final FormatEntity format = this.formatRepository.findById(formatId)
-				.orElseThrow(() -> new InvalidDeckCompositionException("Format not found with id: " + formatId));
+			.orElseThrow(() -> new InvalidDeckCompositionException("Format not found with id: " + formatId));
 
 		if (format.isSingleton()) {
 			return 1;
@@ -140,186 +457,59 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 
 	@Override
 	public int getMaxDeckSize(Long formatId, String section) {
-		// For main deck and sideboard, use the format's limits. A NULL limit means
-		// the section is unbounded.
 		final FormatEntity format = this.formatRepository.findById(formatId)
-				.orElseThrow(() -> new InvalidDeckCompositionException("Format not found with id: " + formatId));
+			.orElseThrow(() -> new InvalidDeckCompositionException("Format not found with id: " + formatId));
 
-		final Integer limit = "sideboard".equals(section) ? format.getMaxSideboardSize() : format.getMaxDeckSize();
+		final Integer limit = SIDEBOARD.equals(section) ? format.getMaxSideboardSize() : format.getMaxDeckSize();
 		return limit != null ? limit : Integer.MAX_VALUE;
 	}
 
-	private void validateCardLegality(CardLegalityEntity cardLegality, Long formatId) {
-		if (cardLegality != null) {
-			final String legalityStatus = cardLegality.getLegalityStatus();
-			if ("banned".equals(legalityStatus) || "not_legal".equals(legalityStatus)) {
-				final FormatEntity format = this.formatRepository.findById(formatId)
-						.orElseThrow(() -> new InvalidDeckCompositionException("Format not found"));
-				throw new InvalidDeckCompositionException(
-						String.format("Card is %s in the %s format", legalityStatus, format.getName()));
+	private Map<Long, CardEntity> cardsById(List<CardInDeckEntity> entries) {
+		final Set<Long> cardIds = entries.stream().map(CardInDeckEntity::getCardId).collect(Collectors.toSet());
+		if (cardIds.isEmpty()) {
+			return Map.of();
+		}
+		return this.cardRepository.findAllById(cardIds)
+			.stream()
+			.collect(Collectors.toMap(CardEntity::getId, card -> card));
+	}
+
+	// ---------------------------------------------------------------------
+	// Zirda heuristics
+	// ---------------------------------------------------------------------
+
+	/**
+	 * Heuristic to detect an activated ability: looks for a colon with a cost-like
+	 * left side.
+	 */
+	private boolean hasActivatedAbility(CardEntity card) {
+		final String text = card.getCardText();
+		if (text == null) {
+			return false;
+		}
+		final String normalized = text.toLowerCase().replace("\n", " ");
+		if (!normalized.contains(":")) {
+			return false;
+		}
+		for (final String clause : normalized.split("\\.")) {
+			final String trimmed = clause.trim();
+			final int idx = trimmed.indexOf(":");
+			if (idx <= 0) {
+				continue;
 			}
-		}
-		// If no legality record exists, assume the card is legal
-	}
-
-	private void validateDeckSizeLimit(Long deckId, Integer quantity, String section, Long formatId,
-			Long excludeCardId) {
-		final int maxDeckSize = this.getMaxDeckSize(formatId, section);
-
-		final Integer currentTotalCards;
-		if (excludeCardId != null) {
-			// This is an update operation, exclude the existing quantity of this card
-			currentTotalCards = this.cardInDeckRepository.sumQuantityByDeckIdAndSectionExcludingCard(deckId, section,
-					excludeCardId);
-		} else {
-			// This is a new addition
-			currentTotalCards = this.cardInDeckRepository.sumQuantityByDeckIdAndSection(deckId, section);
-		}
-
-		final int totalAfterAddition = (currentTotalCards != null ? currentTotalCards : 0) + quantity;
-
-		if (totalAfterAddition > maxDeckSize) {
-			throw new InvalidDeckCompositionException(String.format(
-					"Deck section \"%s\" size limit exceeded. Max allowed is %d, total after addition would be %d",
-					section, maxDeckSize, totalAfterAddition));
-		}
-	}
-
-	// Helper: determine if a card is a permanent (Artifact, Creature, Enchantment,
-	// Planeswalker, Land)
-	private boolean isPermanent(CardEntity c) {
-		final String t = c.getCardType();
-		if (t == null)
-			return false;
-		return t.contains("Artifact") || t.contains("Creature") || t.contains("Enchantment")
-				|| t.contains("Planeswalker") || t.contains("Land");
-	}
-
-	// Helper: heuristic to detect activated ability in card text: looks for a colon
-	// with cost-like left side
-	private boolean hasActivatedAbility(CardEntity c) {
-		final String text = c.getCardText();
-		if (text == null)
-			return false;
-		final String lower = text.toLowerCase();
-		// Heuristics:
-		// - Look for patterns like "{T}:", "{1}:", "{r}:" etc (mana/tap symbols before
-		// colon)
-		// - Or common cost words before a colon: "tap:", "sacrifice:", "discard:",
-		// "exile:", "return:", "pay:", "remove:", "untap:"
-		final String normalized = lower.replace("\n", " ");
-		if (normalized.contains(":")) {
-			final String[] clauses = normalized.split("\\.");
-			for (final String clause : clauses) {
-				final String s = clause.trim();
-				final int idx = s.indexOf(":");
-				if (idx > 0) {
-					final String left = s.substring(0, idx).trim();
-					if (left.contains("{") || left.contains("tap") || left.contains("{t}") || left.matches(".*[0-9].*")
-							|| left.startsWith("sacrifice") || left.startsWith("discard") || left.startsWith("exile")
-							|| left.startsWith("return") || left.startsWith("pay") || left.startsWith("remove")
-							|| left.startsWith("untap")) {
-						return true;
-					}
-				}
+			final String left = trimmed.substring(0, idx).trim();
+			if (left.contains("{") || left.contains("tap") || left.matches(".*[0-9].*") || left.startsWith("sacrifice")
+					|| left.startsWith("discard") || left.startsWith("exile") || left.startsWith("return")
+					|| left.startsWith("pay") || left.startsWith("remove") || left.startsWith("untap")) {
+				return true;
 			}
 		}
 		return false;
 	}
 
-	private void validateRequestedQuantity(Integer quantity) {
-		if (quantity == null || quantity <= 0) {
-			throw new InvalidDeckCompositionException("Quantity must be greater than 0");
-		}
-	}
-
-	private DeckEntity getDeckOrThrow(Long deckId) {
-		return this.deckRepository.findById(deckId)
-				.orElseThrow(() -> new InvalidDeckCompositionException("Deck not found with id: " + deckId));
-	}
-
-	private CardEntity getCardOrThrow(Long cardId) {
-		return this.cardRepository.findById(cardId)
-				.orElseThrow(() -> new InvalidDeckCompositionException("Card not found with id: " + cardId));
-	}
-
-	private void applyCompanionConstraints(DeckEntity deck, CardEntity candidateCard, int candidateQuantity) {
-		final CardEntity companion = this.cardRepository.findById(deck.getCompanionCardId()).orElse(null);
-		if (companion == null) {
-			return;
-		}
-		final String companionName = companion.getName() != null ? companion.getName().toLowerCase() : "";
-
-		// Per-card rule check via CompanionRules
-		final String violation = CompanionRules.validateByCompanionName(companion.getName(), candidateCard);
-		if (violation != null) {
-			throw new InvalidDeckCompositionException(violation);
-		}
-
-		// Deck-level constraints by companion
-		if (companionName.contains("umori")) {
-			this.enforceUmoriDeckTypeRule(deck.getId(), candidateCard);
-		}
-		if (companionName.contains("yorion")) {
-			this.enforceYorionDeckSizeRule(deck, candidateQuantity);
-		}
-		if (companionName.contains("zirda")) {
-			this.enforceZirdaActivatedAbilityRule(deck.getId(), candidateCard);
-		}
-	}
-
-	private void enforceUmoriDeckTypeRule(Long deckId, CardEntity candidateCard) {
-		final Set<String> nonlandTypes = new HashSet<>();
-		final List<CardInDeckEntity> allEntries = this.cardInDeckRepository.findByDeckId(deckId);
-		for (final CardInDeckEntity cid : allEntries) {
-			if (!"main".equals(cid.getSection()))
-				continue;
-			final CardEntity existing = this.cardRepository.findById(cid.getCardId()).orElse(null);
-			if (existing == null)
-				continue;
-			final String type = existing.getCardType();
-			if (type != null && !type.contains("Land")) {
-				nonlandTypes.add(type);
-			}
-		}
-		final String candidateType = candidateCard.getCardType();
-		if (candidateType != null && !candidateType.contains("Land")) {
-			nonlandTypes.add(candidateType);
-		}
-		if (nonlandTypes.size() > 1) {
-			throw new InvalidDeckCompositionException(
-					"Companion Umori: all nonland cards must share the same card type");
-		}
-	}
-
-	private void enforceYorionDeckSizeRule(DeckEntity deck, int candidateQuantity) {
-		final FormatEntity format = this.formatRepository.findById(deck.getFormatId()).orElseThrow(
-				() -> new InvalidDeckCompositionException("Format not found with id: " + deck.getFormatId()));
-		final int requiredMin = format.getMinDeckSize() + 20;
-		final Integer currentMain = this.cardInDeckRepository.sumQuantityByDeckIdAndSection(deck.getId(), "main");
-		final int afterAddition = (currentMain != null ? currentMain : 0) + candidateQuantity;
-		if (afterAddition < requiredMin) {
-			throw new InvalidDeckCompositionException(
-					String.format("Companion Yorion: main deck must be at least %d cards", requiredMin));
-		}
-	}
-
-	private void enforceZirdaActivatedAbilityRule(Long deckId, CardEntity candidateCard) {
-		final List<CardInDeckEntity> allEntries = this.cardInDeckRepository.findByDeckId(deckId);
-		for (final CardInDeckEntity cid : allEntries) {
-			if (!"main".equals(cid.getSection()))
-				continue;
-			final CardEntity existing = this.cardRepository.findById(cid.getCardId()).orElse(null);
-			if (existing == null)
-				continue;
-			if (this.isPermanent(existing) && !this.hasActivatedAbility(existing)) {
-				throw new InvalidDeckCompositionException(
-						"Companion Zirda: each permanent card in your main deck must have an activated ability");
-			}
-		}
-		if (this.isPermanent(candidateCard) && !this.hasActivatedAbility(candidateCard)) {
-			throw new InvalidDeckCompositionException(
-					"Companion Zirda: each permanent card in your main deck must have an activated ability");
+	private record CopyLimit(int max, boolean unlimited, DeckIssueCode exceededCode) {
+		private static CopyLimit noLimit() {
+			return new CopyLimit(Integer.MAX_VALUE, true, DeckIssueCode.MAX_COPIES_EXCEEDED);
 		}
 	}
 }

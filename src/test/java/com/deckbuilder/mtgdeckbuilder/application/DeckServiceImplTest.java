@@ -9,6 +9,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -641,5 +642,102 @@ class DeckServiceImplTest {
 		// Then - Should only delete from main, not from sideboard
 		verify(this.cardInDeckRepository).deleteByDeckIdAndCardIdAndSection(deckId, cardId, "main");
 		verify(this.cardInDeckRepository, never()).deleteByDeckIdAndCardIdAndSection(deckId, cardId, "sideboard");
+	}
+
+	// ==================== DRAFT STATUS AND MODIFICATION TIME ====================
+
+	@Test
+	@DisplayName("Should force draft status when creating a deck")
+	void shouldForceDraftStatus_WhenCreatingDeck() {
+		// Given
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null).build();
+		this.testDeckEntity.setStatus(DeckStatus.PUBLISHED.getValue());
+		this.testDeckEntity.setPublishedAt(LocalDateTime.now());
+
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.create(newDeck);
+
+		// Then
+		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
+		verify(this.deckRepository).save(captor.capture());
+		assertThat(captor.getValue().getStatus()).isEqualTo(DeckStatus.DRAFT.getValue());
+		assertThat(captor.getValue().getPublishedAt()).isNull();
+	}
+
+	@Test
+	@DisplayName("Should return a published deck to draft when updating it")
+	void shouldReturnDeckToDraft_WhenUpdating() {
+		// Given
+		this.testDeckEntity.setStatus(DeckStatus.PUBLISHED.getValue());
+		this.testDeckEntity.setPublishedAt(LocalDateTime.now());
+		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
+
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(updatedDeck);
+
+		// When
+		this.deckService.update(1L, updatedDeck);
+
+		// Then
+		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
+		verify(this.deckRepository).save(captor.capture());
+		assertThat(captor.getValue().getStatus()).isEqualTo(DeckStatus.DRAFT.getValue());
+		assertThat(captor.getValue().getPublishedAt()).isNull();
+	}
+
+	@Test
+	@DisplayName("Should update the deck modification time when adding a card")
+	void shouldUpdateModificationTime_WhenAddingCard() {
+		// Given
+		final LocalDateTime before = LocalDateTime.of(2020, 1, 1, 0, 0);
+		this.testDeckEntity.setModified(before);
+
+		when(this.deckRepository.existsById(1L)).thenReturn(true);
+		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(1L, 100L, "main"))
+				.thenReturn(Optional.empty());
+		when(this.cardInDeckRepository.save(any(CardInDeckEntity.class))).thenReturn(this.testCardInDeck);
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.addCard(1L, 100L, 4, "main");
+
+		// Then
+		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
+		verify(this.deckRepository).save(captor.capture());
+		assertThat(captor.getValue().getModified()).isAfter(before);
+	}
+
+	@Test
+	@DisplayName("Should update the deck modification time when removing a card")
+	void shouldUpdateModificationTime_WhenRemovingCard() {
+		// Given
+		final LocalDateTime before = LocalDateTime.of(2020, 1, 1, 0, 0);
+		this.testDeckEntity.setModified(before);
+		final CardInDeckEntity existingCard = CardInDeckEntity.builder().id(1L).deckId(1L).cardId(100L)
+				.quantity(4).section("main").build();
+
+		when(this.deckRepository.existsById(1L)).thenReturn(true);
+		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(1L, 100L, "main"))
+				.thenReturn(Optional.of(existingCard));
+		doNothing().when(this.cardInDeckRepository).deleteByDeckIdAndCardIdAndSection(1L, 100L, "main");
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.removeCard(1L, 100L, 4, "main");
+
+		// Then
+		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
+		verify(this.deckRepository).save(captor.capture());
+		assertThat(captor.getValue().getModified()).isAfter(before);
 	}
 }

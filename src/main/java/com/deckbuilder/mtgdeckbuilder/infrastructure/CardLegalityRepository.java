@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -17,6 +18,11 @@ public interface CardLegalityRepository extends JpaRepository<CardLegalityEntity
      * Find the legality status of a card in a specific format
      */
     Optional<CardLegalityEntity> findByCardIdAndFormatId(Long cardId, Long formatId);
+
+    /**
+     * Legality rows of several cards in one format, for deck-wide evaluations.
+     */
+    List<CardLegalityEntity> findByFormatIdAndCardIdIn(Long formatId, Collection<Long> cardIds);
 
     /**
      * Check if a card is banned in a specific format

@@ -9,6 +9,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -59,6 +60,9 @@ public class DeckServiceImpl implements DeckService {
 		deck = deck.toBuilder().created(now).modified(now).build();
 
 		DeckEntity entity = this.deckEntityMapper.toEntity(deck);
+		// New decks are always drafts: format rules are not applied when saving.
+		entity.setStatus(DeckStatus.DRAFT.getValue());
+		entity.setPublishedAt(null);
 		entity = this.deckRepository.save(entity);
 
 		this.replaceDeckCards(entity.getId(), deck.getCards());
@@ -77,6 +81,9 @@ public class DeckServiceImpl implements DeckService {
 
 		DeckEntity entity = this.deckEntityMapper.toEntity(deck);
 		entity.setCreated(existing.getCreated());
+		// Editing a published deck returns it to draft (ADR-007).
+		entity.setStatus(DeckStatus.DRAFT.getValue());
+		entity.setPublishedAt(null);
 		entity = this.deckRepository.save(entity);
 
 		this.replaceDeckCards(id, deck.getCards());
@@ -126,6 +133,9 @@ public class DeckServiceImpl implements DeckService {
 			this.cardInDeckRepository.save(newCard);
 		}
 
+		// No trigger anymore: decks.updated_at is maintained here.
+		this.updateDeckModificationTime(deckId);
+
 		// Return updated deck with cards
 		return this.findById(deckId).orElseThrow(() -> new DeckNotFoundException(deckId));
 	}
@@ -166,7 +176,8 @@ public class DeckServiceImpl implements DeckService {
 			this.cardInDeckRepository.save(cardInDeck);
 		}
 
-		// Note: deck modification time is automatically updated by the database trigger
+		// No trigger anymore: decks.updated_at is maintained here, including deletes.
+		this.updateDeckModificationTime(deckId);
 
 		// Return updated deck with cards
 		return this.findById(deckId).orElseThrow(() -> new DeckNotFoundException(deckId));
@@ -244,9 +255,9 @@ public class DeckServiceImpl implements DeckService {
 	 * Updates the deck modification time
 	 */
 	private void updateDeckModificationTime(Long deckId) {
-		DeckEntity deck = deckRepository.findById(deckId)
+		final DeckEntity deck = this.deckRepository.findById(deckId)
 			.orElseThrow(() -> new DeckNotFoundException(deckId));
 		deck.setModified(LocalDateTime.now());
-		deckRepository.save(deck);
+		this.deckRepository.save(deck);
 	}
 }

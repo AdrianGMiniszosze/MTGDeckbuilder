@@ -1,9 +1,25 @@
 package com.deckbuilder.mtgdeckbuilder.application;
 
 import com.deckbuilder.mtgdeckbuilder.application.implement.DeckValidationServiceImpl;
-import com.deckbuilder.mtgdeckbuilder.infrastructure.*;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
-import com.deckbuilder.mtgdeckbuilder.infrastructure.model.*;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssueCode;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
+import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
+import com.deckbuilder.mtgdeckbuilder.model.IssueSeverity;
+import com.deckbuilder.mtgdeckbuilder.model.ValidationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,14 +28,24 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Deck Validation Service Tests")
 class DeckValidationServiceTest {
+
+	private static final long DECK_ID = 1L;
+	private static final long FORMAT_ID = 1L;
 
 	@Mock
 	private DeckRepository deckRepository;
@@ -39,651 +65,495 @@ class DeckValidationServiceTest {
 	@InjectMocks
 	private DeckValidationServiceImpl deckValidationService;
 
-	private DeckEntity testDeck;
-	private CardEntity regularCard;
-	private CardEntity basicLand;
-	private CardEntity bannedCard;
-	private FormatEntity standardFormat;
-	private CardLegalityEntity bannedLegality;
+	private DeckEntity deck;
 
 	@BeforeEach
 	void setUp() {
-		// Test deck
-		this.testDeck = new DeckEntity();
-		this.testDeck.setId(1L);
-		this.testDeck.setFormatId(1L);
+		this.deck = new DeckEntity();
+		this.deck.setId(DECK_ID);
+		this.deck.setFormatId(FORMAT_ID);
+		this.deck.setStatus(DeckStatus.DRAFT.getValue());
+	}
 
-		// Regular card (Lightning Bolt)
-		this.regularCard = new CardEntity();
-		this.regularCard.setId(1L);
-		this.regularCard.setName("Lightning Bolt");
-		this.regularCard.setCardType("Instant");
-		this.regularCard.setCardSupertype(null);
-		this.regularCard.setCopiesLimit(null);
+	// ==================== LEGALITY ====================
 
-		// Basic land (Mountain)
-		this.basicLand = new CardEntity();
-		this.basicLand.setId(2L);
-		this.basicLand.setName("Mountain");
-		this.basicLand.setCardType("Land");
-		this.basicLand.setCardSupertype("Basic");
-		this.basicLand.setIsBasicLand(true);
-		this.basicLand.setCopiesLimit(null);
+	@Test
+	@DisplayName("Should report a legal deck when every rule passes")
+	void shouldReportLegalDeck() {
+		final CardEntity bolt = card(1L, "Lightning Bolt", "Instant");
+		given(baseFormat(), List.of(entry(10L, 1L, 4, "main")), List.of(bolt),
+				List.of(legality(1L, FORMAT_ID, "legal")));
 
-		// Banned card
-		this.bannedCard = new CardEntity();
-		this.bannedCard.setId(3L);
-		this.bannedCard.setName("Black Lotus");
-		this.bannedCard.setCardType("Artifact");
-		this.bannedCard.setCardSupertype(null);
-		this.bannedCard.setCopiesLimit(null);
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
 
-		// Restricted card (local)
-		final CardEntity restrictedCard = new CardEntity();
-		restrictedCard.setId(4L);
-		restrictedCard.setName("Ancestral Recall");
-		restrictedCard.setCardType("Instant");
-		restrictedCard.setCardSupertype(null);
-		restrictedCard.setCopiesLimit(null);
+		assertThat(result.getDeckId()).isEqualTo(DECK_ID);
+		assertThat(result.getStatus()).isEqualTo(DeckStatus.DRAFT);
+		assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.LEGAL);
+		assertThat(result.getIssues()).isEmpty();
+		assertThat(result.hasErrors()).isFalse();
+	}
 
-		// Formats
-		this.standardFormat = FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).maxSideboardSize(15)
+	@Test
+	@DisplayName("Should flag a banned card")
+	void shouldFlagBannedCard() {
+		final CardEntity lotus = card(1L, "Black Lotus", "Artifact");
+		given(baseFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(lotus),
+				List.of(legality(1L, FORMAT_ID, "banned")));
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.ILLEGAL);
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.CARD_BANNED);
+		assertThat(issue.getSeverity()).isEqualTo(IssueSeverity.ERROR);
+		assertThat(issue.getCardId()).isEqualTo(1L);
+		assertThat(issue.getDeckContentId()).isEqualTo(10L);
+		assertThat(issue.getSection()).isEqualTo("main");
+	}
+
+	@Test
+	@DisplayName("Should flag a card that is not legal in the format")
+	void shouldFlagNotLegalCard() {
+		final CardEntity card = card(1L, "Modern Only", "Instant");
+		given(baseFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(card),
+				List.of(legality(1L, FORMAT_ID, "not_legal")));
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		assertThat(singleIssue(result).getCode()).isEqualTo(DeckIssueCode.CARD_NOT_LEGAL);
+	}
+
+	@Test
+	@DisplayName("Should warn when the format tracks legality but the card has no row")
+	void shouldWarnUnknownLegality() {
+		final CardEntity card = card(1L, "Unimported Card", "Instant");
+		given(baseFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(card), List.of());
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.LEGALITY_UNKNOWN);
+		assertThat(issue.getSeverity()).isEqualTo(IssueSeverity.WARNING);
+		assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.UNKNOWN);
+		assertThat(result.hasErrors()).isFalse();
+	}
+
+	@Test
+	@DisplayName("Should not warn about legality when the format does not track it")
+	void shouldSkipLegalityWhenFormatDoesNotTrackIt() {
+		final CardEntity card = card(1L, "Anything", "Instant");
+		given(format(FORMAT_ID, 0, null, 15, 4, false, false), List.of(entry(10L, 1L, 1, "main")),
+				List.of(card), List.of());
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		assertThat(result.getIssues()).isEmpty();
+		assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.LEGAL);
+	}
+
+	// ==================== COPY LIMITS ====================
+
+	@Test
+	@DisplayName("Should count copies across main and sideboard")
+	void shouldCountCopiesAcrossSections() {
+		final CardEntity bolt = card(1L, "Lightning Bolt", "Instant");
+		given(baseFormat(), List.of(entry(10L, 1L, 4, "main"), entry(11L, 1L, 1, "sideboard")), List.of(bolt),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.MAX_COPIES_EXCEEDED);
+		assertThat(issue.getMessage()).contains("5 copies").contains("4");
+		assertThat(issue.getDeckContentId()).isNull();
+		assertThat(issue.getSection()).isNull();
+	}
+
+	@Test
+	@DisplayName("Should count copies by oracle id across printings")
+	void shouldCountCopiesByOracleId() {
+		final UUID oracleId = UUID.randomUUID();
+		final CardEntity first = card(1L, "Lightning Bolt", "Instant");
+		first.setOracleId(oracleId);
+		final CardEntity second = card(2L, "Lightning Bolt", "Instant");
+		second.setOracleId(oracleId);
+
+		given(baseFormat(), List.of(entry(10L, 1L, 3, "main"), entry(11L, 2L, 2, "main")), List.of(first, second),
+				List.of(legality(1L, FORMAT_ID, "legal"), legality(2L, FORMAT_ID, "legal")));
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.MAX_COPIES_EXCEEDED);
+		assertThat(issue.getMessage()).contains("5 copies");
+	}
+
+	@Test
+	@DisplayName("Should allow any number of copies when copies_limit is zero")
+	void shouldAllowUnlimitedCopiesWhenCardSaysSo() {
+		final CardEntity petitioners = card(1L, "Persistent Petitioners", "Creature");
+		petitioners.setCopiesLimit(0);
+		given(baseFormat(), List.of(entry(10L, 1L, 20, "main")), List.of(petitioners),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should allow up to the exact copies_limit the card sets")
+	void shouldAllowExactCopiesLimit() {
+		final CardEntity dwarves = card(1L, "Seven Dwarves", "Creature");
+		dwarves.setCopiesLimit(7);
+		given(baseFormat(), List.of(entry(10L, 1L, 7, "main")), List.of(dwarves),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should flag when the exact copies_limit is exceeded")
+	void shouldFlagExactCopiesLimitExceeded() {
+		final CardEntity dwarves = card(1L, "Seven Dwarves", "Creature");
+		dwarves.setCopiesLimit(7);
+		given(baseFormat(), List.of(entry(10L, 1L, 8, "main")), List.of(dwarves),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.MAX_COPIES_EXCEEDED);
+		assertThat(issue.getMessage()).contains("limit of 7");
+	}
+
+	@Test
+	@DisplayName("Should exempt basic lands from the copy limit")
+	void shouldExemptBasicLands() {
+		final CardEntity mountain = card(1L, "Mountain", "Land");
+		mountain.setIsBasicLand(true);
+		given(baseFormat(), List.of(entry(10L, 1L, 20, "main")), List.of(mountain),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should report a singleton violation instead of a copy-limit one")
+	void shouldReportSingletonViolation() {
+		final CardEntity card = card(1L, "Sol Ring", "Artifact");
+		given(format(FORMAT_ID, 0, null, null, 4, true, true), List.of(entry(10L, 1L, 2, "main")), List.of(card),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.SINGLETON_VIOLATION);
+	}
+
+	@Test
+	@DisplayName("Should restrict a card marked as restricted to one copy")
+	void shouldRestrictRestrictedCards() {
+		final CardEntity recall = card(1L, "Ancestral Recall", "Instant");
+		given(baseFormat(), List.of(entry(10L, 1L, 2, "main")), List.of(recall),
+				List.of(legality(1L, FORMAT_ID, "restricted")));
+
+		assertThat(singleIssue(this.deckValidationService.evaluate(DECK_ID)).getCode())
+				.isEqualTo(DeckIssueCode.MAX_COPIES_EXCEEDED);
+	}
+
+	@Test
+	@DisplayName("Should ignore the maybeboard for copy limits and sizes")
+	void shouldIgnoreMaybeboard() {
+		final CardEntity bolt = card(1L, "Lightning Bolt", "Instant");
+		given(format(FORMAT_ID, 0, 60, 15, 4, false, true), List.of(entry(10L, 1L, 100, "maybeboard")),
+				List.of(bolt), List.of());
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	// ==================== SIZES ====================
+
+	@Test
+	@DisplayName("Should report a main deck below the format minimum")
+	void shouldReportDeckTooSmall() {
+		final CardEntity card = card(1L, "Filler", "Instant");
+		given(format(FORMAT_ID, 60, null, 15, 4, false, true), List.of(entry(10L, 1L, 4, "main")), List.of(card),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.DECK_TOO_SMALL);
+		assertThat(issue.getSection()).isEqualTo("main");
+	}
+
+	@Test
+	@DisplayName("Should report a main deck above the format maximum")
+	void shouldReportDeckTooLarge() {
+		final CardEntity mountain = card(1L, "Mountain", "Land");
+		mountain.setIsBasicLand(true);
+		given(format(FORMAT_ID, 0, 60, 15, 4, false, true), List.of(entry(10L, 1L, 61, "main")),
+				List.of(mountain), List.of(legality(1L, FORMAT_ID, "legal")));
+
+		assertThat(singleIssue(this.deckValidationService.evaluate(DECK_ID)).getCode())
+				.isEqualTo(DeckIssueCode.DECK_TOO_LARGE);
+	}
+
+	@Test
+	@DisplayName("Should report a sideboard above the format maximum")
+	void shouldReportSideboardTooLarge() {
+		final CardEntity mountain = card(1L, "Mountain", "Land");
+		mountain.setIsBasicLand(true);
+		given(format(FORMAT_ID, 0, null, 15, 4, false, true), List.of(entry(10L, 1L, 16, "sideboard")),
+				List.of(mountain), List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.SIDEBOARD_TOO_LARGE);
+		assertThat(issue.getSection()).isEqualTo("sideboard");
+	}
+
+	// ==================== COMPANIONS ====================
+
+	@Test
+	@DisplayName("Should report a per-card companion violation")
+	void shouldReportCompanionPerCardRule() {
+		this.deck.setCompanionCardId(99L);
+		final CardEntity lurrus = card(99L, "Lurrus of the Dream-Den", "Creature");
+		final CardEntity permanent = card(1L, "Expensive Permanent", "Artifact");
+		permanent.setCmc(3);
+
+		given(baseFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(lurrus, permanent),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.COMPANION_RULE_VIOLATION);
+		assertThat(issue.getCardId()).isEqualTo(1L);
+		assertThat(issue.getMessage()).contains("Lurrus");
+	}
+
+	@Test
+	@DisplayName("Should enforce Yorion's extra twenty cards")
+	void shouldEnforceYorionDeckSize() {
+		this.deck.setCompanionCardId(99L);
+		final CardEntity yorion = card(99L, "Yorion, Sky Nomad", "Creature");
+		final CardEntity mountain = card(1L, "Mountain", "Land");
+		mountain.setIsBasicLand(true);
+
+		given(format(FORMAT_ID, 60, null, null, 4, false, true), List.of(entry(10L, 1L, 79, "main")),
+				List.of(yorion, mountain), List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.COMPANION_RULE_VIOLATION);
+		assertThat(issue.getMessage()).contains("Yorion").contains("80");
+	}
+
+	@Test
+	@DisplayName("Should enforce Umori's single nonland type")
+	void shouldEnforceUmoriDeckType() {
+		this.deck.setCompanionCardId(99L);
+		final CardEntity umori = card(99L, "Umori, the Collector", "Creature");
+		final CardEntity instant = card(1L, "Instant", "Instant");
+		final CardEntity artifact = card(2L, "Artifact", "Artifact");
+
+		given(baseFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(umori, instant, artifact),
+				List.of(legality(1L, FORMAT_ID, "legal"), legality(2L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.COMPANION_RULE_VIOLATION);
+		assertThat(issue.getMessage()).contains("Umori");
+	}
+
+	@Test
+	@DisplayName("Should enforce Zirda's activated-ability requirement")
+	void shouldEnforceZirdaActivatedAbility() {
+		this.deck.setCompanionCardId(99L);
+		final CardEntity zirda = card(99L, "Zirda, the Dawnwaker", "Creature");
+		final CardEntity artifact = card(1L, "Vanilla Artifact", "Artifact");
+		artifact.setCardText("This artifact does nothing.");
+
+		given(baseFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(zirda, artifact),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.COMPANION_RULE_VIOLATION);
+		assertThat(issue.getMessage()).contains("Zirda");
+	}
+
+	@Test
+	@DisplayName("Should not apply companion rules when the deck has no companion")
+	void shouldSkipCompanionRulesWithoutCompanion() {
+		final CardEntity card = card(1L, "Anything", "Artifact");
+		card.setCmc(5);
+
+		given(baseFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(card),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+		verify(this.cardRepository, never()).findById(99L);
+	}
+
+	// ==================== ERRORS AND QUERIES ====================
+
+	@Test
+	@DisplayName("Should throw when the deck does not exist")
+	void shouldThrowWhenDeckDoesNotExist() {
+		when(this.deckRepository.findById(9L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> this.deckValidationService.evaluate(9L))
+				.isInstanceOf(DeckNotFoundException.class);
+	}
+
+	@Test
+	@DisplayName("Should throw when the deck's format does not exist")
+	void shouldThrowWhenFormatDoesNotExist() {
+		when(this.deckRepository.findById(DECK_ID)).thenReturn(Optional.of(this.deck));
+		when(this.formatRepository.findById(FORMAT_ID)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> this.deckValidationService.evaluate(DECK_ID))
+				.isInstanceOf(FormatNotFoundException.class);
+	}
+
+	@Test
+	@DisplayName("Should return unlimited for basic lands")
+	void shouldReturnUnlimitedForBasicLands() {
+		final CardEntity mountain = card(1L, "Mountain", "Land");
+		mountain.setIsBasicLand(true);
+		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(mountain));
+		when(this.cardLegalityRepository.findByCardIdAndFormatId(1L, FORMAT_ID)).thenReturn(Optional.empty());
+
+		assertThat(this.deckValidationService.getMaxAllowedQuantity(1L, FORMAT_ID)).isEqualTo(9999);
+	}
+
+	@Test
+	@DisplayName("Should return the card's own copies_limit")
+	void shouldReturnCardCopiesLimit() {
+		final CardEntity dwarves = card(1L, "Seven Dwarves", "Creature");
+		dwarves.setCopiesLimit(7);
+		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(dwarves));
+		when(this.cardLegalityRepository.findByCardIdAndFormatId(1L, FORMAT_ID)).thenReturn(Optional.empty());
+
+		assertThat(this.deckValidationService.getMaxAllowedQuantity(1L, FORMAT_ID)).isEqualTo(7);
+	}
+
+	@Test
+	@DisplayName("Should fall back to the format copy limit")
+	void shouldReturnFormatCopyLimit() {
+		final CardEntity bolt = card(1L, "Lightning Bolt", "Instant");
+		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(bolt));
+		when(this.cardLegalityRepository.findByCardIdAndFormatId(1L, FORMAT_ID)).thenReturn(Optional.empty());
+		when(this.formatRepository.findById(FORMAT_ID)).thenReturn(Optional.of(baseFormat()));
+
+		assertThat(this.deckValidationService.getMaxAllowedQuantity(1L, FORMAT_ID)).isEqualTo(4);
+	}
+
+	@Test
+	@DisplayName("Should return the format's section size")
+	void shouldReturnSectionSize() {
+		when(this.formatRepository.findById(FORMAT_ID)).thenReturn(Optional.of(format(FORMAT_ID, 60, 80, 15, 4,
+				false, true)));
+
+		assertThat(this.deckValidationService.getMaxDeckSize(FORMAT_ID, "main")).isEqualTo(80);
+		assertThat(this.deckValidationService.getMaxDeckSize(FORMAT_ID, "sideboard")).isEqualTo(15);
+	}
+
+	// ==================== REMOVAL INTEGRITY ====================
+
+	@Test
+	@DisplayName("Should reject a removal quantity of zero")
+	void shouldRejectZeroRemoval() {
+		assertThatThrownBy(() -> this.deckValidationService.validateCardRemoval(DECK_ID, 1L, 0, "main"))
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("greater than 0");
+	}
+
+	@Test
+	@DisplayName("Should reject removing a card that is not in the section")
+	void shouldRejectRemovalOfMissingCard() {
+		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(DECK_ID, 1L, "main"))
+				.thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> this.deckValidationService.validateCardRemoval(DECK_ID, 1L, 1, "main"))
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Card not found in deck section");
+	}
+
+	@Test
+	@DisplayName("Should reject removing more copies than available")
+	void shouldRejectRemovalAboveAvailable() {
+		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(DECK_ID, 1L, "main"))
+				.thenReturn(Optional.of(entry(10L, 1L, 2, "main")));
+
+		assertThatThrownBy(() -> this.deckValidationService.validateCardRemoval(DECK_ID, 1L, 3, "main"))
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Cannot remove 3 cards, only 2 available");
+	}
+
+	// ==================== FIXTURES ====================
+
+	private void given(FormatEntity format, List<CardInDeckEntity> entries, List<CardEntity> cards,
+			List<CardLegalityEntity> legalities) {
+		when(this.deckRepository.findById(DECK_ID)).thenReturn(Optional.of(this.deck));
+		when(this.formatRepository.findById(format.getId())).thenReturn(Optional.of(format));
+		when(this.cardInDeckRepository.findByDeckId(DECK_ID)).thenReturn(entries);
+		if (!entries.isEmpty()) {
+			when(this.cardRepository.findAllById(any())).thenReturn(cards);
+		}
+		if (format.isTracksLegality() && !cards.isEmpty()) {
+			when(this.cardLegalityRepository.findByFormatIdAndCardIdIn(eq(format.getId()), any()))
+					.thenReturn(legalities);
+		}
+		if (this.deck.getCompanionCardId() != null) {
+			final CardEntity companion = cards.stream()
+					.filter(card -> card.getId().equals(this.deck.getCompanionCardId()))
+					.findFirst()
+					.orElseThrow(() -> new IllegalArgumentException("Companion card missing from fixture"));
+			when(this.cardRepository.findById(this.deck.getCompanionCardId())).thenReturn(Optional.of(companion));
+		}
+	}
+
+	private static DeckIssue singleIssue(DeckValidationResult result) {
+		assertThat(result.getIssues()).hasSize(1);
+		return result.getIssues().get(0);
+	}
+
+	private static FormatEntity baseFormat() {
+		return format(FORMAT_ID, 0, null, 15, 4, false, true);
+	}
+
+	private static FormatEntity format(long id, int minDeckSize, Integer maxDeckSize, Integer maxSideboardSize,
+			int maxCopies, boolean singleton, boolean tracksLegality) {
+		return FormatEntity.builder()
+				.id(id)
+				.name("Test Format")
+				.minDeckSize(minDeckSize)
+				.maxDeckSize(maxDeckSize)
+				.maxSideboardSize(maxSideboardSize)
+				.maxCopies(maxCopies)
+				.singleton(singleton)
+				.requiresCommander(false)
+				.tracksLegality(tracksLegality)
 				.build();
-
-		// Card legalities
-		this.bannedLegality = new CardLegalityEntity();
-		this.bannedLegality.setCardId(3L);
-		this.bannedLegality.setFormatId(1L);
-		this.bannedLegality.setLegalityStatus("banned");
-
-		final CardLegalityEntity restrictedLegality = new CardLegalityEntity();
-		restrictedLegality.setCardId(4L);
-		restrictedLegality.setFormatId(1L);
-		restrictedLegality.setLegalityStatus("restricted");
 	}
 
-	@Test
-	@DisplayName("Should inject service correctly")
-	void shouldInjectServiceCorrectly() {
-		assertThat(this.deckValidationService).isNotNull();
+	private static CardEntity card(long id, String name, String type) {
+		final CardEntity card = new CardEntity();
+		card.setId(id);
+		card.setName(name);
+		card.setCardType(type);
+		card.setCmc(1);
+		card.setIsBasicLand(false);
+		return card;
 	}
 
-	@Test
-	@DisplayName("Should allow valid card addition")
-	void shouldAllowValidCardAddition() {
-		// Given
-		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeck));
-		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.regularCard));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(1L, 1L)).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.standardFormat));
-		when(this.cardInDeckRepository.sumQuantityByDeckIdAndSection(1L, "main")).thenReturn(0);
-
-		// When & Then - Should not throw exception
-		this.deckValidationService.validateCardAddition(1L, 1L, 4, "main", false);
-
-		// Verify interactions - After optimization, in validateCardAddition only:
-		// 1. cardRepository.findById called once in validateCardAddition
-		// 2. cardLegalityRepository.findByCardIdAndFormatId called once (optimized!)
-		// 3. formatRepository.findById called once in private getMaxAllowedQuantity
-		verify(this.deckRepository).findById(1L);
-		verify(this.cardRepository, times(1)).findById(1L);
-		verify(this.cardLegalityRepository, times(1)).findByCardIdAndFormatId(1L, 1L);
+	private static CardInDeckEntity entry(long id, long cardId, int quantity, String section) {
+		return CardInDeckEntity.builder()
+				.id(id)
+				.deckId(DECK_ID)
+				.cardId(cardId)
+				.quantity(quantity)
+				.section(section)
+				.build();
 	}
 
-	@Test
-	@DisplayName("Should skip validation for maybeboard")
-	void shouldSkipValidationForMaybeboard() {
-		// When & Then - Should not throw exception or call any repositories
-		this.deckValidationService.validateCardAddition(1L, 1L, 100, "maybeboard", false);
-
-		// Verify no validation calls were made
-		verifyNoInteractions(this.deckRepository, this.cardRepository, this.cardLegalityRepository,
-				this.formatRepository);
-	}
-
-	@Test
-	@DisplayName("Should throw exception for banned card")
-	void shouldThrowExceptionForBannedCard() {
-		// Given
-		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeck));
-		when(this.cardRepository.findById(3L)).thenReturn(Optional.of(this.bannedCard));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(3L, 1L)).thenReturn(Optional.of(this.bannedLegality));
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.standardFormat));
-
-		// When & Then
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(1L, 3L, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("banned");
-
-		// Verify interactions - for banned cards, it fails early so
-		// cardRepository.findById is only called once
-		verify(this.deckRepository).findById(1L);
-		verify(this.cardRepository).findById(3L);
-		verify(this.cardLegalityRepository).findByCardIdAndFormatId(3L, 1L);
-	}
-
-	@Test
-	@DisplayName("Should allow unlimited basic lands")
-	void shouldAllowUnlimitedBasicLands() {
-		// Given
-		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeck));
-		when(this.cardRepository.findById(2L)).thenReturn(Optional.of(this.basicLand));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(2L, 1L)).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.standardFormat));
-		when(this.cardInDeckRepository.sumQuantityByDeckIdAndSection(1L, "main")).thenReturn(40); // Already 40 cards in
-																									// deck
-
-		// When & Then - Should allow any quantity for basic lands (20 would exceed
-		// normal 4-card limit)
-		// This should NOT throw an exception even though we're adding 20 copies of a
-		// card
-		this.deckValidationService.validateCardAddition(1L, 2L, 20, "main", false);
-
-		// Also verify that getMaxAllowedQuantity returns unlimited for basic lands
-		final int maxAllowed = this.deckValidationService.getMaxAllowedQuantity(2L, 1L);
-		assertThat(maxAllowed).isEqualTo(9999); // UNLIMITED_QUANTITY constant used by service
-
-		// Verify interactions - This test makes TWO separate API calls:
-		// 1. validateCardAddition() - optimized internally
-		// 2. getMaxAllowedQuantity() - separate public API call
-		// So cardRepository.findById is called twice total (once per API call)
-		verify(this.deckRepository).findById(1L);
-		verify(this.cardRepository, times(2)).findById(2L);
-		verify(this.cardLegalityRepository, atLeast(1)).findByCardIdAndFormatId(2L, 1L);
-	}
-
-	@Test
-	@DisplayName("Should return main deck size for getMaxDeckSize")
-	void shouldReturnMainDeckSizeForGetMaxDeckSize() {
-		// Given
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.standardFormat));
-
-		// When
-		final int maxDeckSize = this.deckValidationService.getMaxDeckSize(1L, "main");
-
-		// Then
-		assertThat(maxDeckSize).isEqualTo(60);
-	}
-
-	@Test
-	@DisplayName("Should return 4 for regular cards max quantity")
-	void shouldReturn4ForRegularCardsMaxQuantity() {
-		// Given
-		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.regularCard));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(1L, 1L)).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.standardFormat));
-
-		// When
-		final int maxQuantity = this.deckValidationService.getMaxAllowedQuantity(1L, 1L);
-
-		// Then
-		assertThat(maxQuantity).isEqualTo(4);
-	}
-
-	@Test
-	@DisplayName("Should throw exception for non-basic card quantity > 4")
-	void shouldThrowExceptionForNonBasicCardQuantityGreaterThan4() {
-		// Given
-		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeck));
-		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.regularCard));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(1L, 1L)).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.standardFormat));
-
-		// When & Then - Should throw exception for trying to add 5 copies of a
-		// non-basic card
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(1L, 1L, 5, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("quantity limit");
-	}
-
-	@Test
-	@DisplayName("Companion Lurrus: should reject permanent MV > 2 and allow MV <= 2")
-	void companionLurrusValidation() {
-		final Long deckId = 1L;
-		final Long companionId = 1000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity lurrus = new CardEntity();
-		lurrus.setId(companionId);
-		lurrus.setName("Lurrus of the Dream-Den");
-
-		final CardEntity permTooHigh = new CardEntity();
-		permTooHigh.setId(10L);
-		permTooHigh.setName("Permanent 3 MV");
-		permTooHigh.setCardType("Artifact");
-		permTooHigh.setCmc(3);
-
-		final CardEntity permOk = new CardEntity();
-		permOk.setId(11L);
-		permOk.setName("Permanent 2 MV");
-		permOk.setCardType("Enchantment");
-		permOk.setCmc(2);
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(lurrus));
-		when(this.cardRepository.findById(permTooHigh.getId())).thenReturn(Optional.of(permTooHigh));
-		when(this.cardRepository.findById(permOk.getId())).thenReturn(Optional.of(permOk));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-
-		final Long badId = permTooHigh.getId();
-		final Long okId = permOk.getId();
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, badId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Lurrus");
-
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, okId, 1, "main", false));
-	}
-
-	@Test
-	@DisplayName("Companion Obosh: should reject even MV nonland and allow odd MV")
-	void companionOboshValidation() {
-		final Long deckId = 2L;
-		final Long companionId = 2000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity obosh = new CardEntity();
-		obosh.setId(companionId);
-		obosh.setName("Obosh, the Preypiercer");
-
-		final CardEntity evenSpell = new CardEntity();
-		evenSpell.setId(20L);
-		evenSpell.setName("Even MV Spell");
-		evenSpell.setCardType("Instant");
-		evenSpell.setCmc(2);
-
-		final CardEntity oddSpell = new CardEntity();
-		oddSpell.setId(21L);
-		oddSpell.setName("Odd MV Spell");
-		oddSpell.setCardType("Sorcery");
-		oddSpell.setCmc(3);
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(obosh));
-		when(this.cardRepository.findById(evenSpell.getId())).thenReturn(Optional.of(evenSpell));
-		when(this.cardRepository.findById(oddSpell.getId())).thenReturn(Optional.of(oddSpell));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-
-		final Long evenId = evenSpell.getId();
-		final Long oddId = oddSpell.getId();
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, evenId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Obosh");
-
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, oddId, 1, "main", false));
-	}
-
-	@Test
-	@DisplayName("Companion Gyruda: should reject odd MV nonland and allow even MV")
-	void companionGyrudaValidation() {
-		final Long deckId = 3L;
-		final Long companionId = 3000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity gyruda = new CardEntity();
-		gyruda.setId(companionId);
-		gyruda.setName("Gyruda, Doom of Depths");
-
-		final CardEntity oddSpell = new CardEntity();
-		oddSpell.setId(30L);
-		oddSpell.setName("Odd MV Spell");
-		oddSpell.setCardType("Sorcery");
-		oddSpell.setCmc(3);
-
-		final CardEntity evenSpell = new CardEntity();
-		evenSpell.setId(31L);
-		evenSpell.setName("Even MV Spell");
-		evenSpell.setCardType("Instant");
-		evenSpell.setCmc(2);
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(gyruda));
-		when(this.cardRepository.findById(oddSpell.getId())).thenReturn(Optional.of(oddSpell));
-		when(this.cardRepository.findById(evenSpell.getId())).thenReturn(Optional.of(evenSpell));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-
-		final Long oddId = oddSpell.getId();
-		final Long evenId = evenSpell.getId();
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, oddId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Gyruda");
-
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, evenId, 1, "main", false));
-	}
-
-	@Test
-	@DisplayName("Companion Keruga: should reject MV <= 2 nonland and allow MV >= 3")
-	void companionKerugaValidation() {
-		final Long deckId = 4L;
-		final Long companionId = 4000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity keruga = new CardEntity();
-		keruga.setId(companionId);
-		keruga.setName("Keruga, the Macrosage");
-
-		final CardEntity mv2 = new CardEntity();
-		mv2.setId(40L);
-		mv2.setName("MV 2 nonland");
-		mv2.setCardType("Enchantment");
-		mv2.setCmc(2);
-
-		final CardEntity mv3 = new CardEntity();
-		mv3.setId(41L);
-		mv3.setName("MV 3 nonland");
-		mv3.setCardType("Artifact");
-		mv3.setCmc(3);
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(keruga));
-		when(this.cardRepository.findById(mv2.getId())).thenReturn(Optional.of(mv2));
-		when(this.cardRepository.findById(mv3.getId())).thenReturn(Optional.of(mv3));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-
-		final Long badId = mv2.getId();
-		final Long okId = mv3.getId();
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, badId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Keruga");
-
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, okId, 1, "main", false));
-	}
-
-	@Test
-	@DisplayName("Companion Kaheera: should reject creature subtype not in allowed list and allow allowed subtype")
-	void companionKaheeraValidation() {
-		final Long deckId = 5L;
-		final Long companionId = 5000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity kaheera = new CardEntity();
-		kaheera.setId(companionId);
-		kaheera.setName("Kaheera, the Orphanguard");
-
-		final CardEntity badCreature = new CardEntity();
-		badCreature.setId(50L);
-		badCreature.setName("Human Rogue");
-		badCreature.setCardType("Creature");
-		badCreature.setSubtypes(java.util.List.of("Human", "Rogue"));
-
-		final CardEntity goodCreature = new CardEntity();
-		goodCreature.setId(51L);
-		goodCreature.setName("Elemental");
-		goodCreature.setCardType("Creature");
-		goodCreature.setSubtypes(java.util.List.of("Elemental"));
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(kaheera));
-		when(this.cardRepository.findById(badCreature.getId())).thenReturn(Optional.of(badCreature));
-		when(this.cardRepository.findById(goodCreature.getId())).thenReturn(Optional.of(goodCreature));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-
-		final Long badId = badCreature.getId();
-		final Long okId = goodCreature.getId();
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, badId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Kaheera");
-
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, okId, 1, "main", false));
-	}
-
-	@Test
-	@DisplayName("Companion Jegantha: should reject repeated mana symbols and allow non-repeating costs")
-	void companionJeganthaValidation() {
-		final Long deckId = 6L;
-		final Long companionId = 6000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity jegantha = new CardEntity();
-		jegantha.setId(companionId);
-		jegantha.setName("Jegantha, the Wellspring");
-
-		// Failing: RR (raw) and WWU (brace form) -> repeats of R and W
-		final CardEntity rrSpell = new CardEntity();
-		rrSpell.setId(60L);
-		rrSpell.setName("RR Spell");
-		rrSpell.setCardType("Instant");
-		rrSpell.setManaCost("RR");
-		rrSpell.setCmc(2);
-
-		final CardEntity wwuSpell = new CardEntity();
-		wwuSpell.setId(61L);
-		wwuSpell.setName("WWU Spell");
-		wwuSpell.setCardType("Sorcery");
-		wwuSpell.setManaCost("{W}{W}{U}");
-		wwuSpell.setCmc(3);
-
-		// Passing: R/G (hybrid) and 2R (numeral + single R)
-		final CardEntity hybridRG = new CardEntity();
-		hybridRG.setId(62L);
-		hybridRG.setName("Hybrid RG");
-		hybridRG.setCardType("Instant");
-		hybridRG.setManaCost("{R/G}");
-		hybridRG.setCmc(1);
-
-		final CardEntity twoR = new CardEntity();
-		twoR.setId(63L);
-		twoR.setName("Two and R");
-		twoR.setCardType("Sorcery");
-		twoR.setManaCost("{2}{R}");
-		twoR.setCmc(3);
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(jegantha));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-
-		when(this.cardRepository.findById(rrSpell.getId())).thenReturn(Optional.of(rrSpell));
-		when(this.cardRepository.findById(wwuSpell.getId())).thenReturn(Optional.of(wwuSpell));
-		when(this.cardRepository.findById(hybridRG.getId())).thenReturn(Optional.of(hybridRG));
-		when(this.cardRepository.findById(twoR.getId())).thenReturn(Optional.of(twoR));
-
-		final Long rrId = rrSpell.getId();
-		final Long wwuId = wwuSpell.getId();
-		final Long rgId = hybridRG.getId();
-		final Long twoRId = twoR.getId();
-
-		// Fail cases
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, rrId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Jegantha");
-
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, wwuId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Jegantha");
-
-		// Pass cases
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, rgId, 1, "main", false));
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, twoRId, 1, "main", false));
-	}
-
-	@Test
-	@DisplayName("Companion Umori: should reject mixed nonland types and allow single type")
-	void companionUmoriValidation() {
-		final Long deckId = 7L;
-		final Long companionId = 7000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity umori = new CardEntity();
-		umori.setId(companionId);
-		umori.setName("Umori, the Collector");
-
-		// Existing main deck has Instants only
-		final CardInDeckEntity existingInstantEntry = CardInDeckEntity.builder().id(701L).deckId(deckId).cardId(7010L)
-				.quantity(4).section("main").build();
-		final CardEntity existingInstant = new CardEntity();
-		existingInstant.setId(7010L);
-		existingInstant.setName("Existing Instant");
-		existingInstant.setCardType("Instant");
-		existingInstant.setCmc(1);
-
-		// Candidate different type (Artifact) -> should fail
-		final CardEntity artifactCard = new CardEntity();
-		artifactCard.setId(7020L);
-		artifactCard.setName("New Artifact");
-		artifactCard.setCardType("Artifact");
-		artifactCard.setCmc(2);
-
-		// Candidate same type (Instant) -> should pass
-		final CardEntity instantCard = new CardEntity();
-		instantCard.setId(7030L);
-		instantCard.setName("New Instant");
-		instantCard.setCardType("Instant");
-		instantCard.setCmc(2);
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(umori));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-		// Deck composition
-		when(this.cardInDeckRepository.findByDeckId(deckId)).thenReturn(java.util.List.of(existingInstantEntry));
-		when(this.cardRepository.findById(existingInstantEntry.getCardId())).thenReturn(Optional.of(existingInstant));
-		// Candidate lookups
-		when(this.cardRepository.findById(artifactCard.getId())).thenReturn(Optional.of(artifactCard));
-		when(this.cardRepository.findById(instantCard.getId())).thenReturn(Optional.of(instantCard));
-
-		final Long artifactId = artifactCard.getId();
-		final Long instantId = instantCard.getId();
-
-		// Fail: adding Artifact introduces mixed nonland types
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, artifactId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Umori");
-
-		// Pass: adding Instant keeps single nonland type
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, instantId, 1, "main", false));
-	}
-
-	@Test
-	@DisplayName("Companion Yorion: should enforce main deck size >= min+20")
-	void companionYorionValidation() {
-		final Long deckId = 8L;
-		final Long companionId = 8000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity yorion = new CardEntity();
-		yorion.setId(companionId);
-		yorion.setName("Yorion, Sky Nomad");
-
-		final CardEntity candidate = new CardEntity();
-		candidate.setId(8010L);
-		candidate.setName("Filler Card");
-		candidate.setCardType("Instant");
-		candidate.setCmc(1);
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(yorion));
-		when(this.cardRepository.findById(candidate.getId())).thenReturn(Optional.of(candidate));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L)).thenReturn(
-				Optional.of(FormatEntity.builder().id(1L).name("Standard").minDeckSize(60).maxDeckSize(80).build()));
-
-		// Case 1: current main deck size is 79, adding 1 -> 80 (min+20), should pass
-		when(this.cardInDeckRepository.sumQuantityByDeckIdAndSection(deckId, "main")).thenReturn(79);
-		assertThatNoException().isThrownBy(
-				() -> this.deckValidationService.validateCardAddition(deckId, candidate.getId(), 1, "main", false));
-
-		// Case 2: current main deck size is 78, adding 1 -> 79 (< min+20), should fail
-		when(this.cardInDeckRepository.sumQuantityByDeckIdAndSection(deckId, "main")).thenReturn(78);
-		assertThatThrownBy(
-				() -> this.deckValidationService.validateCardAddition(deckId, candidate.getId(), 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Yorion");
-	}
-
-	@Test
-	@DisplayName("Companion Zirda: should reject permanents without activated abilities and allow those with them")
-	void companionZirdaValidation() {
-		final Long deckId = 9L;
-		final Long companionId = 9000L;
-		final DeckEntity deck = new DeckEntity();
-		deck.setId(deckId);
-		deck.setFormatId(1L);
-		deck.setCompanionCardId(companionId);
-
-		final CardEntity zirda = new CardEntity();
-		zirda.setId(companionId);
-		zirda.setName("Zirda, the Dawnwaker");
-
-		// Existing permanent without activated ability (static text)
-		final CardInDeckEntity existingPermanentEntry = CardInDeckEntity.builder().id(901L).deckId(deckId).cardId(9010L)
-				.quantity(2).section("main").build();
-		final CardEntity existingPermanentNoAbility = new CardEntity();
-		existingPermanentNoAbility.setId(9010L);
-		existingPermanentNoAbility.setName("Static Enchantment");
-		existingPermanentNoAbility.setCardType("Enchantment");
-		existingPermanentNoAbility.setCardText("Creatures you control get +1/+1.");
-
-		// Candidate permanent without activated ability -> should fail
-		final CardEntity candidateNoAbility = new CardEntity();
-		candidateNoAbility.setId(9020L);
-		candidateNoAbility.setName("Vanilla Artifact");
-		candidateNoAbility.setCardType("Artifact");
-		candidateNoAbility.setCardText("This artifact does nothing.");
-
-		// Candidate permanent with activated ability -> should pass
-		final CardEntity candidateWithAbility = new CardEntity();
-		candidateWithAbility.setId(9030L);
-		candidateWithAbility.setName("Tapping Equipment");
-		candidateWithAbility.setCardType("Artifact");
-		candidateWithAbility.setCardText("{T}: Equipped creature gets +1/+0 until end of turn.");
-
-		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(deck));
-		when(this.cardRepository.findById(companionId)).thenReturn(Optional.of(zirda));
-		when(this.cardLegalityRepository.findByCardIdAndFormatId(anyLong(), anyLong())).thenReturn(Optional.empty());
-		when(this.formatRepository.findById(1L))
-				.thenReturn(Optional.of(FormatEntity.builder().id(1L).name("Standard").maxDeckSize(60).build()));
-		// Deck composition
-		when(this.cardInDeckRepository.findByDeckId(deckId)).thenReturn(java.util.List.of(existingPermanentEntry));
-		when(this.cardRepository.findById(existingPermanentEntry.getCardId()))
-				.thenReturn(Optional.of(existingPermanentNoAbility));
-		// Candidate lookups
-		when(this.cardRepository.findById(candidateNoAbility.getId())).thenReturn(Optional.of(candidateNoAbility));
-		when(this.cardRepository.findById(candidateWithAbility.getId())).thenReturn(Optional.of(candidateWithAbility));
-
-		final Long badId = candidateNoAbility.getId();
-		final Long okId = candidateWithAbility.getId();
-
-		// Fail: adding a permanent without activated ability violates Zirda
-		assertThatThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, badId, 1, "main", false))
-				.isInstanceOf(InvalidDeckCompositionException.class).hasMessageContaining("Zirda");
-
-		// Re-mock deck composition for pass case: no conflicting permanents in main
-		when(this.cardInDeckRepository.findByDeckId(deckId)).thenReturn(java.util.List.of());
-		// Pass: adding a permanent with activated ability is allowed
-		assertThatNoException()
-				.isThrownBy(() -> this.deckValidationService.validateCardAddition(deckId, okId, 1, "main", false));
+	private static CardLegalityEntity legality(long cardId, long formatId, String status) {
+		final CardLegalityEntity entity = new CardLegalityEntity();
+		entity.setCardId(cardId);
+		entity.setFormatId(formatId);
+		entity.setLegalityStatus(status);
+		return entity;
 	}
 }

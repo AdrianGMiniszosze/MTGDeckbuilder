@@ -1,8 +1,8 @@
 # Modelo de validación de mazos
 
-- **Estado:** aprobado; fase 1 (`V3__deck_validation_model.sql`) implementada
+- **Estado:** aprobado; fases 1 (`V3__deck_validation_model.sql`) y 2 (`evaluate`) implementadas
 - **Alcance:** estados de mazo, diagnóstico de legalidad, contrato y esquema
-- **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`
+- **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`, D-012
 
 ## 1. Problema
 
@@ -49,8 +49,8 @@ las reglas de companion (que viven en Java) y no cubre `DELETE`.
 | `SINGLETON_VIOLATION` | error | Formato singleton y más de 1 copia |
 | `SIDEBOARD_TOO_LARGE` | error | Sideboard > `max_sideboard_size` |
 | `DECK_TOO_LARGE` | error | Main > `max_deck_size` |
-| `DECK_TOO_SMALL` | error | Main < `min_deck_size` (solo al publicar) |
-| `MISSING_COMMANDER` | error | `requires_commander` sin comandante |
+| `DECK_TOO_SMALL` | error | Main < `min_deck_size`; se emite siempre, solo bloquea al publicar |
+| `MISSING_COMMANDER` | error | **Diferido** (D-012): no hay campo de comandante en esquema ni contrato |
 | `COMPANION_RULE_VIOLATION` | error | `CompanionRules`, Umori, Yorion, Zirda |
 | `LEGALITY_UNKNOWN` | warning | El formato rastrea legalidad pero no hay fila para esa carta |
 
@@ -186,8 +186,8 @@ Se conservan:
 - Triggers genéricos `set_updated_at()` de `users`, `sets`, `cards`, `formats`, `decks`.
 
 `decks.updated_at` al cambiar cartas pasa a gestionarse en Java
-(`DeckServiceImpl.updateDeckModificationTime`, hoy sin uso), incluyendo el caso
-`DELETE` que el trigger nunca cubrió.
+(`DeckServiceImpl.updateDeckModificationTime`), incluyendo el caso `DELETE` que el
+trigger nunca cubrió.
 
 **Trade-off aceptado:** la BD deja de garantizar que un mazo publicado sea legal ante
 escrituras que no pasen por la API. Hoy la API es el único escritor. Si aparece un
@@ -195,27 +195,41 @@ segundo escritor (importador o scripts de administración), se reevalúa.
 
 ## 7. Java
 
-### 7.1 Refactor del validador
+### 7.1 Refactor del validador (implementado)
 
 ```java
 DeckValidationResult evaluate(Long deckId);
 ```
 
-- `DeckValidationResult`: `status` + `List<DeckIssue>`.
-- Sin excepciones para reglas de formato; `validateCardRemoval` se mantiene (integridad).
-- `getMaxAllowedQuantity` pasa a considerar `cards.copies_limit` y a sumar por `oracle_id`.
+- `DeckValidationResult`: `deckId`, `status`, `validationStatus` (`legal` / `illegal` /
+  `unknown`), `List<DeckIssue>`; helpers `getErrors`, `getWarnings`, `hasErrors`.
+- `DeckIssue`: `severity`, `code`, `message`, `cardId`, `deckContentId`, `section`.
+  `cardId`/`deckContentId` son `null` cuando el problema afecta al mazo completo o al
+  grupo de copias repartido entre secciones.
+- Sin excepciones para reglas de formato: solo lanza `DeckNotFoundException` y
+  `FormatNotFoundException`. `validateCardRemoval` se mantiene (integridad de datos).
+- `validateCardAddition` se elimina de la interfaz: el guardado ya no valida formato.
+- `getMaxAllowedQuantity` considera `cards.copies_limit` y el estado `restricted`.
+- `evaluate` agrupa copias por `oracle_id` (o `card_id` si falta el oracle), cuenta main
+  + sideboard, ignora `maybeboard` y omite legalidad si `tracks_legality = FALSE`.
+- **Comandante diferido (D-012):** `MISSING_COMMANDER` no se emite porque ni el esquema
+  ni el contrato tienen un campo de comandante; declarar la regla la haría
+  insatisfacible. Se implementará junto con ese campo.
 
-### 7.2 `DeckServiceImpl`
+### 7.2 `DeckServiceImpl` (parcial)
 
-- `create` / `update`: sin validación de formato; `update` fuerza `status = draft`.
-- `publish(id)`: `evaluate()`; errores → `DeckNotLegalException` (nueva) → 409.
-- `unpublish(id)`: `draft`.
+- `create` / `update`: sin validación de formato; fuerzan `status = draft` y limpian
+  `published_at`. Implementado.
 - `addCard` / `removeCard`: sin bloqueo por formato; actualizan `decks.updated_at`.
-- `create`/`update` recalculan `decks.updated_at` (ya lo hacen vía `save`).
+  Implementado.
+- `publish(id)`: `evaluate()`; errores → `DeckNotLegalException` (nueva) → 409.
+  **Pendiente (fase 3).**
+- `unpublish(id)`: `draft`. **Pendiente (fase 3).**
 
 ### 7.3 `GlobalExceptionHandler`
 
 Nuevo handler `DeckNotLegalException` → `409` `DECK_NOT_LEGAL` con `issues`.
+**Pendiente (fase 3).**
 
 ## 8. Comportamiento por acción
 
@@ -243,29 +257,32 @@ Nuevo handler `DeckNotLegalException` → `409` `DECK_NOT_LEGAL` con `issues`.
 - El trigger `check_card_quantity` **ya no existe**.
 - Los constraints de `card_deck` siguen rechazando `quantity <= 0` y sección inválida.
 
-Unitarias:
+Unitarias (implementadas):
 
-- `DeckValidationServiceImplTest`: un caso por código, `copies_limit` 0 / N / NULL,
+- `DeckValidationServiceTest`: un caso por código, `copies_limit` 0 / N / NULL,
   recuento por `oracle_id` con dos impresiones, `maybeboard` ignorado,
-  `tracks_legality = FALSE` sin avisos.
-- `DeckServiceImplTest`: `create`/`update` no bloquean, `update` degrada a `draft`,
-  `publish` propaga errores, `addCard`/`removeCard` tocan `updated_at`.
+  `tracks_legality = FALSE` sin avisos, `DECK_TOO_SMALL` siempre emitido.
+- `DeckServiceImplTest`: `create`/`update` fuerzan `draft`, `addCard`/`removeCard`
+  tocan `updated_at`.
 
-Integración:
+Integración (implementadas):
 
-- `POST /decks` ilegal → `201`.
-- `publish` ilegal → `409` con `issues`; publicar y editar → `draft`.
-- 4 en main + 1 en sideboard → `MAX_COPIES_EXCEEDED`.
+- `DeckValidationIntegrationTest` ejecuta `evaluate` real: 4 en main + 1 en sideboard →
+  `MAX_COPIES_EXCEEDED`; dos impresiones por `oracle_id`; baneada con `card_id` y
+  `deck_content_id`; maybeboard ignorado; formato sin `tracks_legality`; mazo corto.
+- **Pendiente (fase 3):** `POST /decks` ilegal → `201`, `publish` ilegal → `409` con
+  `issues`, publicar y editar → `draft`.
 
 ## 10. Fases
 
-1. `V3` + entidades/dominio/mappers + smoke actualizado.
-2. Refactor del validador a `evaluate()`.
+1. `V3` + entidades/dominio/mappers + smoke actualizado. **Hecha.**
+2. Refactor del validador a `evaluate()`. **Hecha.**
 3. Endpoints `validation`, `publish`, `unpublish` + handler 409.
 4. Contrato: `format` requerido, `status`, `validation_status`, `issues`,
    `copies_limit`; regenerar.
 5. `addCard` / `removeCard` por HTTP.
 6. Importación de datos (ver `docs/DATA_IMPORT.md` cuando exista).
+7. Comandante: campo en esquema y contrato, después `MISSING_COMMANDER` (D-012).
 
 ## 11. Decisiones cerradas
 
@@ -281,6 +298,7 @@ Integración:
 | Formato "for fun" | Fila `Casual`, no `NULL` |
 | `unlimited_copies` | Sustituido por `copies_limit` (`NULL`/`0`/`N`) |
 | Recuento de copias | Por `oracle_id` |
+| `MISSING_COMMANDER` | Diferido hasta tener campo de comandante (D-012) |
 
 ## 12. Riesgos
 

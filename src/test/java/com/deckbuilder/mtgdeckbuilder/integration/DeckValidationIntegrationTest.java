@@ -1,5 +1,6 @@
 package com.deckbuilder.mtgdeckbuilder.integration;
 
+import com.deckbuilder.mtgdeckbuilder.application.DeckValidationService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
@@ -12,6 +13,12 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssueCode;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
+import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
+import com.deckbuilder.mtgdeckbuilder.model.IssueSeverity;
+import com.deckbuilder.mtgdeckbuilder.model.ValidationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +27,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,6 +53,9 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
 
     @Autowired
     private CardInDeckRepository cardInDeckRepository;
+
+    @Autowired
+    private DeckValidationService deckValidationService;
 
     private DeckEntity testDeck;
     private CardEntity lightningBolt;
@@ -233,6 +245,157 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
                     .section(section)
                     .build()
             );
+        }
+    }
+
+    @Nested
+    @DisplayName("Deck Evaluation Tests")
+    class DeckEvaluationTests {
+
+        @Test
+        @DisplayName("Should count copies across main and sideboard")
+        void shouldCountCopiesAcrossSections() {
+            // Given - 4 in main + 1 in sideboard = 5 copies of the same card
+            addCard(lightningBolt.getId(), 4, "main");
+            addCard(lightningBolt.getId(), 1, "sideboard");
+
+            // When
+            DeckValidationResult result = deckValidationService.evaluate(testDeck.getId());
+
+            // Then
+            assertThat(result.getStatus()).isEqualTo(DeckStatus.DRAFT);
+            assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.ILLEGAL);
+            DeckIssue issue = singleIssue(result, DeckIssueCode.MAX_COPIES_EXCEEDED);
+            assertThat(issue.getSeverity()).isEqualTo(IssueSeverity.ERROR);
+            assertThat(issue.getCardId()).isEqualTo(lightningBolt.getId());
+            assertThat(issue.getMessage()).contains("5 copies").contains("limit of 4");
+            // The limit is exceeded by the whole group, not by one row.
+            assertThat(issue.getDeckContentId()).isNull();
+            assertThat(issue.getSection()).isNull();
+        }
+
+        @Test
+        @DisplayName("Should count copies by oracle id across printings")
+        void shouldCountCopiesByOracleIdAcrossPrintings() {
+            // Given - two printings of the same card, 3 + 2 copies
+            UUID oracleId = UUID.randomUUID();
+            lightningBolt.setOracleId(oracleId);
+            cardRepository.save(lightningBolt);
+            CardEntity secondPrinting = createCard("Lightning Bolt (Alt)", "Instant", null, false);
+            secondPrinting.setOracleId(oracleId);
+            cardRepository.save(secondPrinting);
+
+            addCard(lightningBolt.getId(), 3, "main");
+            addCard(secondPrinting.getId(), 2, "main");
+
+            // When
+            DeckValidationResult result = deckValidationService.evaluate(testDeck.getId());
+
+            // Then
+            DeckIssue issue = singleIssue(result, DeckIssueCode.MAX_COPIES_EXCEEDED);
+            assertThat(issue.getMessage()).contains("5 copies");
+        }
+
+        @Test
+        @DisplayName("Should flag a banned card on the row that contains it")
+        void shouldFlagBannedCardOnTheRow() {
+            // Given
+            CardInDeckEntity entry = addCard(bannedCard.getId(), 1, "main");
+
+            // When
+            DeckValidationResult result = deckValidationService.evaluate(testDeck.getId());
+
+            // Then
+            DeckIssue issue = singleIssue(result, DeckIssueCode.CARD_BANNED);
+            assertThat(issue.getCardId()).isEqualTo(bannedCard.getId());
+            assertThat(issue.getDeckContentId()).isEqualTo(entry.getId());
+            assertThat(issue.getSection()).isEqualTo("main");
+        }
+
+        @Test
+        @DisplayName("Should ignore the maybeboard for copy limits and legality")
+        void shouldIgnoreMaybeboard() {
+            // Given - banned card with 10 copies, but only in the maybeboard
+            addCard(bannedCard.getId(), 10, "maybeboard");
+
+            // When
+            DeckValidationResult result = deckValidationService.evaluate(testDeck.getId());
+
+            // Then
+            assertThat(issuesWithCode(result, DeckIssueCode.CARD_BANNED)).isEmpty();
+            assertThat(issuesWithCode(result, DeckIssueCode.MAX_COPIES_EXCEEDED)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Should not warn about legality when the format does not track it")
+        void shouldSkipLegalityWhenFormatDoesNotTrackIt() {
+            // Given - casual format without legality tracking and no size rules
+            FormatEntity casual = formatRepository.save(FormatEntity.builder()
+                .name("Casual Test")
+                .description("No format rules")
+                .minDeckSize(0)
+                .tracksLegality(false)
+                .build());
+            DeckEntity casualDeck = createDeck(casual);
+            cardInDeckRepository.save(CardInDeckEntity.builder()
+                .cardId(lightningBolt.getId())
+                .deckId(casualDeck.getId())
+                .quantity(4)
+                .section("main")
+                .build());
+
+            // When
+            DeckValidationResult result = deckValidationService.evaluate(casualDeck.getId());
+
+            // Then
+            assertThat(result.getIssues()).isEmpty();
+            assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.LEGAL);
+            assertThat(result.getStatus()).isEqualTo(DeckStatus.DRAFT);
+        }
+
+        @Test
+        @DisplayName("Should report a draft deck below the format minimum")
+        void shouldReportDeckTooSmall() {
+            // Given
+            addCard(lightningBolt.getId(), 4, "main");
+
+            // When
+            DeckValidationResult result = deckValidationService.evaluate(testDeck.getId());
+
+            // Then
+            DeckIssue issue = singleIssue(result, DeckIssueCode.DECK_TOO_SMALL);
+            assertThat(issue.getSection()).isEqualTo("main");
+            assertThat(issue.getMessage()).contains("requires at least 60");
+        }
+
+        private CardInDeckEntity addCard(Long cardId, int quantity, String section) {
+            return cardInDeckRepository.save(CardInDeckEntity.builder()
+                .cardId(cardId)
+                .deckId(testDeck.getId())
+                .quantity(quantity)
+                .section(section)
+                .build());
+        }
+
+        private DeckEntity createDeck(FormatEntity format) {
+            DeckEntity deck = new DeckEntity();
+            deck.setName("Deck for " + format.getName());
+            deck.setFormatId(format.getId());
+            deck.setUserId(testUser.getId());
+            deck.setCreated(LocalDateTime.now());
+            deck.setModified(LocalDateTime.now());
+            deck.setIsPrivate(false);
+            return deckRepository.save(deck);
+        }
+
+        private DeckIssue singleIssue(DeckValidationResult result, DeckIssueCode code) {
+            List<DeckIssue> matching = issuesWithCode(result, code);
+            assertThat(matching).hasSize(1);
+            return matching.get(0);
+        }
+
+        private List<DeckIssue> issuesWithCode(DeckValidationResult result, DeckIssueCode code) {
+            return result.getIssues().stream().filter(issue -> issue.getCode() == code).toList();
         }
     }
 }

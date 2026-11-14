@@ -239,3 +239,26 @@ ni del historial de chat.
   temporal o re-indexando desde disco.
 - **Revisar si:** se adopta un mono-repo con otros lenguajes y la regla necesita
   excepciones.
+
+### D-012 - `MISSING_COMMANDER` diferido hasta tener campo de comandante
+
+- **Fecha:** 2026-11-14
+- **Estado:** Aceptada (diferida)
+- **Decisión:** No emitir `MISSING_COMMANDER` en `evaluate()` por ahora. El código queda
+  reservado, pero la regla se implementa junto con un campo de comandante en el esquema
+  y en el contrato.
+- **Contexto:** El modelo aprobado incluye `formats.requires_commander`, pero ni
+  `decks` ni `openapi.yml` tienen un campo de comandante. Un mazo Commander cumpliría
+  `requires_commander` sin poder declararlo, así que la regla rechazaría todos los mazos
+  del formato sin ofrecer una salida.
+- **Por qué:** Una validación insatisfacible es peor que una ausente: bloquea publicar
+  sin que el usuario pueda arreglarlo. Es preferible publicar sin la comprobación y
+  añadirla cuando exista el dato.
+- **Alternativas descartadas:** usar `companionCardId` como comandante (son conceptos
+  distintos y el contrato tampoco lo expone); derivar el comandante de la primera carta
+  legendaria (heurística, no un dato); bloquear Commander hasta la fase 7 (impide probar
+  el resto del modelo).
+- **Consecuencias:** `MISSING_COMMANDER` no aparece en los resultados actuales. Commander
+  se evalúa con copias, legalidad y tamaño, pero no con la presencia de comandante.
+  Registrado en `docs/DECK_VALIDATION_MODEL.md` §4 y §7.1.
+- **Revisar si:** se añade `commander_card_id` (o equivalente) a `decks` y al contrato.
