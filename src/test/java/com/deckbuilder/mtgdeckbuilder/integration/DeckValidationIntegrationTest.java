@@ -458,12 +458,60 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
             // When/Then - publish
             mockMvc.perform(post("/decks/{id}/publish", deck.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(deck.getId()));
+                .andExpect(jsonPath("$.id").value(deck.getId()))
+                .andExpect(jsonPath("$.status").value("published"))
+                .andExpect(jsonPath("$.validation_status").value("legal"));
 
             // When/Then - unpublish
             mockMvc.perform(post("/decks/{id}/unpublish", deck.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(deck.getId()));
+                .andExpect(jsonPath("$.id").value(deck.getId()))
+                .andExpect(jsonPath("$.status").value("draft"));
+        }
+
+        @Test
+        @DisplayName("Should include the diagnosis in the deck detail")
+        void shouldIncludeDiagnosisInDeckDetail() throws Exception {
+            // Given - illegal deck (too small, unknown legality)
+            addCard(testDeck.getId(), lightningBolt.getId(), 4, "main");
+
+            // When/Then
+            mockMvc.perform(get("/decks/{id}", testDeck.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(testDeck.getId()))
+                .andExpect(jsonPath("$.status").value("draft"))
+                .andExpect(jsonPath("$.validation_status").value("illegal"))
+                .andExpect(jsonPath("$.issue_count.errors").value(1))
+                .andExpect(jsonPath("$.issues[*].code", hasItem("DECK_TOO_SMALL")));
+        }
+
+        @Test
+        @DisplayName("Should save an illegal deck with 201 and its diagnosis")
+        void shouldSaveIllegalDeck() throws Exception {
+            // Given - an empty Standard deck is illegal but saving is free
+            String body = String.format("""
+                {"deck_name": "Illegal but saved", "user_id": %d, "format": %d}
+                """, testUser.getId(), standardFormat.getId());
+
+            // When/Then
+            mockMvc.perform(post("/decks").contentType("application/json").content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("draft"))
+                .andExpect(jsonPath("$.validation_status").value("illegal"))
+                .andExpect(jsonPath("$.issues[*].code", hasItem("DECK_TOO_SMALL")));
+        }
+
+        @Test
+        @DisplayName("Should reject a deck without a format")
+        void shouldRejectDeckWithoutFormat() throws Exception {
+            // Given
+            String body = String.format("""
+                {"deck_name": "No format", "user_id": %d}
+                """, testUser.getId());
+
+            // When/Then
+            mockMvc.perform(post("/decks").contentType("application/json").content(body))
+                .andExpect(status().isBadRequest());
         }
     }
 

@@ -262,3 +262,40 @@ ni del historial de chat.
   se evalúa con copias, legalidad y tamaño, pero no con la presencia de comandante.
   Registrado en `docs/DECK_VALIDATION_MODEL.md` §4 y §7.1.
 - **Revisar si:** se añade `commander_card_id` (o equivalente) a `decks` y al contrato.
+
+### D-013 - Los issues viven solo en el mazo, no en cada fila
+
+- **Fecha:** 2026-11-14
+- **Estado:** Aceptada
+- **Decisión:** `DeckIssue` se expone en `Deck.issues` y `CompleteDeck.issues`; no se
+  añade `CardDeck.issues`.
+- **Contexto:** El modelo inicial listaba `issues` también por fila de `card_deck`. Cada
+  `DeckIssue` ya lleva `card_id`, `deck_content_id` y `section`, así que la fila no aporta
+  información nueva.
+- **Por qué:** Duplicar el mismo dato en cada fila agranda la respuesta y obliga a mapear
+  y recorrer la lista dos veces. El cliente puede agrupar por `deck_content_id` con los
+  issues del mazo.
+- **Alternativas descartadas:** `CardDeck.issues` completo (duplicado); solo un booleano
+  por fila (otro campo que mantener sincronizado).
+- **Consecuencias:** El editor colorea filas cruzando `issues[].deck_content_id` con el
+  `CardDeck.deck_id`/`card_id`. `DeckValidationMapper` es la única traducción de issues.
+- **Revisar si:** el cliente necesita el diagnóstico por fila sin cargar el mazo completo.
+
+### D-014 - La lista de mazos no calcula el diagnóstico
+
+- **Fecha:** 2026-11-14
+- **Estado:** Aceptada
+- **Decisión:** Las respuestas de un solo mazo (`GET /decks/{id}`, `POST /decks`,
+  `PUT /decks/{id}`, `publish`, `unpublish`) incluyen `validation_status`, `issue_count`
+  e `issues`. `GET /decks` deja esos campos en `null`.
+- **Contexto:** `evaluate()` consulta carta, formato, legalidad y copias. Calcularlo para
+  cada elemento de una página de 20 añade decenas de consultas a una ruta de listado.
+- **Por qué:** El listado sirve para navegar, no para editar. El coste por escritura es un
+  `evaluate()` extra sobre un único mazo; el coste por página sería multiplicativo y
+  innecesario.
+- **Alternativas descartadas:** calcular en la lista (N+1); guardar el diagnóstico en la
+  tabla (deja de ser calculado y se queda obsoleto); parámetro `include=validation`
+  (complica el contrato antes de tener un cliente que lo pida).
+- **Consecuencias:** El campo es nullable en el contrato; el cliente que quiera el
+  diagnóstico de un mazo llama a `GET /decks/{id}/validation` o a `GET /decks/{id}`.
+- **Revisar si:** aparece una pantalla que necesite diagnósticos de una página entera.

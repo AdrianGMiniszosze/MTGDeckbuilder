@@ -1441,6 +1441,7 @@ components:
       required:
         - deck_name
         - user_id
+        - format
       properties:
         id:
           type: integer
@@ -1486,6 +1487,24 @@ components:
           items:
             $ref: '#/components/schemas/CardDeck'
           maxItems: 250
+        status:
+          type: string
+          enum: [draft, published]
+          readOnly: true
+          description: Lifecycle state; editing a published deck returns it to draft
+        validation_status:
+          type: string
+          enum: [legal, illegal, unknown]
+          readOnly: true
+          description: Calculated diagnosis; null on list responses
+        issue_count:
+          $ref: '#/components/schemas/IssueCount'
+        issues:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/DeckIssue'
+          description: Full diagnosis; null on list responses
 
     CompleteDeck:
       type: object
@@ -1549,6 +1568,21 @@ components:
         format:
           type: integer
           minimum: 1
+        status:
+          type: string
+          enum: [draft, published]
+          readOnly: true
+        validation_status:
+          type: string
+          enum: [legal, illegal, unknown]
+          readOnly: true
+        issue_count:
+          $ref: '#/components/schemas/IssueCount'
+        issues:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/DeckIssue'
 
     Tag:
       type: object
@@ -1634,6 +1668,21 @@ components:
         section:
           type: string
           enum: [main, sideboard, maybeboard]
+
+    IssueCount:
+      type: object
+      required:
+        - errors
+        - warnings
+      properties:
+        errors:
+          type: integer
+          minimum: 0
+          example: 0
+        warnings:
+          type: integer
+          minimum: 0
+          example: 1
 
     DeckValidation:
       type: object

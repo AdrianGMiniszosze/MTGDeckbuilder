@@ -25,7 +25,6 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -105,8 +104,10 @@ class DeckControllerTest {
 	@DisplayName("Should get deck by ID when it exists")
 	void shouldGetDeckById_WhenExists() {
 		// Given
+		final DeckValidationResult validation = validation();
 		when(this.deckService.findById(1L)).thenReturn(Optional.of(this.testDeck));
-		when(this.deckMapper.toCompleteDeckDTO(this.testDeck)).thenReturn(this.testCompleteDeckDTO);
+		when(this.deckService.validate(1L)).thenReturn(validation);
+		when(this.deckMapper.toCompleteDeckDTO(this.testDeck, validation)).thenReturn(this.testCompleteDeckDTO);
 
 		// When
 		final ResponseEntity<CompleteDeckDTO> response = this.deckController.getDeckById(1);
@@ -117,13 +118,14 @@ class DeckControllerTest {
 		assertThat(response.getBody().getId()).isEqualTo(1);
 		assertThat(response.getBody().getDeck_name()).isEqualTo("Test Deck");
 		verify(this.deckService).findById(1L);
+		verify(this.deckService).validate(1L);
 	}
 
 	@Test
 	@DisplayName("Should throw exception when deck not found by ID")
 	void shouldReturn404_WhenDeckNotFound() {
 		// When/Then
-		assertThatThrownBy(() -> this.deckController.getDeckById(999)).isInstanceOf(NoSuchElementException.class);
+		assertThatThrownBy(() -> this.deckController.getDeckById(999)).isInstanceOf(DeckNotFoundException.class);
 
 		verify(this.deckService).findById(999L);
 	}
@@ -137,6 +139,7 @@ class DeckControllerTest {
 
 		final Deck newDeck = this.testDeck.toBuilder().id(null).name("New Deck").build();
 		final Deck createdDeck = this.testDeck.toBuilder().id(2L).name("New Deck").build();
+		final DeckValidationResult validation = validation();
 
 		final DeckDTO createdDeckDTO = DeckDTO.builder().id(2).deck_name("New Deck").description("A new deck")
 				.user_id(1).format(1).creation_date(LocalDateTime.now())
@@ -144,7 +147,8 @@ class DeckControllerTest {
 
 		when(this.deckMapper.toDeck(newDeckDTO)).thenReturn(newDeck);
 		when(this.deckService.create(any(Deck.class))).thenReturn(createdDeck);
-		when(this.deckMapper.toDeckDTO(createdDeck)).thenReturn(createdDeckDTO);
+		when(this.deckService.validate(2L)).thenReturn(validation);
+		when(this.deckMapper.toDeckDTO(createdDeck, validation)).thenReturn(createdDeckDTO);
 
 		// When
 		final ResponseEntity<DeckDTO> response = this.deckController.createDeck(newDeckDTO);
@@ -155,6 +159,7 @@ class DeckControllerTest {
 		assertThat(response.getBody().getId()).isEqualTo(2);
 		assertThat(response.getBody().getDeck_name()).isEqualTo("New Deck");
 		verify(this.deckService).create(any(Deck.class));
+		verify(this.deckService).validate(2L);
 	}
 
 	@Test
@@ -166,13 +171,15 @@ class DeckControllerTest {
 
 		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
 		final Deck savedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
+		final DeckValidationResult validation = validation();
 
 		final DeckDTO savedDTO = DeckDTO.builder().id(1).deck_name("Updated Deck").description("Updated description")
 				.user_id(1).format(1).last_modification(LocalDateTime.now()).build();
 
 		when(this.deckMapper.toDeck(updatedDTO)).thenReturn(updatedDeck);
 		when(this.deckService.update(eq(1L), any(Deck.class))).thenReturn(savedDeck);
-		when(this.deckMapper.toDeckDTO(savedDeck)).thenReturn(savedDTO);
+		when(this.deckService.validate(1L)).thenReturn(validation);
+		when(this.deckMapper.toDeckDTO(savedDeck, validation)).thenReturn(savedDTO);
 
 		// When
 		final ResponseEntity<DeckDTO> response = this.deckController.updateDeck(1, updatedDTO);
@@ -182,6 +189,7 @@ class DeckControllerTest {
 		assertThat(response.getBody()).isNotNull();
 		assertThat(response.getBody().getDeck_name()).isEqualTo("Updated Deck");
 		verify(this.deckService).update(eq(1L), any(Deck.class));
+		verify(this.deckService).validate(1L);
 	}
 
 	@Test
@@ -223,7 +231,8 @@ class DeckControllerTest {
 		final DeckDTO publishedDTO = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build();
 
 		when(this.deckService.publish(1L)).thenReturn(published);
-		when(this.deckMapper.toDeckDTO(published)).thenReturn(publishedDTO);
+		when(this.deckService.validate(1L)).thenReturn(validation());
+		when(this.deckMapper.toDeckDTO(eq(published), any(DeckValidationResult.class))).thenReturn(publishedDTO);
 
 		// When
 		final ResponseEntity<DeckDTO> response = this.deckController.publishDeck(1);
@@ -233,6 +242,7 @@ class DeckControllerTest {
 		assertThat(response.getBody()).isNotNull();
 		assertThat(response.getBody().getId()).isEqualTo(1);
 		verify(this.deckService).publish(1L);
+		verify(this.deckService).validate(1L);
 	}
 
 	@Test
@@ -243,7 +253,8 @@ class DeckControllerTest {
 		final DeckDTO draftDTO = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build();
 
 		when(this.deckService.unpublish(1L)).thenReturn(draft);
-		when(this.deckMapper.toDeckDTO(draft)).thenReturn(draftDTO);
+		when(this.deckService.validate(1L)).thenReturn(validation());
+		when(this.deckMapper.toDeckDTO(eq(draft), any(DeckValidationResult.class))).thenReturn(draftDTO);
 
 		// When
 		final ResponseEntity<DeckDTO> response = this.deckController.unpublishDeck(1);
@@ -252,6 +263,7 @@ class DeckControllerTest {
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).isNotNull();
 		verify(this.deckService).unpublish(1L);
+		verify(this.deckService).validate(1L);
 	}
 
 	@Test
@@ -277,5 +289,14 @@ class DeckControllerTest {
 				.hasMessageContaining("Deck not found with id: 999");
 
 		verify(this.deckService).deleteById(999L);
+	}
+
+	private static DeckValidationResult validation() {
+		return DeckValidationResult.builder()
+				.deckId(1L)
+				.status(DeckStatus.DRAFT)
+				.validationStatus(ValidationStatus.LEGAL)
+				.issues(List.of())
+				.build();
 	}
 }

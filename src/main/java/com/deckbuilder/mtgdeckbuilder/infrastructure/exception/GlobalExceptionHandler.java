@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -166,6 +167,23 @@ public class GlobalExceptionHandler {
 				.issues(ex.getValidation() != null ? ex.getValidation().getIssues() : List.of()).build();
 
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+	}
+
+	/**
+	 * Handle unreadable bodies, including missing required fields enforced by the
+	 * generated DTOs
+	 */
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ErrorResponse> handleUnreadableBody(HttpMessageNotReadableException ex,
+			HttpServletRequest request) {
+		log.warn("Unreadable request body: {}", ex.getMostSpecificCause().getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false)
+				.message("Request body is missing or invalid")
+				.error("INVALID_REQUEST_BODY").status(HttpStatus.BAD_REQUEST.value())
+				.path(request.getRequestURI()).timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
 	}
 
 	/**

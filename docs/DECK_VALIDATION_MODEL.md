@@ -1,6 +1,6 @@
 # Modelo de validación de mazos
 
-- **Estado:** aprobado; fases 1-3 implementadas
+- **Estado:** aprobado; fases 1-4 implementadas
 - **Alcance:** estados de mazo, diagnóstico de legalidad, contrato y esquema
 - **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`, D-012
 
@@ -63,20 +63,22 @@ Reglas de aplicación:
 
 ## 5. Contrato (`openapi.yml`)
 
-### 5.1 Campos nuevos y cambios (fase 4, pendientes)
+### 5.1 Campos nuevos y cambios (implementado)
 
 `Deck`:
 
 | Campo | Tipo | Notas |
 |---|---|---|
-| `format` | `integer` | **Pasa a `required`**. Sustituye al 409 por `NOT NULL` |
+| `format` | `integer` | **`required`**. Sustituye al 409 por `NOT NULL` |
 | `status` | `draft` \| `published` | `readOnly` |
-| `validation_status` | `legal` \| `illegal` \| `unknown` | `readOnly`, calculado |
-| `issue_count` | `{errors, warnings}` | `readOnly` |
+| `validation_status` | `legal` \| `illegal` \| `unknown` | `readOnly`, calculado; `null` en la lista |
+| `issue_count` | `{errors, warnings}` | `readOnly`, calculado; `null` en la lista |
+| `issues` | `array<DeckIssue>` | `readOnly`, calculado; `null` en la lista |
 
-`CardDeck`: `issues` (`array<DeckIssue>`, `readOnly`).
+`CompleteDeck`: expone los mismos cuatro campos de diagnóstico que `Deck`.
 
-`Card`: `unlimited_copies` → **`copies_limit`** (`integer`, nullable). Breaking, sin consumidores.
+`CardDeck`: sin `issues` (D-013). `Card`: `unlimited_copies` → **`copies_limit`**
+(`integer`, nullable). Breaking, sin consumidores.
 
 ### 5.2 Esquemas nuevos
 
@@ -100,6 +102,13 @@ DeckValidation:
     status: { type: string, enum: [draft, published] }
     validation_status: { type: string, enum: [legal, illegal, unknown] }
     issues: { type: array, items: { $ref: '#/components/schemas/DeckIssue' } }
+
+IssueCount:
+  type: object
+  required: [errors, warnings]
+  properties:
+    errors: { type: integer, minimum: 0 }
+    warnings: { type: integer, minimum: 0 }
 ```
 
 ### 5.3 Endpoints (implementados en fase 3)
@@ -116,7 +125,8 @@ El cuerpo del `409` es `DeckNotLegalError`: los campos de `ErrorResponse` más
 
 ### 5.4 Errores
 
-- Formato ausente o inválido: `400` de validación (campo `format`).
+- Formato ausente o inválido: `400` `INVALID_REQUEST_BODY` (el DTO generado rechaza
+  `format` nulo antes de entrar al controlador).
 - Integridad: `400` `INVALID_DECK_COMPOSITION`; `404` `CARD_NOT_FOUND` /
   `DECK_NOT_FOUND` / `FORMAT_NOT_FOUND`.
 - Publicación fallida: `409` `DECK_NOT_LEGAL` con `issues`.
@@ -235,6 +245,14 @@ DeckValidationResult evaluate(Long deckId);
 Handler `DeckNotLegalException` → `409` `DECK_NOT_LEGAL` con `issues`. `ErrorResponse`
 incorpora `List<DeckIssue>` y `IssueSeverity` serializa su valor en minúsculas.
 
+### 7.4 `DeckMapper` y respuestas de un mazo (implementado)
+
+`DeckMapper.toDeckDTO(Deck, DeckValidationResult)` y
+`toCompleteDeckDTO(Deck, DeckValidationResult)` añaden `validation_status`,
+`issue_count` e `issues`; el `status` sale del dominio. `DeckController` llama a
+`validate()` tras crear, actualizar, publicar y despublicar, y en el detalle.
+`GET /decks` usa la versión de un solo argumento, que deja el diagnóstico a `null`.
+
 ## 8. Comportamiento por acción
 
 | Acción | ¿Bloquea? | Resultado |
@@ -251,8 +269,8 @@ incorpora `List<DeckIssue>` y `IssueSeverity` serializa su valor en minúsculas.
 | `POST /decks/{id}/unpublish` | No | `200`, `draft` |
 | `DELETE /decks/{id}` | No | `204` |
 
-Las respuestas que exponen `status`, `validation_status` o `issues` en `Deck` llegan
-con la fase 4; hasta entonces esos datos solo están en `/decks/{id}/validation`.
+`GET /decks` deja `validation_status`, `issue_count` e `issues` en `null`; el resto de
+respuestas de un solo mazo los rellenan (D-014).
 
 ## 9. Pruebas
 
@@ -273,10 +291,13 @@ Unitarias (implementadas):
   tocan `updated_at`, `validate` delega en `evaluate`, `publish` publica legal y
   solo con warnings, rechaza con errores sin guardar y propaga `404`,
   `unpublish` vuelve a `draft` y limpia `published_at`.
-- `DeckControllerTest`: los tres endpoints devuelven `200` y delegan en el servicio.
+- `DeckControllerTest`: los tres endpoints devuelven `200` y delegan en el servicio;
+  las respuestas de un mazo llaman a `validate` y mapean con el diagnóstico.
 - `DeckValidationMapperTest`: snake_case (`deck_id`, `validation_status`,
   `card_id`, `deck_content_id`), enums de severidad y `section` nula o en
   minúsculas.
+- `DeckMapperTest`: `status`, `validation_status`, `issue_count` e `issues` en `Deck`
+  y `CompleteDeck`; la lista deja el diagnóstico a `null`.
 
 Integración (implementadas):
 
@@ -286,6 +307,9 @@ Integración (implementadas):
 - El mismo test, con `MockMvc`, cubre el ciclo HTTP: `GET /validation` → `200` con
   `validation_status=illegal` e `issues`; `POST /publish` ilegal → `409`
   `DECK_NOT_LEGAL` con `issues`; publicar y despublicar un mazo legal → `200`.
+- El detalle `GET /decks/{id}` incluye `status`, `validation_status`, `issue_count` e
+  `issues`; `POST /decks` guarda un mazo ilegal con `201` y su diagnóstico, y responde
+  `400` si falta `format`.
 - `DeckServiceH2IntegrationTest` (PostgreSQL/Testcontainers) guarda, publica y
   despublica contra la base real, y comprueba que un `publish` rechazado deja el
   mazo en `draft` sin `published_at`.
@@ -296,7 +320,7 @@ Integración (implementadas):
 2. Refactor del validador a `evaluate()`. **Hecha.**
 3. Endpoints `validation`, `publish`, `unpublish` + handler 409. **Hecha.**
 4. Contrato: `format` requerido, `status`, `validation_status`, `issues`,
-   `copies_limit`; regenerar.
+   `copies_limit`; regenerar. **Hecha.**
 5. `addCard` / `removeCard` por HTTP.
 6. Importación de datos (ver `docs/DATA_IMPORT.md` cuando exista).
 7. Comandante: campo en esquema y contrato, después `MISSING_COMMANDER` (D-012).
@@ -316,6 +340,8 @@ Integración (implementadas):
 | `unlimited_copies` | Sustituido por `copies_limit` (`NULL`/`0`/`N`) |
 | Recuento de copias | Por `oracle_id` |
 | `MISSING_COMMANDER` | Diferido hasta tener campo de comandante (D-012) |
+| `issues` por fila | No; solo en el mazo (D-013) |
+| Diagnóstico en la lista | No se calcula; `null` (D-014) |
 
 ## 12. Riesgos
 
