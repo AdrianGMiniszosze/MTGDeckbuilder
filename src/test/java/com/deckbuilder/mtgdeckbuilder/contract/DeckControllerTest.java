@@ -2,10 +2,15 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.DeckValidationDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
+import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
+import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
+import com.deckbuilder.mtgdeckbuilder.model.ValidationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -38,6 +43,9 @@ class DeckControllerTest {
 
 	@Mock
 	private DeckMapper deckMapper;
+
+	@Mock
+	private DeckValidationMapper deckValidationMapper;
 
 	@InjectMocks
 	private DeckController deckController;
@@ -174,6 +182,76 @@ class DeckControllerTest {
 		assertThat(response.getBody()).isNotNull();
 		assertThat(response.getBody().getDeck_name()).isEqualTo("Updated Deck");
 		verify(this.deckService).update(eq(1L), any(Deck.class));
+	}
+
+	@Test
+	@DisplayName("Should return the deck diagnosis")
+	void shouldGetDeckValidation() {
+		// Given
+		final DeckValidationResult validation = DeckValidationResult.builder()
+				.deckId(1L)
+				.status(DeckStatus.DRAFT)
+				.validationStatus(ValidationStatus.LEGAL)
+				.issues(List.of())
+				.build();
+		final DeckValidationDTO dto = DeckValidationDTO.builder()
+				.deck_id(1)
+				.status(DeckValidationDTO.Status.DRAFT)
+				.validation_status(DeckValidationDTO.Validation_status.LEGAL)
+				.issues(List.of())
+				.build();
+
+		when(this.deckService.validate(1L)).thenReturn(validation);
+		when(this.deckValidationMapper.toDto(validation)).thenReturn(dto);
+
+		// When
+		final ResponseEntity<DeckValidationDTO> response = this.deckController.getDeckValidation(1);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getDeck_id()).isEqualTo(1);
+		assertThat(response.getBody().getValidation_status()).isEqualTo(DeckValidationDTO.Validation_status.LEGAL);
+		verify(this.deckService).validate(1L);
+	}
+
+	@Test
+	@DisplayName("Should publish a deck")
+	void shouldPublishDeck() {
+		// Given
+		final Deck published = this.testDeck.toBuilder().status(DeckStatus.PUBLISHED).build();
+		final DeckDTO publishedDTO = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build();
+
+		when(this.deckService.publish(1L)).thenReturn(published);
+		when(this.deckMapper.toDeckDTO(published)).thenReturn(publishedDTO);
+
+		// When
+		final ResponseEntity<DeckDTO> response = this.deckController.publishDeck(1);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		assertThat(response.getBody().getId()).isEqualTo(1);
+		verify(this.deckService).publish(1L);
+	}
+
+	@Test
+	@DisplayName("Should return a deck to draft")
+	void shouldUnpublishDeck() {
+		// Given
+		final Deck draft = this.testDeck.toBuilder().status(DeckStatus.DRAFT).build();
+		final DeckDTO draftDTO = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build();
+
+		when(this.deckService.unpublish(1L)).thenReturn(draft);
+		when(this.deckMapper.toDeckDTO(draft)).thenReturn(draftDTO);
+
+		// When
+		final ResponseEntity<DeckDTO> response = this.deckController.unpublishDeck(1);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		verify(this.deckService).unpublish(1L);
 	}
 
 	@Test

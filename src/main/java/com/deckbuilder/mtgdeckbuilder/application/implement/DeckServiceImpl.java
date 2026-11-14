@@ -1,8 +1,10 @@
 package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
+import com.deckbuilder.mtgdeckbuilder.application.DeckValidationService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
@@ -10,6 +12,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
+import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -30,6 +33,7 @@ public class DeckServiceImpl implements DeckService {
 	private final DeckRepository deckRepository;
 	private final DeckEntityMapper deckEntityMapper;
 	private final CardInDeckRepository cardInDeckRepository;
+	private final DeckValidationService deckValidationService;
 
 	@Override
 	public List<Deck> getAll(int pageSize, int pageNumber) {
@@ -99,6 +103,37 @@ public class DeckServiceImpl implements DeckService {
 		}
 		this.deckRepository.deleteById(id);
 		return true;
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public DeckValidationResult validate(Long deckId) {
+		return this.deckValidationService.evaluate(deckId);
+	}
+
+	@Override
+	@Transactional
+	public Deck publish(Long deckId) {
+		final DeckValidationResult validation = this.deckValidationService.evaluate(deckId);
+		if (validation.hasErrors()) {
+			throw new DeckNotLegalException(deckId, validation);
+		}
+
+		final DeckEntity entity = this.deckRepository.findById(deckId)
+				.orElseThrow(() -> new DeckNotFoundException(deckId));
+		entity.setStatus(DeckStatus.PUBLISHED.getValue());
+		entity.setPublishedAt(LocalDateTime.now());
+		return this.buildDeckWithCards(this.deckRepository.save(entity));
+	}
+
+	@Override
+	@Transactional
+	public Deck unpublish(Long deckId) {
+		final DeckEntity entity = this.deckRepository.findById(deckId)
+				.orElseThrow(() -> new DeckNotFoundException(deckId));
+		entity.setStatus(DeckStatus.DRAFT.getValue());
+		entity.setPublishedAt(null);
+		return this.buildDeckWithCards(this.deckRepository.save(entity));
 	}
 
 	@Override

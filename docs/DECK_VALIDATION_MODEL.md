@@ -1,6 +1,6 @@
 # Modelo de validación de mazos
 
-- **Estado:** aprobado; fases 1 (`V3__deck_validation_model.sql`) y 2 (`evaluate`) implementadas
+- **Estado:** aprobado; fases 1-3 implementadas
 - **Alcance:** estados de mazo, diagnóstico de legalidad, contrato y esquema
 - **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`, D-012
 
@@ -63,7 +63,7 @@ Reglas de aplicación:
 
 ## 5. Contrato (`openapi.yml`)
 
-### 5.1 Campos nuevos y cambios
+### 5.1 Campos nuevos y cambios (fase 4, pendientes)
 
 `Deck`:
 
@@ -102,13 +102,17 @@ DeckValidation:
     issues: { type: array, items: { $ref: '#/components/schemas/DeckIssue' } }
 ```
 
-### 5.3 Endpoints
+### 5.3 Endpoints (implementados en fase 3)
 
 | Método | Ruta | Respuesta |
 |---|---|---|
 | `GET` | `/decks/{id}/validation` | `200` con `DeckValidation` (nunca falla por ilegalidad) |
 | `POST` | `/decks/{id}/publish` | `200` con `DeckDTO`; `409` `DECK_NOT_LEGAL` + `issues` si hay errores |
 | `POST` | `/decks/{id}/unpublish` | `200` con `DeckDTO`, vuelve a `draft` |
+
+El cuerpo del `409` es `DeckNotLegalError`: los campos de `ErrorResponse` más
+`issues`. `DeckValidationMapper` traduce el dominio a `DeckValidationDTO`, incluyendo
+`section` (string) a su enum generado.
 
 ### 5.4 Errores
 
@@ -216,20 +220,20 @@ DeckValidationResult evaluate(Long deckId);
   ni el contrato tienen un campo de comandante; declarar la regla la haría
   insatisfacible. Se implementará junto con ese campo.
 
-### 7.2 `DeckServiceImpl` (parcial)
+### 7.2 `DeckServiceImpl` (implementado)
 
 - `create` / `update`: sin validación de formato; fuerzan `status = draft` y limpian
-  `published_at`. Implementado.
+  `published_at`.
 - `addCard` / `removeCard`: sin bloqueo por formato; actualizan `decks.updated_at`.
-  Implementado.
-- `publish(id)`: `evaluate()`; errores → `DeckNotLegalException` (nueva) → 409.
-  **Pendiente (fase 3).**
-- `unpublish(id)`: `draft`. **Pendiente (fase 3).**
+- `validate(id)`: delega en `evaluate()`; es de solo lectura.
+- `publish(id)`: `evaluate()`; con errores lanza `DeckNotLegalException`; sin errores
+  guarda `status = published` y `published_at = now()`.
+- `unpublish(id)`: vuelve a `draft` y limpia `published_at`, sin validar.
 
-### 7.3 `GlobalExceptionHandler`
+### 7.3 `GlobalExceptionHandler` (implementado)
 
-Nuevo handler `DeckNotLegalException` → `409` `DECK_NOT_LEGAL` con `issues`.
-**Pendiente (fase 3).**
+Handler `DeckNotLegalException` → `409` `DECK_NOT_LEGAL` con `issues`. `ErrorResponse`
+incorpora `List<DeckIssue>` y `IssueSeverity` serializa su valor en minúsculas.
 
 ## 8. Comportamiento por acción
 
@@ -247,6 +251,9 @@ Nuevo handler `DeckNotLegalException` → `409` `DECK_NOT_LEGAL` con `issues`.
 | `POST /decks/{id}/unpublish` | No | `200`, `draft` |
 | `DELETE /decks/{id}` | No | `204` |
 
+Las respuestas que exponen `status`, `validation_status` o `issues` en `Deck` llegan
+con la fase 4; hasta entonces esos datos solo están en `/decks/{id}/validation`.
+
 ## 9. Pruebas
 
 `FlywayMigrationSmokeIntegrationTest` (obligatorio actualizar):
@@ -263,21 +270,31 @@ Unitarias (implementadas):
   recuento por `oracle_id` con dos impresiones, `maybeboard` ignorado,
   `tracks_legality = FALSE` sin avisos, `DECK_TOO_SMALL` siempre emitido.
 - `DeckServiceImplTest`: `create`/`update` fuerzan `draft`, `addCard`/`removeCard`
-  tocan `updated_at`.
+  tocan `updated_at`, `validate` delega en `evaluate`, `publish` publica legal y
+  solo con warnings, rechaza con errores sin guardar y propaga `404`,
+  `unpublish` vuelve a `draft` y limpia `published_at`.
+- `DeckControllerTest`: los tres endpoints devuelven `200` y delegan en el servicio.
+- `DeckValidationMapperTest`: snake_case (`deck_id`, `validation_status`,
+  `card_id`, `deck_content_id`), enums de severidad y `section` nula o en
+  minúsculas.
 
 Integración (implementadas):
 
 - `DeckValidationIntegrationTest` ejecuta `evaluate` real: 4 en main + 1 en sideboard →
   `MAX_COPIES_EXCEEDED`; dos impresiones por `oracle_id`; baneada con `card_id` y
   `deck_content_id`; maybeboard ignorado; formato sin `tracks_legality`; mazo corto.
-- **Pendiente (fase 3):** `POST /decks` ilegal → `201`, `publish` ilegal → `409` con
-  `issues`, publicar y editar → `draft`.
+- El mismo test, con `MockMvc`, cubre el ciclo HTTP: `GET /validation` → `200` con
+  `validation_status=illegal` e `issues`; `POST /publish` ilegal → `409`
+  `DECK_NOT_LEGAL` con `issues`; publicar y despublicar un mazo legal → `200`.
+- `DeckServiceH2IntegrationTest` (PostgreSQL/Testcontainers) guarda, publica y
+  despublica contra la base real, y comprueba que un `publish` rechazado deja el
+  mazo en `draft` sin `published_at`.
 
 ## 10. Fases
 
 1. `V3` + entidades/dominio/mappers + smoke actualizado. **Hecha.**
 2. Refactor del validador a `evaluate()`. **Hecha.**
-3. Endpoints `validation`, `publish`, `unpublish` + handler 409.
+3. Endpoints `validation`, `publish`, `unpublish` + handler 409. **Hecha.**
 4. Contrato: `format` requerido, `status`, `validation_status`, `issues`,
    `copies_limit`; regenerar.
 5. `addCard` / `removeCard` por HTTP.

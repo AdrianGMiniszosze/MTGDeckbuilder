@@ -1,5 +1,6 @@
 package com.deckbuilder.mtgdeckbuilder.infrastructure.exception;
 
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,6 +25,7 @@ public class ErrorResponse {
 	private String path;
 	private LocalDateTime timestamp;
 	private List<ValidationError> validationErrors;
+	private List<DeckIssue> issues;
 
 	/**
 	 * Validation error details for field-level errors

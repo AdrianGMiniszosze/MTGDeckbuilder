@@ -24,6 +24,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -31,9 +33,15 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @DisplayName("Deck Validation Repository Integration Tests")
 @Transactional
+@AutoConfigureMockMvc
 class DeckValidationIntegrationTest extends PostgresIntegrationTest {
 
     @Autowired
@@ -56,6 +64,9 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
 
     @Autowired
     private DeckValidationService deckValidationService;
+
+    @Autowired
+    private MockMvc mockMvc;
 
     private DeckEntity testDeck;
     private CardEntity lightningBolt;
@@ -147,6 +158,17 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
         legality.setFormatId(formatId);
         legality.setLegalityStatus(status);
         cardLegalityRepository.save(legality);
+    }
+
+    private DeckEntity createDeck(FormatEntity format) {
+        DeckEntity deck = new DeckEntity();
+        deck.setName("Deck for " + format.getName());
+        deck.setFormatId(format.getId());
+        deck.setUserId(testUser.getId());
+        deck.setCreated(LocalDateTime.now());
+        deck.setModified(LocalDateTime.now());
+        deck.setIsPrivate(false);
+        return deckRepository.save(deck);
     }
 
     @Test
@@ -369,23 +391,7 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
         }
 
         private CardInDeckEntity addCard(Long cardId, int quantity, String section) {
-            return cardInDeckRepository.save(CardInDeckEntity.builder()
-                .cardId(cardId)
-                .deckId(testDeck.getId())
-                .quantity(quantity)
-                .section(section)
-                .build());
-        }
-
-        private DeckEntity createDeck(FormatEntity format) {
-            DeckEntity deck = new DeckEntity();
-            deck.setName("Deck for " + format.getName());
-            deck.setFormatId(format.getId());
-            deck.setUserId(testUser.getId());
-            deck.setCreated(LocalDateTime.now());
-            deck.setModified(LocalDateTime.now());
-            deck.setIsPrivate(false);
-            return deckRepository.save(deck);
+            return DeckValidationIntegrationTest.this.addCard(testDeck.getId(), cardId, quantity, section);
         }
 
         private DeckIssue singleIssue(DeckValidationResult result, DeckIssueCode code) {
@@ -397,5 +403,76 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
         private List<DeckIssue> issuesWithCode(DeckValidationResult result, DeckIssueCode code) {
             return result.getIssues().stream().filter(issue -> issue.getCode() == code).toList();
         }
+    }
+
+    @Nested
+    @DisplayName("Lifecycle Endpoint Tests")
+    class LifecycleEndpointTests {
+
+        @Test
+        @DisplayName("Should return 200 with the diagnosis")
+        void shouldReturnDiagnosisOverHttp() throws Exception {
+            // Given - illegal deck (too small, unknown legality)
+            addCard(testDeck.getId(), lightningBolt.getId(), 4, "main");
+
+            // When/Then
+            mockMvc.perform(get("/decks/{id}/validation", testDeck.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deck_id").value(testDeck.getId()))
+                .andExpect(jsonPath("$.status").value("draft"))
+                .andExpect(jsonPath("$.validation_status").value("illegal"))
+                .andExpect(jsonPath("$.issues[*].code", hasItem("DECK_TOO_SMALL")));
+        }
+
+        @Test
+        @DisplayName("Should return 409 DECK_NOT_LEGAL with the issues")
+        void shouldReturnConflictWhenPublishingIllegalDeck() throws Exception {
+            // Given - illegal deck (too small)
+            addCard(testDeck.getId(), lightningBolt.getId(), 4, "main");
+
+            // When/Then
+            mockMvc.perform(post("/decks/{id}/publish", testDeck.getId()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error").value("DECK_NOT_LEGAL"))
+                .andExpect(jsonPath("$.issues[*].code", hasItem("DECK_TOO_SMALL")));
+        }
+
+        @Test
+        @DisplayName("Should publish and unpublish a legal deck over HTTP")
+        void shouldPublishAndUnpublishOverHttp() throws Exception {
+            // Given - casual format, no legality or size rules
+            FormatEntity casual = formatRepository.save(FormatEntity.builder()
+                .name("Casual HTTP")
+                .description("No format rules")
+                .minDeckSize(0)
+                .tracksLegality(false)
+                .build());
+            DeckEntity deck = createDeck(casual);
+            cardInDeckRepository.save(CardInDeckEntity.builder()
+                .cardId(lightningBolt.getId())
+                .deckId(deck.getId())
+                .quantity(4)
+                .section("main")
+                .build());
+
+            // When/Then - publish
+            mockMvc.perform(post("/decks/{id}/publish", deck.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(deck.getId()));
+
+            // When/Then - unpublish
+            mockMvc.perform(post("/decks/{id}/unpublish", deck.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(deck.getId()));
+        }
+    }
+
+    private CardInDeckEntity addCard(Long deckId, Long cardId, int quantity, String section) {
+        return cardInDeckRepository.save(CardInDeckEntity.builder()
+            .cardId(cardId)
+            .deckId(deckId)
+            .quantity(quantity)
+            .section(section)
+            .build());
     }
 }

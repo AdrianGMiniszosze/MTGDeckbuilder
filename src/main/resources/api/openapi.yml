@@ -615,6 +615,89 @@ paths:
         '204':
           description: Deck deleted
 
+  /decks/{id}/validation:
+    get:
+      summary: Evaluate a deck against the rules of its format
+      description: >
+        Returns the diagnosis. It never fails because the deck is illegal:
+        rule violations are reported as issues. Only a missing deck or format
+        is an error.
+      operationId: getDeckValidation
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Deck diagnosis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckValidation'
+        '404':
+          description: Deck or format not found
+
+  /decks/{id}/publish:
+    post:
+      summary: Publish a deck after validating it
+      description: >
+        Evaluates the deck and publishes it when there are no errors. Warnings
+        do not block publishing.
+      operationId: publishDeck
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Deck published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+        '404':
+          description: Deck or format not found
+        '409':
+          description: Deck has blocking issues and cannot be published
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeckNotLegalError'
+
+  /decks/{id}/unpublish:
+    post:
+      summary: Return a published deck to draft
+      description: Does not validate the deck; drafts are always allowed.
+      operationId: unpublishDeck
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Deck returned to draft
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+        '404':
+          description: Deck not found
+
   /tags:
     get:
       summary: List all tags
@@ -1522,6 +1605,85 @@ components:
           enum: [main, sideboard, maybeboard]
           default: main
           example: "main"
+
+    DeckIssue:
+      type: object
+      required:
+        - severity
+        - code
+        - message
+      properties:
+        severity:
+          type: string
+          enum: [error, warning]
+          description: Only errors block publishing
+          example: "error"
+        code:
+          type: string
+          description: Stable identifier; clients must branch on this, never on message
+          example: "MAX_COPIES_EXCEEDED"
+        message:
+          type: string
+          example: "Lightning Bolt: 5 copies exceed the limit of 4 for this format."
+        card_id:
+          type: integer
+          description: Card the issue belongs to, when it is about one card
+        deck_content_id:
+          type: integer
+          description: Deck row the issue belongs to, when it is about one row
+        section:
+          type: string
+          enum: [main, sideboard, maybeboard]
+
+    DeckValidation:
+      type: object
+      required:
+        - deck_id
+        - status
+        - validation_status
+        - issues
+      properties:
+        deck_id:
+          type: integer
+        status:
+          type: string
+          enum: [draft, published]
+        validation_status:
+          type: string
+          enum: [legal, illegal, unknown]
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeckIssue'
+
+    DeckNotLegalError:
+      type: object
+      required:
+        - success
+        - error
+        - status
+        - issues
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+        error:
+          type: string
+          example: "DECK_NOT_LEGAL"
+        status:
+          type: integer
+          example: 409
+        path:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeckIssue'
 
     CardTag:
       type: object

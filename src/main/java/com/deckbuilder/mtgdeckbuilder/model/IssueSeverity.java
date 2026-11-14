@@ -1,5 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.model;
 
+import com.fasterxml.jackson.annotation.JsonValue;
+
 /**
  * Severity of a deck validation issue.
  *
@@ -17,6 +19,7 @@ public enum IssueSeverity {
 		this.value = value;
 	}
 
+	@JsonValue
 	public String getValue() {
 		return this.value;
 	}

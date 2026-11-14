@@ -6,12 +6,16 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssueCode;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
+import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,6 +26,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Integration test using a real PostgreSQL database (via Testcontainers + pgvector image).
@@ -255,5 +260,91 @@ class DeckServiceH2IntegrationTest extends PostgresIntegrationTest {
                 .findFirst()
                 .orElseThrow();
         assertThat(sideboardCard.getQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Should publish a legal deck and return it to draft")
+    void shouldPublishAndUnpublishDeck() {
+        // Given - casual format: no legality, no size rules, 4 copies max
+        Deck deck = createDeck(casualFormat());
+        assertThat(deck.getStatus()).isEqualTo(DeckStatus.DRAFT);
+        deckService.addCard(deck.getId(), testCard.getId(), 4, "main");
+
+        // When
+        Deck published = deckService.publish(deck.getId());
+
+        // Then
+        assertThat(published.getStatus()).isEqualTo(DeckStatus.PUBLISHED);
+        DeckEntity publishedEntity = deckRepository.findById(deck.getId()).orElseThrow();
+        assertThat(publishedEntity.getStatus()).isEqualTo("published");
+        assertThat(publishedEntity.getPublishedAt()).isNotNull();
+
+        // When
+        Deck draft = deckService.unpublish(deck.getId());
+
+        // Then
+        assertThat(draft.getStatus()).isEqualTo(DeckStatus.DRAFT);
+        DeckEntity draftEntity = deckRepository.findById(deck.getId()).orElseThrow();
+        assertThat(draftEntity.getStatus()).isEqualTo("draft");
+        assertThat(draftEntity.getPublishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("Should reject publishing an illegal deck and keep it draft")
+    void shouldRejectPublishingIllegalDeck() {
+        // Given - 5 copies exceed the format's 4-copy limit
+        Deck deck = createDeck(casualFormat());
+        deckService.addCard(deck.getId(), testCard.getId(), 5, "main");
+
+        // When/Then
+        assertThatThrownBy(() -> deckService.publish(deck.getId()))
+                .isInstanceOf(DeckNotLegalException.class)
+                .satisfies(exception -> {
+                    DeckValidationResult validation = ((DeckNotLegalException) exception).getValidation();
+                    assertThat(validation.getErrors()).hasSize(1);
+                    assertThat(validation.getErrors().getFirst().getCode())
+                            .isEqualTo(DeckIssueCode.MAX_COPIES_EXCEEDED);
+                });
+
+        DeckEntity entity = deckRepository.findById(deck.getId()).orElseThrow();
+        assertThat(entity.getStatus()).isEqualTo("draft");
+        assertThat(entity.getPublishedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("Should return the diagnosis without throwing")
+    void shouldReturnDiagnosis() {
+        // Given - illegal deck, but validate never throws
+        Deck deck = createDeck(casualFormat());
+        deckService.addCard(deck.getId(), testCard.getId(), 5, "main");
+
+        // When
+        DeckValidationResult result = deckService.validate(deck.getId());
+
+        // Then
+        assertThat(result.getDeckId()).isEqualTo(deck.getId());
+        assertThat(result.getStatus()).isEqualTo(DeckStatus.DRAFT);
+        assertThat(result.getErrors()).hasSize(1);
+        assertThat(result.getErrors().getFirst().getCode()).isEqualTo(DeckIssueCode.MAX_COPIES_EXCEEDED);
+    }
+
+    private FormatEntity casualFormat() {
+        return formatRepository.save(FormatEntity.builder()
+                .name("Casual Test")
+                .description("No format rules")
+                .minDeckSize(0)
+                .maxCopies(4)
+                .tracksLegality(false)
+                .build());
+    }
+
+    private Deck createDeck(FormatEntity format) {
+        return deckService.create(Deck.builder()
+                .name("Lifecycle Deck")
+                .description("Lifecycle test")
+                .userId(testUser.getId())
+                .formatId(format.getId())
+                .isPrivate(false)
+                .build());
     }
 }

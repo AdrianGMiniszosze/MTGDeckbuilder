@@ -3,13 +3,19 @@ package com.deckbuilder.mtgdeckbuilder.application;
 import com.deckbuilder.mtgdeckbuilder.application.implement.DeckServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
+import com.deckbuilder.mtgdeckbuilder.model.DeckIssueCode;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
+import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
+import com.deckbuilder.mtgdeckbuilder.model.IssueSeverity;
+import com.deckbuilder.mtgdeckbuilder.model.ValidationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,6 +51,9 @@ class DeckServiceImplTest {
 
 	@Mock
 	private CardInDeckRepository cardInDeckRepository;
+
+	@Mock
+	private DeckValidationService deckValidationService;
 
 	@InjectMocks
 	private DeckServiceImpl deckService;
@@ -304,6 +313,116 @@ class DeckServiceImplTest {
 		assertThat(result).isFalse();
 		verify(this.deckRepository).existsById(999L);
 		verify(this.deckRepository, never()).deleteById(any());
+	}
+
+	// ==================== LIFECYCLE TESTS ====================
+
+	@Test
+	@DisplayName("Should delegate validation to the validation service")
+	void shouldValidateDeck() {
+		// Given
+		final DeckValidationResult expected = validationResult();
+		when(this.deckValidationService.evaluate(1L)).thenReturn(expected);
+
+		// When
+		final DeckValidationResult result = this.deckService.validate(1L);
+
+		// Then
+		assertThat(result).isSameAs(expected);
+		verify(this.deckValidationService).evaluate(1L);
+	}
+
+	@Test
+	@DisplayName("Should publish a legal deck")
+	void shouldPublishLegalDeck() {
+		// Given
+		when(this.deckValidationService.evaluate(1L)).thenReturn(validationResult());
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.publish(1L);
+
+		// Then
+		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
+		verify(this.deckRepository).save(captor.capture());
+		assertThat(captor.getValue().getStatus()).isEqualTo(DeckStatus.PUBLISHED.getValue());
+		assertThat(captor.getValue().getPublishedAt()).isNotNull();
+	}
+
+	@Test
+	@DisplayName("Should publish a deck that only has warnings")
+	void shouldPublishDeckWithWarnings() {
+		// Given
+		final DeckIssue warning = DeckIssue.builder()
+				.severity(IssueSeverity.WARNING)
+				.code(DeckIssueCode.LEGALITY_UNKNOWN)
+				.message("Unknown legality")
+				.build();
+		when(this.deckValidationService.evaluate(1L)).thenReturn(validationResult(warning));
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.publish(1L);
+
+		// Then
+		assertThat(this.testDeckEntity.getStatus()).isEqualTo(DeckStatus.PUBLISHED.getValue());
+		verify(this.deckRepository).save(any(DeckEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should reject publishing a deck with errors")
+	void shouldRejectPublishingIllegalDeck() {
+		// Given
+		final DeckIssue error = DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.CARD_BANNED)
+				.message("Black Lotus is banned")
+				.build();
+		final DeckValidationResult illegal = validationResult(error);
+		when(this.deckValidationService.evaluate(1L)).thenReturn(illegal);
+
+		// When/Then
+		assertThatThrownBy(() -> this.deckService.publish(1L))
+				.isInstanceOf(DeckNotLegalException.class)
+				.hasMessageContaining("1 blocking issue");
+		verify(this.deckRepository, never()).save(any());
+	}
+
+	@Test
+	@DisplayName("Should return a published deck to draft")
+	void shouldUnpublishDeck() {
+		// Given
+		this.testDeckEntity.setStatus(DeckStatus.PUBLISHED.getValue());
+		this.testDeckEntity.setPublishedAt(LocalDateTime.now());
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.unpublish(1L);
+
+		// Then
+		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
+		verify(this.deckRepository).save(captor.capture());
+		assertThat(captor.getValue().getStatus()).isEqualTo(DeckStatus.DRAFT.getValue());
+		assertThat(captor.getValue().getPublishedAt()).isNull();
+	}
+
+	@Test
+	@DisplayName("Should throw when publishing a non-existent deck")
+	void shouldThrowWhenPublishingNonExistentDeck() {
+		// Given
+		when(this.deckValidationService.evaluate(999L))
+				.thenThrow(new DeckNotFoundException(999L));
+
+		// When/Then
+		assertThatThrownBy(() -> this.deckService.publish(999L))
+				.isInstanceOf(DeckNotFoundException.class);
+		verify(this.deckRepository, never()).save(any());
 	}
 
 	// ==================== ADD CARD TESTS ====================
@@ -739,5 +858,15 @@ class DeckServiceImplTest {
 		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
 		verify(this.deckRepository).save(captor.capture());
 		assertThat(captor.getValue().getModified()).isAfter(before);
+	}
+
+	private static DeckValidationResult validationResult(DeckIssue... issues) {
+		final boolean hasError = Arrays.stream(issues).anyMatch(issue -> issue.getSeverity() == IssueSeverity.ERROR);
+		return DeckValidationResult.builder()
+				.deckId(1L)
+				.status(DeckStatus.DRAFT)
+				.validationStatus(hasError ? ValidationStatus.ILLEGAL : ValidationStatus.LEGAL)
+				.issues(List.of(issues))
+				.build();
 	}
 }

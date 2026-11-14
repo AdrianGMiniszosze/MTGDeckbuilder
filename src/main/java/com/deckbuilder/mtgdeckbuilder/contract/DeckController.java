@@ -3,8 +3,10 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 import com.deckbuilder.apigenerator.openapi.api.DecksApi;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.DeckValidationDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
+import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +21,7 @@ import java.util.List;
 public class DeckController implements DecksApi {
 	private final DeckService deckService;
 	private final DeckMapper deckMapper;
+	private final DeckValidationMapper deckValidationMapper;
 
 	@Override
 	public ResponseEntity<List<CompleteDeckDTO>> listDecks(Integer pagesize, Integer pagenumber) {
@@ -46,6 +49,24 @@ public class DeckController implements DecksApi {
 		final var deck = this.deckMapper.toDeck(deckDTO);
 		final var updated = this.deckService.update(id.longValue(), deck);
 		return ResponseEntity.ok(this.deckMapper.toDeckDTO(updated));
+	}
+
+	@Override
+	public ResponseEntity<DeckValidationDTO> getDeckValidation(Integer id) {
+		final var validation = this.deckService.validate(id.longValue());
+		return ResponseEntity.ok(this.deckValidationMapper.toDto(validation));
+	}
+
+	@Override
+	public ResponseEntity<DeckDTO> publishDeck(Integer id) {
+		final var published = this.deckService.publish(id.longValue());
+		return ResponseEntity.ok(this.deckMapper.toDeckDTO(published));
+	}
+
+	@Override
+	public ResponseEntity<DeckDTO> unpublishDeck(Integer id) {
+		final var draft = this.deckService.unpublish(id.longValue());
+		return ResponseEntity.ok(this.deckMapper.toDeckDTO(draft));
 	}
 
 	@Override

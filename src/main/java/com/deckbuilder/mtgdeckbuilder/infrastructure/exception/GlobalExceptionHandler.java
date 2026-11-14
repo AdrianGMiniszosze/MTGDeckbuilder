@@ -154,6 +154,21 @@ public class GlobalExceptionHandler {
 	}
 
 	/**
+	 * Handle publishing attempts on decks with blocking issues
+	 */
+	@ExceptionHandler(DeckNotLegalException.class)
+	public ResponseEntity<ErrorResponse> handleDeckNotLegal(DeckNotLegalException ex, HttpServletRequest request) {
+		log.warn("Deck not legal: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("DECK_NOT_LEGAL").status(HttpStatus.CONFLICT.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now())
+				.issues(ex.getValidation() != null ? ex.getValidation().getIssues() : List.of()).build();
+
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+	}
+
+	/**
 	 * Handle validation errors from @Valid annotations
 	 */
 	@ExceptionHandler(MethodArgumentNotValidException.class)
