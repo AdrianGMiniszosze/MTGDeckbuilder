@@ -10,10 +10,11 @@ import java.util.List;
 @Mapper(componentModel = "spring")
 public interface SetEntityMapper {
 
+	@Mapping(source = "type", target = "setType")
+	@Mapping(target = "releasedAt", ignore = true)
 	SetEntity toEntity(Set model);
 
-	@Mapping(target = "code", ignore = true)
-	@Mapping(target = "type", ignore = true)
+	@Mapping(source = "setType", target = "type")
 	@Mapping(target = "releaseDate", ignore = true)
 	@Mapping(target = "baseSetSize", ignore = true)
 	@Mapping(target = "totalSetSize", ignore = true)

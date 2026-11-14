@@ -44,8 +44,7 @@ class FormatControllerTest {
 	@BeforeEach
 	void setUp() {
 		this.testFormat = Format.builder().id(1L).name("Standard").description("Standard format").minDeckSize(60)
-				.maxDeckSize(60).maxSideboardSize(15).bannedCards(Arrays.asList("123", "456"))
-				.restrictedCards(List.of("789")).build();
+				.maxDeckSize(60).maxSideboardSize(15).maxCopies(4).singleton(false).requiresCommander(false).build();
 
 		this.testFormatDTO = FormatDTO.builder().id(1).format_name("Standard").deck_size(60).build();
 	}

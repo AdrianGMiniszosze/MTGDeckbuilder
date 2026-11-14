@@ -35,8 +35,9 @@ class FormatRepositoryTest {
         this.testFormatEntity.setMinDeckSize(60);
         this.testFormatEntity.setMaxDeckSize(60);
         this.testFormatEntity.setMaxSideboardSize(15);
-        this.testFormatEntity.setBannedCards(Arrays.asList("123", "456"));
-        this.testFormatEntity.setRestrictedCards(List.of("789"));
+        this.testFormatEntity.setMaxCopies(4);
+        this.testFormatEntity.setSingleton(false);
+        this.testFormatEntity.setRequiresCommander(false);
 	}
 
 	@Test

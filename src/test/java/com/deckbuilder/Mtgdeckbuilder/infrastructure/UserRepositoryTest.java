@@ -39,7 +39,7 @@ class UserRepositoryTest {
         this.testUserEntity.setEmail("john@example.com");
         this.testUserEntity.setHashedPassword("hashedPassword123");
         this.testUserEntity.setCountry("USA");
-        this.testUserEntity.setRegistrationDate(LocalDateTime.now());
+        this.testUserEntity.setCreatedAt(LocalDateTime.now());
 	}
 
 	@Test

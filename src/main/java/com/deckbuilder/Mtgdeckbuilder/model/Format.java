@@ -18,6 +18,7 @@ public class Format {
 	private Integer minDeckSize;
 	private Integer maxDeckSize;
 	private Integer maxSideboardSize;
-	private List<String> bannedCards;
-	private List<String> restrictedCards;
+	private Integer maxCopies;
+	private Boolean singleton;
+	private Boolean requiresCommander;
 }

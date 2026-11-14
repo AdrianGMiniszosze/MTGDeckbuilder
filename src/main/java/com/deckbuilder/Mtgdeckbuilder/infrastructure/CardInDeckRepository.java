@@ -17,6 +17,8 @@ public interface CardInDeckRepository extends JpaRepository<CardInDeckEntity, Lo
 
 	void deleteByDeckIdAndCardIdAndSection(Long deckId, Long cardId, String section);
 
+	void deleteByDeckId(Long deckId);
+
 	boolean existsByDeckIdAndCardIdAndSection(Long deckId, Long cardId, String section);
 
 	/**

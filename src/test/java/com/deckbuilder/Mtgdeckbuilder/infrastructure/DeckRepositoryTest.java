@@ -39,7 +39,7 @@ class DeckRepositoryTest {
         this.testDeckEntity.setDescription("A test deck");
         this.testDeckEntity.setUserId(1L);
         this.testDeckEntity.setFormatId(1L);
-        this.testDeckEntity.setDeckType("main");
+
         this.testDeckEntity.setIsPrivate(false);
         this.testDeckEntity.setCreated(LocalDateTime.now());
         this.testDeckEntity.setModified(LocalDateTime.now());

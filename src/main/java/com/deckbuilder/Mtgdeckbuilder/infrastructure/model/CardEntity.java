@@ -60,6 +60,9 @@ public class CardEntity {
 	@Column(name = "unlimited_copies", nullable = false)
 	private Boolean unlimitedCopies = false;
 
+	@Column(name = "is_basic_land", nullable = false)
+	private Boolean isBasicLand = false;
+
 	@Column(name = "image_url", nullable = false)
 	private String imageUrl;
 
@@ -69,8 +72,8 @@ public class CardEntity {
 	@Column(name = "game_changer", nullable = false)
 	private Boolean gameChanger = false;
 
-	@Column(name = "related_card")
-	private Long relatedCard;
+	@Column(name = "related_card_id")
+	private Long relatedCardId;
 
 	@Column(name = "parent_card_id")
 	private Long parentCardId;
@@ -78,14 +81,10 @@ public class CardEntity {
 	@Column(nullable = false)
 	private String language;
 
-	@Column(name = "embedding")
-	@Lob
-	private String embedding;
-
 	private String archetype;
 
-	@Column(name = "card_set")
-	private Long cardSet;
+	@Column(name = "set_id")
+	private Long cardSetId;
 
 	@Column(name = "collector_number")
 	private String collectorNumber;

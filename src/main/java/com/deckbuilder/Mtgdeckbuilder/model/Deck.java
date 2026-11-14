@@ -18,7 +18,6 @@ public class Deck {
 	private String description;
 	private LocalDateTime created;
 	private LocalDateTime modified;
-	private String deckType;
 	private Boolean isPrivate;
 	private String tournament;
 	private String shareUrl;

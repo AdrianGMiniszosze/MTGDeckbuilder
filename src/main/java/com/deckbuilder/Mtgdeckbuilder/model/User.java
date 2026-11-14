@@ -18,6 +18,7 @@ public class User {
 	private String email;
 	private String hashedPassword;
 	private String country;
+	private String role;
 	private LocalDateTime registrationDate;
 	private Boolean isActive;
 	private LocalDateTime lastLogin;

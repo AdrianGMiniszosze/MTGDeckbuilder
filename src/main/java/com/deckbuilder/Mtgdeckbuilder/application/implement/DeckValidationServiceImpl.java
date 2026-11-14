@@ -25,8 +25,6 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 	private final CardLegalityRepository cardLegalityRepository;
 	private final CardInDeckRepository cardInDeckRepository;
 
-	private static final int SIDEBOARD_MAX_SIZE = 15;
-	private static final int DEFAULT_MAX_CARD_QUANTITY = 4;
 	private static final int UNLIMITED_QUANTITY = 9999;
 
 	@Override
@@ -118,7 +116,7 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 		}
 
 		// Check if it's a basic land
-		if ("Land".equals(card.getCardType()) && "Basic".equals(card.getCardSupertype())) {
+		if (Boolean.TRUE.equals(card.getIsBasicLand())) {
 			return UNLIMITED_QUANTITY;
 		}
 
@@ -131,35 +129,32 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 		final FormatEntity format = this.formatRepository.findById(formatId)
 				.orElseThrow(() -> new InvalidDeckCompositionException("Format not found with id: " + formatId));
 
-		if ("Commander".equals(format.getName())) {
+		if (format.isSingleton()) {
 			return 1;
 		}
 
-		// Default maximum
-		return DEFAULT_MAX_CARD_QUANTITY;
+		return format.getMaxCopies();
 	}
 
 	@Override
 	public int getMaxDeckSize(Long formatId, String section) {
-		if ("sideboard".equals(section)) {
-			return SIDEBOARD_MAX_SIZE;
-		}
-
-		// For main deck, use format's deck size limit
+		// For main deck and sideboard, use the format's limits. A NULL limit means
+		// the section is unbounded.
 		final FormatEntity format = this.formatRepository.findById(formatId)
 				.orElseThrow(() -> new InvalidDeckCompositionException("Format not found with id: " + formatId));
 
-		return format.getMaxDeckSize();
+		final Integer limit = "sideboard".equals(section) ? format.getMaxSideboardSize() : format.getMaxDeckSize();
+		return limit != null ? limit : Integer.MAX_VALUE;
 	}
 
 	private void validateCardLegality(CardLegalityEntity cardLegality, Long formatId) {
 		if (cardLegality != null) {
 			final String legalityStatus = cardLegality.getLegalityStatus();
-			if ("banned".equals(legalityStatus)) {
+			if ("banned".equals(legalityStatus) || "not_legal".equals(legalityStatus)) {
 				final FormatEntity format = this.formatRepository.findById(formatId)
 						.orElseThrow(() -> new InvalidDeckCompositionException("Format not found"));
 				throw new InvalidDeckCompositionException(
-						String.format("Card is banned in the %s format", format.getName()));
+						String.format("Card is %s in the %s format", legalityStatus, format.getName()));
 			}
 		}
 		// If no legality record exists, assume the card is legal

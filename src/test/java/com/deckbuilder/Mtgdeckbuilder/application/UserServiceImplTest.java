@@ -58,7 +58,7 @@ class UserServiceImplTest {
 		this.testUserEntity.setEmail("john@example.com");
 		this.testUserEntity.setHashedPassword("hashedPassword123");
 		this.testUserEntity.setCountry("USA");
-		this.testUserEntity.setRegistrationDate(LocalDateTime.now());
+		this.testUserEntity.setCreatedAt(LocalDateTime.now());
 
 		this.testUser = new User();
 		this.testUser.setId(1L);

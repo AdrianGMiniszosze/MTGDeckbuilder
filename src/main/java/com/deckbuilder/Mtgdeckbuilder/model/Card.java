@@ -29,15 +29,15 @@ public class Card {
 	private String power;
 	private String toughness;
 	private Boolean unlimitedCopies;
+	private Boolean isBasicLand;
 	private String imageUrl;
 	private Boolean foil;
 	private Boolean gameChanger;
-	private Long relatedCard;
+	private Long relatedCardId;
 	private Long parentCardId;
 	private String language;
-	private String embedding;
 	private String archetype;
-	private Long cardSet;
+	private Long cardSetId;
 	private String collectorNumber;
 		private UUID scryfallId;
 		private UUID oracleId;

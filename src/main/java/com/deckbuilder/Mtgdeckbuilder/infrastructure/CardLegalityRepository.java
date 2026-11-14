@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -32,4 +33,12 @@ public interface CardLegalityRepository extends JpaRepository<CardLegalityEntity
            "FROM CardLegalityEntity cl " +
            "WHERE cl.cardId = :cardId AND cl.formatId = :formatId AND cl.legalityStatus = 'restricted'")
     boolean isCardRestricted(@Param("cardId") Long cardId, @Param("formatId") Long formatId);
+
+    /**
+     * Card names currently restricted in a format.
+     */
+    @Query("SELECT c.name FROM CardLegalityEntity cl JOIN cl.card c " +
+           "WHERE cl.formatId = :formatId AND cl.legalityStatus = 'restricted' " +
+           "ORDER BY c.name")
+    List<String> findRestrictedCardNamesByFormatId(@Param("formatId") Long formatId);
 }

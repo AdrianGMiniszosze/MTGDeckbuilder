@@ -48,7 +48,7 @@ class DeckControllerTest {
 	@BeforeEach
 	void setUp() {
 		this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
-				.deckType("main").isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
+				.isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
 
 
         this.testCompleteDeckDTO = CompleteDeckDTO.builder().id(1).deck_name("Test Deck").description("A test deck").user_id(1)
@@ -125,13 +125,13 @@ class DeckControllerTest {
 	void shouldCreateDeck() {
 		// Given
 		final DeckDTO newDeckDTO = DeckDTO.builder().deck_name("New Deck").description("A new deck").user_id(1)
-				.format(1).deck_type(DeckDTO.Deck_type.MAIN).build();
+				.format(1).build();
 
 		final Deck newDeck = this.testDeck.toBuilder().id(null).name("New Deck").build();
 		final Deck createdDeck = this.testDeck.toBuilder().id(2L).name("New Deck").build();
 
 		final DeckDTO createdDeckDTO = DeckDTO.builder().id(2).deck_name("New Deck").description("A new deck")
-				.user_id(1).format(1).deck_type(DeckDTO.Deck_type.MAIN).creation_date(LocalDateTime.now())
+				.user_id(1).format(1).creation_date(LocalDateTime.now())
 				.last_modification(LocalDateTime.now()).build();
 
 		when(this.deckMapper.toDeck(newDeckDTO)).thenReturn(newDeck);
@@ -154,13 +154,13 @@ class DeckControllerTest {
 	void shouldUpdateDeck_WhenExists() {
 		// Given
 		final DeckDTO updatedDTO = DeckDTO.builder().id(1).deck_name("Updated Deck").description("Updated description")
-				.user_id(1).format(1).deck_type(DeckDTO.Deck_type.MAIN).build();
+				.user_id(1).format(1).build();
 
 		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
 		final Deck savedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
 
 		final DeckDTO savedDTO = DeckDTO.builder().id(1).deck_name("Updated Deck").description("Updated description")
-				.user_id(1).format(1).deck_type(DeckDTO.Deck_type.MAIN).last_modification(LocalDateTime.now()).build();
+				.user_id(1).format(1).last_modification(LocalDateTime.now()).build();
 
 		when(this.deckMapper.toDeck(updatedDTO)).thenReturn(updatedDeck);
 		when(this.deckService.update(eq(1L), any(Deck.class))).thenReturn(savedDeck);

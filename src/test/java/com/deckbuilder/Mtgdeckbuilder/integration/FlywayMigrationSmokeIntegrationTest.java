@@ -1,7 +1,6 @@
 package com.deckbuilder.mtgdeckbuilder.integration;
 
 import org.flywaydb.core.Flyway;
-import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -10,212 +9,152 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.OffsetDateTime;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * Verifies that a completely empty database can be provisioned by Flyway alone
+ * (V1 baseline + V2 format seed) and that the resulting schema enforces the
+ * core deck rules.
+ */
 class FlywayMigrationSmokeIntegrationTest {
 
     @Test
-    void appliesV2ThroughV5AndPreservesExistingPricesAfterBootstrapBaseline() throws Exception {
+    void appliesBaselineAndSeedToAnEmptyDatabase() throws Exception {
         try (PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("pgvector/pgvector:pg16")
                 .withDatabaseName("mtg_test")
                 .withUsername("test")
-                .withPassword("test")
-                .withInitScript("scripts/01-create-schema-ENHANCED.sql")) {
+                .withPassword("test")) {
             postgres.start();
 
-            try (Connection bootstrapConnection = DriverManager.getConnection(
-                    postgres.getJdbcUrl(),
-                    postgres.getUsername(),
-                    postgres.getPassword())) {
-                // Seed pre-migration data to validate timestamp backfill on existing rows.
-                insertCardBeforeV2(bootstrapConnection, "pre_v2_card");
-            }
-
-            Flyway v2Flyway = Flyway.configure()
+            Flyway flyway = Flyway.configure()
                     .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
                     .locations("classpath:db/migration")
-                    .baselineOnMigrate(true)
-                    .target(MigrationVersion.fromVersion("2"))
                     .load();
-            v2Flyway.migrate();
 
-            assertThat(v2Flyway.info().applied())
+            var result = flyway.migrate();
+
+            assertThat(result.migrationsExecuted).isEqualTo(2);
+            assertThat(flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .contains("2");
+                    .containsExactly("1", "2");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
                     postgres.getUsername(),
                     postgres.getPassword())) {
-                assertThat(isNotNullable(connection, "cards", "imported_at")).isFalse();
-                assertThat(isNotNullable(connection, "cards", "updated_at")).isFalse();
-            }
-
-            Flyway v4Flyway = Flyway.configure()
-                    .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
-                    .locations("classpath:db/migration")
-                    .baselineOnMigrate(true)
-                    .target(MigrationVersion.fromVersion("4"))
-                    .load();
-            v4Flyway.migrate();
-
-            assertThat(v4Flyway.info().applied())
-                    .extracting(migration -> migration.getVersion().getVersion())
-                    .contains("3", "4");
-
-            try (Connection connection = DriverManager.getConnection(
-                    postgres.getJdbcUrl(),
-                    postgres.getUsername(),
-                    postgres.getPassword())) {
-                insertCardPrice(connection, getCardIdByName(connection, "pre_v2_card"));
-            }
-
-            Flyway v5Flyway = Flyway.configure()
-                    .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
-                    .locations("classpath:db/migration")
-                    .baselineOnMigrate(true)
-                    .load();
-            v5Flyway.migrate();
-
-            assertThat(v5Flyway.info().applied())
-                    .extracting(migration -> migration.getVersion().getVersion())
-                    .contains("3", "4", "5");
-
-            try (Connection connection = DriverManager.getConnection(
-                    postgres.getJdbcUrl(),
-                    postgres.getUsername(),
-                    postgres.getPassword())) {
-                assertCardTimestampSchema(connection);
-                assertImportSchema(connection);
-
-                long seededCardId = getCardIdByName(connection, "pre_v2_card");
-                assertThat(readUpdatedAt(connection, seededCardId)).isNotNull();
-                assertThat(readUsd(connection, seededCardId)).isEqualByComparingTo("1.25");
-                assertThat(readPriceObservedAt(connection, seededCardId)).isNotNull();
-
-                UUID sharedOracleId = UUID.randomUUID();
-                long cardWithScryfall = assertScryfallIdentityBehavior(connection, sharedOracleId);
-                assertNewSchemaBehavior(connection, cardWithScryfall, sharedOracleId);
-                assertUpdatedAtChangesOnUpdate(connection, cardWithScryfall);
+                assertCoreTablesExist(connection);
+                assertCanonicalColumns(connection);
+                assertLegacyColumnsAreGone(connection);
+                assertSeedFormats(connection);
+                assertDeckRulesTrigger(connection);
             }
         }
     }
 
-    private static void assertCardTimestampSchema(Connection connection) throws Exception {
+    private static void assertCoreTablesExist(Connection connection) throws Exception {
+        for (String table : new String[]{
+                "users", "sets", "cards", "card_colors", "card_color_identity",
+                "card_types", "card_supertypes", "card_subtypes", "card_keywords",
+                "card_faces", "card_rulings", "formats", "card_legality", "decks",
+                "card_deck", "tags", "card_tag", "card_relationships"}) {
+            assertThat(hasTable(connection, table)).as("table %s", table).isTrue();
+        }
+    }
+
+    private static void assertCanonicalColumns(Connection connection) throws Exception {
+        assertThat(hasColumn(connection, "cards", "set_id")).isTrue();
+        assertThat(hasColumn(connection, "cards", "related_card_id")).isTrue();
+        assertThat(hasColumn(connection, "cards", "is_basic_land")).isTrue();
         assertThat(hasColumn(connection, "cards", "scryfall_id")).isTrue();
         assertThat(hasColumn(connection, "cards", "oracle_id")).isTrue();
-        assertThat(hasColumn(connection, "cards", "imported_at")).isTrue();
-        assertThat(hasColumn(connection, "cards", "updated_at")).isTrue();
-        assertThat(hasTrigger(connection, "cards", "trg_cards_updated_at")).isTrue();
-        assertThat(hasIndex(connection, "ux_cards_scryfall_id")).isTrue();
-        assertThat(hasIndex(connection, "ix_cards_oracle_id")).isTrue();
-        assertThat(hasIndex(connection, "ix_cards_updated_at")).isTrue();
-        assertThat(hasDefault(connection, "cards", "imported_at", "CURRENT_TIMESTAMP")).isTrue();
-        assertThat(hasDefault(connection, "cards", "updated_at", "CURRENT_TIMESTAMP")).isTrue();
-        assertThat(isNotNullable(connection, "cards", "imported_at")).isTrue();
-        assertThat(isNotNullable(connection, "cards", "updated_at")).isTrue();
-        assertThat(countCardsWithMissingTimestamps(connection)).isZero();
+
+        assertThat(hasColumn(connection, "decks", "format_id")).isTrue();
+        assertThat(hasColumn(connection, "decks", "is_private")).isTrue();
+        assertThat(hasColumn(connection, "decks", "created_at")).isTrue();
+        assertThat(hasColumn(connection, "decks", "updated_at")).isTrue();
+
+        assertThat(hasColumn(connection, "formats", "max_copies")).isTrue();
+        assertThat(hasColumn(connection, "formats", "singleton")).isTrue();
+        assertThat(hasColumn(connection, "formats", "requires_commander")).isTrue();
+        assertThat(hasColumn(connection, "formats", "max_sideboard_size")).isTrue();
+
+        assertThat(hasColumn(connection, "card_legality", "format_id")).isTrue();
+        assertThat(hasColumn(connection, "users", "role")).isTrue();
+        assertThat(hasColumn(connection, "users", "is_active")).isTrue();
     }
 
-    private static void assertImportSchema(Connection connection) throws Exception {
-        assertThat(hasTable(connection, "card_prices")).isFalse();
-        assertThat(hasColumn(connection, "cards", "usd")).isTrue();
-        assertThat(hasColumn(connection, "cards", "usd_foil")).isTrue();
-        assertThat(hasColumn(connection, "cards", "price_observed_at")).isTrue();
-        assertThat(hasColumn(connection, "card_faces", "face_index")).isTrue();
-        assertThat(hasColumn(connection, "card_faces", "face_data")).isTrue();
-        assertThat(hasColumn(connection, "card_rulings", "oracle_id")).isTrue();
-        assertThat(hasIndex(connection, "ix_card_rulings_oracle_id")).isTrue();
+    private static void assertLegacyColumnsAreGone(Connection connection) throws Exception {
+        assertThat(hasColumn(connection, "decks", "deck_type")).isFalse();
+        assertThat(hasColumn(connection, "decks", "private")).isFalse();
+        assertThat(hasColumn(connection, "cards", "card_set")).isFalse();
+        assertThat(hasColumn(connection, "cards", "embedding")).isFalse();
     }
 
-    private static long assertScryfallIdentityBehavior(Connection connection, UUID sharedOracleId) throws Exception {
-        UUID duplicateScryfallId = UUID.randomUUID();
-        long cardWithScryfall = insertCardAfterV2(connection, "scryfall_unique_1", duplicateScryfallId, null);
-        assertThat(readImportedAt(connection, cardWithScryfall)).isNotNull();
-        assertThat(readUpdatedAt(connection, cardWithScryfall)).isNotNull();
-        assertThatThrownBy(() -> insertCardAfterV2(connection, "scryfall_unique_2", duplicateScryfallId, null))
+    private static void assertSeedFormats(Connection connection) throws Exception {
+        assertThat(countFormats(connection)).isEqualTo(6);
+
+        FormatRules standard = readFormat(connection, "Standard");
+        assertThat(standard.minDeckSize()).isEqualTo(60);
+        assertThat(standard.maxDeckSize()).isNull();
+        assertThat(standard.maxSideboardSize()).isEqualTo(15);
+        assertThat(standard.maxCopies()).isEqualTo(4);
+        assertThat(standard.singleton()).isFalse();
+        assertThat(standard.requiresCommander()).isFalse();
+
+        FormatRules commander = readFormat(connection, "Commander");
+        assertThat(commander.minDeckSize()).isEqualTo(100);
+        assertThat(commander.maxDeckSize()).isEqualTo(100);
+        assertThat(commander.maxCopies()).isEqualTo(1);
+        assertThat(commander.singleton()).isTrue();
+        assertThat(commander.requiresCommander()).isTrue();
+
+        for (String name : new String[]{"Modern", "Legacy", "Vintage", "Pauper"}) {
+            FormatRules rules = readFormat(connection, name);
+            assertThat(rules.minDeckSize()).as(name).isEqualTo(60);
+            assertThat(rules.maxCopies()).as(name).isEqualTo(4);
+        }
+    }
+
+    private static void assertDeckRulesTrigger(Connection connection) throws Exception {
+        assertThat(hasTrigger(connection, "card_deck", "enforce_card_quantity_limit")).isTrue();
+
+        long userId = insertUser(connection);
+        long standardFormatId = formatId(connection, "Standard");
+        long deckId = insertDeck(connection, "Smoke Deck", standardFormatId, userId);
+
+        long legalCard = insertCard(connection, "Legal Card", false, false);
+        long bannedCard = insertCard(connection, "Banned Card", false, false);
+        long basicLand = insertCard(connection, "Plains", true, false);
+
+        insertLegality(connection, legalCard, standardFormatId, "legal");
+        insertLegality(connection, bannedCard, standardFormatId, "banned");
+
+        // Four copies are accepted.
+        insertDeckCard(connection, deckId, legalCard, 4, "main");
+
+        // A fifth copy is rejected.
+        assertThatThrownBy(() -> insertDeckCard(connection, deckId, legalCard, 1, "sideboard"))
                 .isInstanceOf(SQLException.class);
 
-        insertCardAfterV2(connection, "oracle_reprint_1", UUID.randomUUID(), sharedOracleId);
-        insertCardAfterV2(connection, "oracle_reprint_2", UUID.randomUUID(), sharedOracleId);
-        assertThat(countCardsWithOracleId(connection, sharedOracleId)).isEqualTo(2);
-        return cardWithScryfall;
-    }
-
-    private static void assertNewSchemaBehavior(Connection connection, long cardId, UUID oracleId) throws Exception {
-        updateCardPrice(connection, cardId);
-        assertThat(readUsd(connection, cardId)).isEqualByComparingTo("1.25");
-        assertThatThrownBy(() -> updateCardPriceToNegative(connection, cardId))
-                .isInstanceOf(SQLException.class);
-        insertCardFace(connection, cardId, 0, "Front");
-        insertCardFace(connection, cardId, 1, "Back");
-        assertThat(countRows(connection, "card_faces", "card_id", cardId)).isEqualTo(2);
-        assertThatThrownBy(() -> insertCardFace(connection, cardId, 1, "Duplicate"))
+        // Banned cards are rejected.
+        assertThatThrownBy(() -> insertDeckCard(connection, deckId, bannedCard, 1, "main"))
                 .isInstanceOf(SQLException.class);
 
-        insertRuling(connection, oracleId, "This ruling applies to multiple printings.");
-        assertThatThrownBy(() -> insertRuling(connection, oracleId, "This ruling applies to multiple printings."))
-                .isInstanceOf(SQLException.class);
-        insertRuling(connection, oracleId, "A second ruling for the same oracle identity.");
-        assertThat(countRows(connection, "card_rulings", "oracle_id", oracleId)).isEqualTo(2);
+        // Basic lands are exempt from the copy limit.
+        insertDeckCard(connection, deckId, basicLand, 20, "main");
+
+        // Maybeboard is a scratch area.
+        insertDeckCard(connection, deckId, bannedCard, 10, "maybeboard");
     }
 
-    private static void assertUpdatedAtChangesOnUpdate(Connection connection, long cardId) throws Exception {
-        OffsetDateTime beforeUpdate = readUpdatedAt(connection, cardId);
-        updateCardText(connection, cardId);
-        OffsetDateTime afterUpdate = readUpdatedAt(connection, cardId);
-        assertThat(afterUpdate).isAfter(beforeUpdate);
-    }
-
-    private static long insertCardBeforeV2(Connection connection, String cardName) throws Exception {
+    private static long insertUser(Connection connection) throws Exception {
         String sql = """
-                INSERT INTO cards(card_name, cmc, type_line, card_type, rarity, card_text, image_url, language)
-                VALUES (?, 1, 'Creature - Test', 'Creature', 'common', 'text', 'https://img', 'en')
+                INSERT INTO users(name, username, email, hashed_password)
+                VALUES ('Smoke', 'smoke', 'smoke@example.com', 'hash')
                 RETURNING id
                 """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, cardName);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                resultSet.next();
-                return resultSet.getLong(1);
-            }
-        }
-    }
-
-    private static long insertCardAfterV2(Connection connection, String cardName, UUID scryfallId, UUID oracleId) throws Exception {
-        String sql = """
-                INSERT INTO cards(card_name, cmc, type_line, card_type, rarity, card_text, image_url, language, scryfall_id, oracle_id)
-                VALUES (?, 1, 'Creature - Test', 'Creature', 'common', 'text', 'https://img', 'en', ?, ?)
-                RETURNING id
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, cardName);
-            statement.setObject(2, scryfallId);
-            statement.setObject(3, oracleId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                resultSet.next();
-                return resultSet.getLong(1);
-            }
-        }
-    }
-
-    private static long getCardIdByName(Connection connection, String cardName) throws Exception {
-        String sql = "SELECT id FROM cards WHERE card_name = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, cardName);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                resultSet.next();
-                return resultSet.getLong(1);
-            }
-        }
-    }
-
-    private static long countCardsWithMissingTimestamps(Connection connection) throws Exception {
-        String sql = "SELECT COUNT(*) FROM cards WHERE imported_at IS NULL OR updated_at IS NULL";
         try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet resultSet = statement.executeQuery()) {
             resultSet.next();
@@ -223,10 +162,10 @@ class FlywayMigrationSmokeIntegrationTest {
         }
     }
 
-    private static long countCardsWithOracleId(Connection connection, UUID oracleId) throws Exception {
-        String sql = "SELECT COUNT(*) FROM cards WHERE oracle_id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, oracleId);
+    private static long formatId(Connection connection, String formatName) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT id FROM formats WHERE format_name = ?")) {
+            statement.setString(1, formatName);
             try (ResultSet resultSet = statement.executeQuery()) {
                 resultSet.next();
                 return resultSet.getLong(1);
@@ -234,58 +173,93 @@ class FlywayMigrationSmokeIntegrationTest {
         }
     }
 
-    private static void insertCardPrice(Connection connection, long cardId) throws Exception {
-        String sql = "INSERT INTO card_prices(card_id, usd, price_observed_at) VALUES (?, 1.25, CURRENT_TIMESTAMP)";
+    private static long insertDeck(Connection connection, String name, long formatId, long userId) throws Exception {
+        String sql = """
+                INSERT INTO decks(deck_name, format_id, user_id)
+                VALUES (?, ?, ?)
+                RETURNING id
+                """;
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            statement.executeUpdate();
-        }
-    }
-
-    private static void updateCardPrice(Connection connection, long cardId) throws Exception {
-        String sql = "UPDATE cards SET usd = 1.25, price_observed_at = CURRENT_TIMESTAMP WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            statement.executeUpdate();
-        }
-    }
-
-    private static void updateCardPriceToNegative(Connection connection, long cardId) throws Exception {
-        String sql = "UPDATE cards SET usd = -1 WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            statement.executeUpdate();
-        }
-    }
-
-    private static void insertCardFace(Connection connection, long cardId, int faceIndex, String name) throws Exception {
-        String sql = "INSERT INTO card_faces(card_id, face_index, name, face_data) VALUES (?, ?, ?, '{\"name\":\"test\"}'::jsonb)";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            statement.setInt(2, faceIndex);
-            statement.setString(3, name);
-            statement.executeUpdate();
-        }
-    }
-
-    private static void insertRuling(Connection connection, UUID oracleId, String comment) throws Exception {
-        String sql = "INSERT INTO card_rulings(oracle_id, published_at, comment, source) VALUES (?, DATE '2026-01-01', ?, 'wotc')";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, oracleId);
-            statement.setString(2, comment);
-            statement.executeUpdate();
-        }
-    }
-
-    private static long countRows(Connection connection, String table, String column, Object value) throws Exception {
-        String sql = "SELECT COUNT(*) FROM " + table + " WHERE " + column + " = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, value);
+            statement.setString(1, name);
+            statement.setLong(2, formatId);
+            statement.setLong(3, userId);
             try (ResultSet resultSet = statement.executeQuery()) {
                 resultSet.next();
                 return resultSet.getLong(1);
             }
         }
+    }
+
+    private static long insertCard(Connection connection, String name, boolean basicLand, boolean unlimited) throws Exception {
+        String sql = """
+                INSERT INTO cards(card_name, cmc, type_line, card_type, rarity, image_url, is_basic_land, unlimited_copies)
+                VALUES (?, 1, 'Creature - Test', 'Creature', 'common', 'https://img', ?, ?)
+                RETURNING id
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, name);
+            statement.setBoolean(2, basicLand);
+            statement.setBoolean(3, unlimited);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getLong(1);
+            }
+        }
+    }
+
+    private static void insertLegality(Connection connection, long cardId, long formatId, String status) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO card_legality(card_id, format_id, legality_status) VALUES (?, ?, ?)")) {
+            statement.setLong(1, cardId);
+            statement.setLong(2, formatId);
+            statement.setString(3, status);
+            statement.executeUpdate();
+        }
+    }
+
+    private static void insertDeckCard(Connection connection, long deckId, long cardId, int quantity, String section) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO card_deck(deck_id, card_id, quantity, section) VALUES (?, ?, ?, ?)")) {
+            statement.setLong(1, deckId);
+            statement.setLong(2, cardId);
+            statement.setInt(3, quantity);
+            statement.setString(4, section);
+            statement.executeUpdate();
+        }
+    }
+
+    private static long countFormats(Connection connection) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM formats");
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getLong(1);
+        }
+    }
+
+    private static FormatRules readFormat(Connection connection, String formatName) throws Exception {
+        String sql = """
+                SELECT min_deck_size, max_deck_size, max_sideboard_size, max_copies, singleton, requires_commander
+                FROM formats
+                WHERE format_name = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, formatName);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                assertThat(resultSet.next()).as("format %s exists", formatName).isTrue();
+                Integer maxDeckSize = resultSet.getObject("max_deck_size", Integer.class);
+                return new FormatRules(
+                        resultSet.getInt("min_deck_size"),
+                        maxDeckSize,
+                        resultSet.getObject("max_sideboard_size", Integer.class),
+                        resultSet.getInt("max_copies"),
+                        resultSet.getBoolean("singleton"),
+                        resultSet.getBoolean("requires_commander"));
+            }
+        }
+    }
+
+    private record FormatRules(int minDeckSize, Integer maxDeckSize, Integer maxSideboardSize,
+                               int maxCopies, boolean singleton, boolean requiresCommander) {
     }
 
     private static boolean hasTable(Connection connection, String table) throws Exception {
@@ -295,58 +269,6 @@ class FlywayMigrationSmokeIntegrationTest {
             try (ResultSet resultSet = statement.executeQuery()) {
                 return resultSet.next();
             }
-        }
-    }
-
-    private static java.math.BigDecimal readUsd(Connection connection, long cardId) throws Exception {
-        String sql = "SELECT usd FROM cards WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                resultSet.next();
-                return resultSet.getBigDecimal(1);
-            }
-        }
-    }
-
-    private static OffsetDateTime readPriceObservedAt(Connection connection, long cardId) throws Exception {
-        String sql = "SELECT price_observed_at FROM cards WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                resultSet.next();
-                return resultSet.getObject(1, OffsetDateTime.class);
-            }
-        }
-    }
-
-    private static OffsetDateTime readImportedAt(Connection connection, long cardId) throws Exception {
-        String sql = "SELECT imported_at FROM cards WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                resultSet.next();
-                return resultSet.getObject(1, OffsetDateTime.class);
-            }
-        }
-    }
-
-    private static OffsetDateTime readUpdatedAt(Connection connection, long cardId) throws Exception {
-        String sql = "SELECT updated_at FROM cards WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                resultSet.next();
-                return resultSet.getObject(1, OffsetDateTime.class);
-            }
-        }
-    }
-
-    private static void updateCardText(Connection connection, long cardId) throws Exception {
-        String sql = "UPDATE cards SET card_text = card_text || ' updated' WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, cardId);
-            statement.executeUpdate();
         }
     }
 
@@ -386,59 +308,4 @@ class FlywayMigrationSmokeIntegrationTest {
             }
         }
     }
-
-    private static boolean hasIndex(Connection connection, String indexName) throws Exception {
-        String sql = """
-                SELECT 1
-                FROM pg_indexes
-                WHERE schemaname = 'public'
-                  AND indexname = ?
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, indexName);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next();
-            }
-        }
-    }
-
-    private static boolean hasDefault(Connection connection, String table, String column, String expectedSnippet) throws Exception {
-        String sql = """
-                SELECT column_default
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = ?
-                  AND column_name = ?
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, table);
-            statement.setString(2, column);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                if (!resultSet.next()) {
-                    return false;
-                }
-                String defaultValue = resultSet.getString(1);
-                return defaultValue != null && defaultValue.contains(expectedSnippet);
-            }
-        }
-    }
-
-    private static boolean isNotNullable(Connection connection, String table, String column) throws Exception {
-        String sql = """
-                SELECT is_nullable
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = ?
-                  AND column_name = ?
-                """;
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, table);
-            statement.setString(2, column);
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return resultSet.next() && "NO".equals(resultSet.getString(1));
-            }
-        }
-    }
 }
-
-

@@ -195,7 +195,7 @@ public class CardServiceImpl implements CardService {
 	@Override
 	public List<Card> findByNameAndSet(String name, Long setId) {
 		log.debug("Finding cards by name: {} and set: {}", name, setId);
-		final List<CardEntity> entities = this.cardRepository.findByNameAndCardSet(name, setId);
+		final List<CardEntity> entities = this.cardRepository.findByNameAndCardSetId(name, setId);
 		final List<Card> cards = entities.stream()
 			.map(this::mapEntityToModel)
 			.toList();

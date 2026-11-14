@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -54,7 +55,7 @@ class DeckServiceImplTest {
 	@BeforeEach
 	void setUp() {
 		this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
-				.deckType("main").isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
+				.isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
 
 		this.testDeckEntity = new DeckEntity();
 		this.testDeckEntity.setId(1L);
@@ -62,7 +63,6 @@ class DeckServiceImplTest {
 		this.testDeckEntity.setDescription("A test deck");
 		this.testDeckEntity.setUserId(1L);
 		this.testDeckEntity.setFormatId(1L);
-		this.testDeckEntity.setDeckType("main");
 		this.testDeckEntity.setIsPrivate(false);
 		this.testDeckEntity.setCreated(LocalDateTime.now());
 		this.testDeckEntity.setModified(LocalDateTime.now());
@@ -176,11 +176,76 @@ class DeckServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Should persist deck contents when creating a deck")
+	void shouldPersistDeckContents_WhenCreatingDeck() {
+		// Given
+		final Deck.CardInDeck mainCard = new Deck.CardInDeck(null, 10L, null, 2, "main");
+		final Deck.CardInDeck sideCard = new Deck.CardInDeck(null, 10L, null, 1, "sideboard");
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null)
+				.cards(List.of(mainCard, sideCard)).build();
+
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.create(newDeck);
+
+		// Then
+		verify(this.cardInDeckRepository).deleteByDeckId(1L);
+		final ArgumentCaptor<CardInDeckEntity> captor = ArgumentCaptor.forClass(CardInDeckEntity.class);
+		verify(this.cardInDeckRepository, times(2)).save(captor.capture());
+		assertThat(captor.getAllValues()).allMatch(card -> card.getDeckId().equals(1L));
+		assertThat(captor.getAllValues()).extracting(CardInDeckEntity::getSection)
+				.containsExactlyInAnyOrder("main", "sideboard");
+	}
+
+	@Test
+	@DisplayName("Should merge duplicate cards of the same section when creating a deck")
+	void shouldMergeDuplicateCards_WhenCreatingDeck() {
+		// Given
+		final Deck.CardInDeck first = new Deck.CardInDeck(null, 10L, null, 2, "main");
+		final Deck.CardInDeck duplicate = new Deck.CardInDeck(null, 10L, null, 3, null);
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null)
+				.cards(List.of(first, duplicate)).build();
+
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.create(newDeck);
+
+		// Then
+		final ArgumentCaptor<CardInDeckEntity> captor = ArgumentCaptor.forClass(CardInDeckEntity.class);
+		verify(this.cardInDeckRepository).save(captor.capture());
+		assertThat(captor.getValue().getSection()).isEqualTo("main");
+		assertThat(captor.getValue().getQuantity()).isEqualTo(5);
+	}
+
+	@Test
+	@DisplayName("Should keep existing deck contents when the payload omits them")
+	void shouldKeepDeckContents_WhenUpdateOmitsThem() {
+		// Given
+		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").cards(null).build();
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(updatedDeck);
+
+		// When
+		this.deckService.update(1L, updatedDeck);
+
+		// Then
+		verify(this.cardInDeckRepository, never()).deleteByDeckId(anyLong());
+	}
+
+	@Test
 	@DisplayName("Should update existing deck")
 	void shouldUpdateDeck_WhenExists() {
 		// Given
 		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
-		when(this.deckRepository.existsById(1L)).thenReturn(true);
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
 		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
 		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(updatedDeck);
@@ -191,7 +256,7 @@ class DeckServiceImplTest {
 		// Then
 		assertThat(result).isNotNull();
 		assertThat(result.getName()).isEqualTo("Updated Deck");
-		verify(this.deckRepository).existsById(1L);
+		verify(this.deckRepository).findById(1L);
 		verify(this.deckRepository).save(any(DeckEntity.class));
 	}
 
@@ -199,13 +264,13 @@ class DeckServiceImplTest {
 	@DisplayName("Should throw exception when updating non-existent deck")
 	void shouldThrowException_WhenUpdatingNonExistentDeck() {
 		// Given
-		when(this.deckRepository.existsById(999L)).thenReturn(false);
+		when(this.deckRepository.findById(999L)).thenReturn(Optional.empty());
 
 		// When/Then
 		assertThatThrownBy(() -> this.deckService.update(999L, this.testDeck)).isInstanceOf(DeckNotFoundException.class)
 				.hasMessageContaining("Deck not found with id: 999");
 
-		verify(this.deckRepository).existsById(999L);
+		verify(this.deckRepository).findById(999L);
 		verify(this.deckRepository, never()).save(any());
 	}
 

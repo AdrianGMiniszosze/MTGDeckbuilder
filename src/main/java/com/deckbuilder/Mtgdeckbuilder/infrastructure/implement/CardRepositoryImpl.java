@@ -190,7 +190,7 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
 
         // Set ID filter (maps to card_set column)
         if (criteria.getSetId() != null) {
-            predicates.add(cb.equal(cardRoot.get("cardSet"), criteria.getSetId()));
+            predicates.add(cb.equal(cardRoot.get("cardSetId"), criteria.getSetId()));
         }
 
         // Text contains filter (maps to card_text column)
@@ -245,7 +245,7 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
                 order = "desc".equals(sortOrder) ? cb.desc(cardRoot.get("toughness")) : cb.asc(cardRoot.get("toughness"));
                 break;
             case "set":
-                order = "desc".equals(sortOrder) ? cb.desc(cardRoot.get("cardSet")) : cb.asc(cardRoot.get("cardSet"));
+                order = "desc".equals(sortOrder) ? cb.desc(cardRoot.get("cardSetId")) : cb.asc(cardRoot.get("cardSetId"));
                 break;
             case "name":
             default:
