@@ -33,7 +33,7 @@ Registro inicial de decisiones tecnicas (ADR lite) para `MTGDeckbuilder`.
 
 ## ADR-002 - Reglas criticas de deck reforzadas en base de datos
 
-- **Estado**: Aceptada
+- **Estado**: Reemplazada por ADR-007
 - **Fecha**: 2026-05-23
 - **Decision**: Mantener validaciones de legalidad/cantidad/tamano de seccion en trigger SQL (`check_card_quantity`) sobre `card_deck`.
 - **Contexto**: Reglas de negocio sensibles (banned, restricted, Commander, sideboard size) deben cumplirse incluso si falla la capa aplicacion.
@@ -111,6 +111,26 @@ Registro inicial de decisiones tecnicas (ADR lite) para `MTGDeckbuilder`.
 - **Alternativas consideradas**:
   - Mantener solo scripts SQL manuales.
   - Adoptar Liquibase en lugar de Flyway.
+
+## ADR-007 - Mazos en borrador permisivos y publicacion estricta
+
+- **Estado**: Propuesta
+- **Fecha**: 2026-11-14
+- **Decision**: Introducir `decks.status` (`draft` | `published`). Guardar un mazo nunca aplica reglas de formato; la legalidad se calcula como diagnostico (`GET /decks/{id}/validation`) y solo bloquea en `POST /decks/{id}/publish`. El trigger `check_card_quantity` aplica reglas de formato unicamente a mazos publicados y conserva siempre las comprobaciones de integridad.
+- **Contexto**: El veto actual impide guardar mazos en construccion y devuelve un unico mensaje sin identificar la carta culpable, lo que no permite a la interfaz mostrar que cartas son ilegales. La validacion Java existia pero no estaba cableada.
+- **Trade-offs**:
+  - Beneficio: el usuario guarda su trabajo siempre; el error se explica por carta; la BD sigue protegiendo lo que se publica.
+  - Costo: la base de datos deja de garantizar que todo mazo almacenado sea legal; aparecen estado y endpoints nuevos; hay que actualizar el smoke test de Flyway.
+- **Consecuencias**:
+  - `V3__add_deck_status.sql` anade `status`, `published_at`, sus constraints y un indice.
+  - `DeckValidationService` pasa a devolver `DeckValidationResult` en lugar de lanzar `InvalidDeckCompositionException` para reglas de formato.
+  - Editar un mazo publicado lo devuelve a `draft`.
+  - El contrato publica `status`, `validation_status` e `issues` por carta.
+  - Detalle completo en `docs/DECK_VALIDATION_MODEL.md`.
+- **Alternativas consideradas**:
+  - Mantener el bloqueo al guardar (rechazada: peor experiencia y sin informacion accionable).
+  - Permitir guardar y no validar nunca; validar solo en cliente (rechazada: sin garantia en servidor).
+  - Tabla `deck_status` separada en lugar de columna en `decks` (rechazada: un estado por mazo no justifica tabla propia).
 
 ---
 
