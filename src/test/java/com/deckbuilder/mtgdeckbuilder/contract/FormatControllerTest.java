@@ -1,9 +1,12 @@
 package com.deckbuilder.mtgdeckbuilder.contract;
 
+import com.deckbuilder.apigenerator.openapi.api.model.CardDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.FormatDTO;
 import com.deckbuilder.mtgdeckbuilder.application.FormatService;
+import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.FormatMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.model.Card;
 import com.deckbuilder.mtgdeckbuilder.model.Format;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -34,6 +37,9 @@ class FormatControllerTest {
 
 	@Mock
 	private FormatMapper formatMapper;
+
+	@Mock
+	private CardMapper cardMapper;
 
 	@InjectMocks
 	private FormatController formatController;
@@ -163,6 +169,37 @@ class FormatControllerTest {
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 		assertThat(response.getBody()).isNull();
 		verify(this.formatService).deleteById(1L);
+	}
+
+	@Test
+	@DisplayName("Should list the cards of a format with the paging defaults")
+	void shouldListCardsForFormatWithDefaults() {
+		// Given
+		final Card card = Card.builder().id(1L).name("Lightning Bolt").build();
+		final CardDTO cardDTO = mock(CardDTO.class);
+		when(this.formatService.findCardsByFormatId(1L, 10, 0)).thenReturn(List.of(card));
+		when(this.cardMapper.toDto(card)).thenReturn(cardDTO);
+
+		// When
+		final ResponseEntity<List<CardDTO>> response = this.formatController.listCardsForFormat(1, null, null);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).containsExactly(cardDTO);
+	}
+
+	@Test
+	@DisplayName("Should forward the requested page size and number")
+	void shouldListCardsForFormatWithPaging() {
+		// Given
+		when(this.formatService.findCardsByFormatId(1L, 25, 2)).thenReturn(List.of());
+
+		// When
+		final ResponseEntity<List<CardDTO>> response = this.formatController.listCardsForFormat(1, 25, 2);
+
+		// Then
+		assertThat(response.getBody()).isEmpty();
+		verify(this.formatService).findCardsByFormatId(1L, 25, 2);
 	}
 
 	@Test

@@ -203,6 +203,10 @@ class CardRepositorySearchIntegrationTest extends PostgresDataJpaTest {
             // When / Then
             assertThat(names(search(CardSearchCriteria.builder().powerMin("2").build())))
                     .containsExactly("Serra Angel");
+            assertThat(names(search(CardSearchCriteria.builder().powerMax("1").build())))
+                    .containsExactly("Llanowar Elves");
+            assertThat(names(search(CardSearchCriteria.builder().toughnessMin("4").build())))
+                    .containsExactly("Serra Angel");
             assertThat(names(search(CardSearchCriteria.builder().toughnessMax("1").build())))
                     .containsExactly("Llanowar Elves");
         }
@@ -260,6 +264,26 @@ class CardRepositorySearchIntegrationTest extends PostgresDataJpaTest {
                     .containsExactlyInAnyOrder("Llanowar Elves", "Counterspell");
             assertThat(names(search(CardSearchCriteria.builder().sortBy("unknown").build())).get(0))
                     .isEqualTo("Counterspell");
+        }
+
+        @Test
+        @DisplayName("Should sort in both directions for every column")
+        void shouldSortInBothDirections() {
+            // When / Then
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("name").sortOrder("desc").build())).get(0))
+                    .isEqualTo("Serra Angel");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("cmc").sortOrder("asc").build())).get(0))
+                    .isEqualTo("Mountain");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("rarity").sortOrder("desc").build())).get(0))
+                    .isEqualTo("Serra Angel");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("type").sortOrder("desc").build())).get(0))
+                    .isEqualTo("Mountain");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("power").sortOrder("asc").build())).get(0))
+                    .isEqualTo("Llanowar Elves");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("toughness").sortOrder("asc").build())).get(0))
+                    .isEqualTo("Llanowar Elves");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("set").sortOrder("asc").build())).subList(0, 3))
+                    .containsExactlyInAnyOrder("Lightning Bolt", "Mountain", "Serra Angel");
         }
 
         @Test

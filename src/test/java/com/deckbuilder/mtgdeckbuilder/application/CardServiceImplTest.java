@@ -78,6 +78,24 @@ class CardServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Should expose the alias methods")
+	void shouldExposeAliasMethods() {
+		// Given
+		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.testCardEntity));
+		when(this.cardEntityMapper.toModel(this.testCardEntity)).thenReturn(this.testCard);
+
+		// When / Then
+		assertThat(this.cardService.findById(1L)).contains(this.testCard);
+
+		// Given
+		when(this.cardEntityMapper.toEntity(this.testCard)).thenReturn(this.testCardEntity);
+		when(this.cardRepository.saveAndFlush(this.testCardEntity)).thenReturn(this.testCardEntity);
+
+		// When / Then
+		assertThat(this.cardService.create(this.testCard)).isSameAs(this.testCard);
+	}
+
+	@Test
 	@DisplayName("Should get all cards with pagination")
 	void shouldGetAllCards() {
 		// Given

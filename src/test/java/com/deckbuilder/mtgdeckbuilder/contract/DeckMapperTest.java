@@ -112,6 +112,20 @@ class DeckMapperTest {
 	}
 
 	@Test
+	@DisplayName("Should return no issue counts without a diagnosis")
+	void returnsNullIssueCountWithoutDiagnosis() {
+		assertThat(this.mapper.issueCount(null)).isNull();
+	}
+
+	@Test
+	@DisplayName("Should keep a null section when mapping to the API")
+	void keepsNullSectionWhenMappingToApi() {
+		final CardDeckDTO dto = this.mapper.toCardDeckDTO(new CardInDeck(1L, 10L, 2L, 3, null));
+
+		assertThat(dto.getSection()).isNull();
+	}
+
+	@Test
 	@DisplayName("Should leave the diagnosis empty when listing decks")
 	void leavesDiagnosisEmptyOnListMapping() {
 		final Deck deck = Deck.builder().id(1L).name("Test Deck").userId(2L).formatId(3L)

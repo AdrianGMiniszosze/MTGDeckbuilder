@@ -500,7 +500,9 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 			final String left = trimmed.substring(0, idx).trim();
 			if (left.contains("{") || left.contains("tap") || left.matches(".*[0-9].*") || left.startsWith("sacrifice")
 					|| left.startsWith("discard") || left.startsWith("exile") || left.startsWith("return")
-					|| left.startsWith("pay") || left.startsWith("remove") || left.startsWith("untap")) {
+					|| left.startsWith("pay") || left.startsWith("remove")) {
+				// "untap" is already matched by contains("tap"), so it needs no
+				// separate case.
 				return true;
 			}
 		}

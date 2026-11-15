@@ -287,6 +287,52 @@ class DeckServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Should reject an unknown section when creating a deck")
+	void shouldRejectUnknownSection_WhenCreatingDeck() {
+		// Given
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null)
+				.cards(List.of(new Deck.CardInDeck(null, 10L, null, 1, "graveyard"))).build();
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+
+		// When / Then
+		assertThatThrownBy(() -> this.deckService.create(newDeck))
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Invalid section");
+		verify(this.cardInDeckRepository, never()).save(any(CardInDeckEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should reject a deck row without a card id")
+	void shouldRejectMissingCardId_WhenCreatingDeck() {
+		// Given
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null)
+				.cards(List.of(new Deck.CardInDeck(null, null, null, 1, "main"))).build();
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+
+		// When / Then
+		assertThatThrownBy(() -> this.deckService.create(newDeck))
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Card id is required");
+	}
+
+	@Test
+	@DisplayName("Should reject a non-positive quantity when creating a deck")
+	void shouldRejectInvalidQuantity_WhenCreatingDeck() {
+		// Given
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null)
+				.cards(List.of(new Deck.CardInDeck(null, 10L, null, 0, "main"))).build();
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+
+		// When / Then
+		assertThatThrownBy(() -> this.deckService.create(newDeck))
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Quantity must be greater than 0");
+	}
+
+	@Test
 	@DisplayName("Should keep existing deck contents when the payload omits them")
 	void shouldKeepDeckContents_WhenUpdateOmitsThem() {
 		// Given

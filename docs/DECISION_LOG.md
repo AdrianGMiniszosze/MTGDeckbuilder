@@ -335,16 +335,18 @@ ni del historial de chat.
 - **Decisión:** Añadir `jacoco-maven-plugin` (0.8.13) con agente en cada `test`, informe
   HTML en `target/site/jacoco/` y `check` en `verify`. CI ejecuta
   `jacoco:report jacoco:check` tras las tres tandas de tests y publica el informe como
-  artefacto. Los umbrales son un trinquete de bundle (no por clase): ahora 89 % de
-  líneas y 69 % de ramas, y solo suben.
+  artefacto. Los umbrales son un trinquete de bundle (no por clase): ahora 99 % de
+  líneas y 94 % de ramas, y solo suben.
 - **Contexto:** No había ninguna medida de cobertura, así que "¿esto está probado?" se
   respondía leyendo el código. El primer informe combinado (unitarias + integración +
   smoke) dio 68,6 % de líneas y 42,3 % de ramas; las mayores lagunas eran
   `CardRepositoryImpl`, `GlobalExceptionHandler` y `CompanionRules`. Tras cubrirlas y
   añadir tests de `CardColor`, `CardTagServiceImpl` y el SQL real de búsqueda, el
-  informe combinado subió a 91,6 % / 71,4 %, y el suelo se movió con él a 89 / 69 (las
-  cifras unitarias solas, 79,4 / 56,9, no alcanzan el suelo: el gate es de suite
-  completa).
+  informe combinado subió a 91,6 % / 71,4 %, y el suelo se movió con él a 89 / 69. Al
+  cubrir después la validación de mazos, los criterios de búsqueda, las claves
+  compuestas, la paginación y los mapeadores, quedó en 99,9 % / 94,9 %, con el suelo en
+  99 / 94. Una pasada solo de unitarias (79,4 / 56,9 al principio) no alcanza el suelo:
+  el gate es de suite completa.
 - **Por qué:** El suelo por debajo de la cifra actual impide retroceder sin obligar a
   arreglar de golpe toda la deuda. Un umbral por clase habría fallado el primer día en
   clases sin test y se habría desactivado.
@@ -357,9 +359,10 @@ ni del historial de chat.
   `argLine` de surefire usa `@{argLine}` para no pisar el agente de Mockito. Se excluyen
   las clases generadas de OpenAPI, los `*Impl` de MapStruct y los métodos anotados con
   `@lombok.Generated`.
-- **Revisar si:** se ataca `DeckValidationServiceImpl` (24 líneas y 48 ramas sin cubrir)
-  o los `*Id` de `infrastructure/model`, que permitirían volver a subir el suelo; o si
-  CI necesita separar la medida del job de tests.
+- **Revisar si:** se busca el último punto de cobertura (`main()` de
+  `MtgdeckbuilderApplication` y las ramas sueltas de `CardServiceImpl` y
+  `CompanionRules`); si no, el suelo ya no tiene margen para bajar y cualquier código
+  nuevo sin test romperá el build, que es justo el objetivo.
 
 ### D-017 - Las consultas nativas parametrizan todos los filtros
 

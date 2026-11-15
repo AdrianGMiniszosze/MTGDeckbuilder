@@ -175,6 +175,15 @@ class CompanionRulesTest {
         }
 
         @Test
+        @DisplayName("Should skip empty tokens, X and numerals")
+        void shouldSkipIgnoredTokens() {
+            assertThat(CompanionRules.validateByCompanionName("jegantha", card("Creature", 4, null, "{}R")))
+                    .isNull();
+            assertThat(CompanionRules.validateByCompanionName("jegantha", card("Creature", 4, null, "XX2GGG")))
+                    .contains("multiple 'G' symbols");
+        }
+
+        @Test
         @DisplayName("Should allow distinct symbols, X, numerals and single hybrid symbols")
         void shouldAllowValidCosts() {
             assertThat(CompanionRules.validateByCompanionName("jegantha", card("Creature", 4, null, "{1}{R}{G}")))
