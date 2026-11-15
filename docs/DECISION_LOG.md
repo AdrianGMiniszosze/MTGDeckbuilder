@@ -43,6 +43,7 @@ ni del historial de chat.
 | D-014 | 2026-11-14 | La lista de mazos no calcula el diagnóstico | Aceptada |
 | D-015 | 2026-11-15 | Los listados cargan los tableros con una consulta extra | Aceptada |
 | D-016 | 2026-11-15 | JaCoCo mide cobertura y actúa como trinquete | Aceptada |
+| D-017 | 2026-11-15 | Las consultas nativas parametrizan todos los filtros | Aceptada |
 
 ## 4. Entradas
 
@@ -332,24 +333,56 @@ ni del historial de chat.
 - **Fecha:** 2026-11-15
 - **Estado:** Aceptada
 - **Decisión:** Añadir `jacoco-maven-plugin` (0.8.13) con agente en cada `test`, informe
-  HTML en `target/site/jacoco/` y `check` en `verify` con suelo de bundle al 65 % de
-  líneas y 40 % de ramas. CI ejecuta `jacoco:report jacoco:check` tras las tres tandas
-  de tests y publica el informe como artefacto. Los umbrales son un trinquete: solo
-  suben.
+  HTML en `target/site/jacoco/` y `check` en `verify`. CI ejecuta
+  `jacoco:report jacoco:check` tras las tres tandas de tests y publica el informe como
+  artefacto. Los umbrales son un trinquete de bundle (no por clase): ahora 89 % de
+  líneas y 69 % de ramas, y solo suben.
 - **Contexto:** No había ninguna medida de cobertura, así que "¿esto está probado?" se
   respondía leyendo el código. El primer informe combinado (unitarias + integración +
-  smoke) dio 68,6 % de líneas y 42,3 % de ramas; las mayores lagunas son
-  `CardRepositoryImpl`, `GlobalExceptionHandler` y `CompanionRules`.
+  smoke) dio 68,6 % de líneas y 42,3 % de ramas; las mayores lagunas eran
+  `CardRepositoryImpl`, `GlobalExceptionHandler` y `CompanionRules`. Tras cubrirlas y
+  añadir tests de `CardColor`, `CardTagServiceImpl` y el SQL real de búsqueda, el
+  informe combinado subió a 91,6 % / 71,4 %, y el suelo se movió con él a 89 / 69 (las
+  cifras unitarias solas, 79,4 / 56,9, no alcanzan el suelo: el gate es de suite
+  completa).
 - **Por qué:** El suelo por debajo de la cifra actual impide retroceder sin obligar a
   arreglar de golpe toda la deuda. Un umbral por clase habría fallado el primer día en
   clases sin test y se habría desactivado.
 - **Alternativas descartadas:** umbral por clase o por paquete desde el inicio (demasiado
-  ruido); exigir 80 % ya (bloquearía el trabajo en curso); sin `check` y solo informe
-  (nadie mira un informe que no rompe nada).
+  ruido); exigir 80 % antes de cubrir nada (bloquearía el trabajo en curso); sin `check`
+  y solo informe (nadie mira un informe que no rompe nada).
 - **Consecuencias:** Toda tanda de tests escribe `target/jacoco.exec`, así que el informe
-  es acumulativo; hay que regenerarlo tras correr la suite completa. El `argLine` de
-  surefire usa `@{argLine}` para no pisar el agente de Mockito. Se excluyen las clases
-  generadas de OpenAPI, los `*Impl` de MapStruct y los métodos anotados con
+  es acumulativo; hay que regenerarlo tras correr la suite completa y hacer `clean` para
+  medir una tanda aislada. Una pasada solo de unitarias no pasa el gate por diseño. El
+  `argLine` de surefire usa `@{argLine}` para no pisar el agente de Mockito. Se excluyen
+  las clases generadas de OpenAPI, los `*Impl` de MapStruct y los métodos anotados con
   `@lombok.Generated`.
-- **Revisar si:** se sube el suelo a 75-80 % tras cubrir `CardRepositoryImpl` y
-  `GlobalExceptionHandler`, o si CI necesita separar la medida del job de tests.
+- **Revisar si:** se ataca `DeckValidationServiceImpl` (24 líneas y 48 ramas sin cubrir)
+  o los `*Id` de `infrastructure/model`, que permitirían volver a subir el suelo; o si
+  CI necesita separar la medida del job de tests.
+
+### D-017 - Las consultas nativas parametrizan todos los filtros
+
+- **Fecha:** 2026-11-15
+- **Estado:** Aceptada
+- **Decisión:** En `CardRepositoryImpl.findRandomCards`, las únicas partes que se
+  construyen como texto son las cláusulas fijas; todo valor que venga de la petición
+  (tipo, rareza, formato, límite) se enlaza con `setParameter`. Se eliminan
+  `buildRandomQuerySql`, `findRandomCardsWithFormatNative` y el `CriteriaQuery` que no
+  se llegaba a ejecutar cuando había `formatId`.
+- **Contexto:** La versión anterior concatenaba `type`, `rarity` y `formatId` dentro del
+  SQL (`LOWER('...')`, `format_id = 3`) y solo el límite era parámetro. El filtro de
+  formato además usaba `LEFT JOIN`, así que un `formatId` presente devolvía también
+  cartas sin fila en `card_legality`. Nadie lo explotaba, pero era inyección SQL en una
+  ruta pública y un resultado incorrecto.
+- **Por qué:** Un valor de request nunca debe convertirse en sintaxis. El `JOIN` interno
+  además hace que "cartas de este formato" signifique exactamente eso.
+- **Alternativas descartadas:** escapar comillas a mano (frágil y no cubre todos los
+  casos); mantener el `CriteriaQuery` muerto (código que aparenta cubrir un caso y no lo
+  hace); dejar el `LEFT JOIN` y filtrar en Java (más código y menos preciso).
+- **Consecuencias:** La consulta tiene un único camino, con parámetros posicionales en
+  orden. `CardRepositorySearchIntegrationTest` ejecuta el SQL real contra PostgreSQL,
+  cubre cada combinación de filtros y comprueba que un payload tipo `' OR 1=1 --` no
+  devuelve filas ni altera la tabla.
+- **Revisar si:** se añaden más consultas nativas: todas deben seguir la misma regla, y
+  cualquier `+ valor +` dentro de un `String` que acabe en `createNativeQuery` es un bug.

@@ -256,22 +256,22 @@
                         <exclude>**/*MapperImpl.*</exclude>
                     </excludes>
                     <rules>
-                        <!-- Ratchet: floors sit just below the current figures,
-                             so they block regressions without turning every
-                             partial test run into a gate. Raise them when
-                             coverage improves. -->
+                        <!-- Ratchet: floors sit below the combined unit + smoke
+                             + integration figures, so they block regressions
+                             without turning every partial test run into a gate.
+                             Raise them when coverage improves. -->
                         <rule>
                             <element>BUNDLE</element>
                             <limits>
                                 <limit>
                                     <counter>LINE</counter>
                                     <value>COVEREDRATIO</value>
-                                    <minimum>0.65</minimum>
+                                    <minimum>0.89</minimum>
                                 </limit>
                                 <limit>
                                     <counter>BRANCH</counter>
                                     <value>COVEREDRATIO</value>
-                                    <minimum>0.40</minimum>
+                                    <minimum>0.69</minimum>
                                 </limit>
                             </limits>
                         </rule>
