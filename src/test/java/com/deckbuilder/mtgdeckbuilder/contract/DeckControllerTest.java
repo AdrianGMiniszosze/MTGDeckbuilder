@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.DeckCardRequestDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckValidationDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
@@ -264,6 +265,83 @@ class DeckControllerTest {
 		assertThat(response.getBody()).isNotNull();
 		verify(this.deckService).unpublish(1L);
 		verify(this.deckService).validate(1L);
+	}
+
+	@Test
+	@DisplayName("Should add a card with its diagnosis")
+	void shouldAddCardToDeck() {
+		// Given
+		final DeckCardRequestDTO request = DeckCardRequestDTO.builder()
+				.card_id(100).quantity(4).section(DeckCardRequestDTO.Section.MAIN).build();
+		final Deck updated = this.testDeck.toBuilder().status(DeckStatus.DRAFT).build();
+		final DeckDTO dto = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build();
+
+		when(this.deckService.addCard(1L, 100L, 4, "main")).thenReturn(updated);
+		when(this.deckService.validate(1L)).thenReturn(validation());
+		when(this.deckMapper.toDeckDTO(eq(updated), any(DeckValidationResult.class))).thenReturn(dto);
+
+		// When
+		final ResponseEntity<DeckDTO> response = this.deckController.addCardToDeck(1, request);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		assertThat(response.getBody()).isNotNull();
+		verify(this.deckService).addCard(1L, 100L, 4, "main");
+		verify(this.deckService).validate(1L);
+	}
+
+	@Test
+	@DisplayName("Should default the card section to main")
+	void shouldDefaultCardSectionToMain() {
+		// Given
+		final DeckCardRequestDTO request = DeckCardRequestDTO.builder().card_id(100).quantity(2).build();
+
+		when(this.deckService.addCard(1L, 100L, 2, "main")).thenReturn(this.testDeck);
+		when(this.deckService.validate(1L)).thenReturn(validation());
+		when(this.deckMapper.toDeckDTO(eq(this.testDeck), any(DeckValidationResult.class)))
+				.thenReturn(DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build());
+
+		// When
+		this.deckController.addCardToDeck(1, request);
+
+		// Then
+		verify(this.deckService).addCard(1L, 100L, 2, "main");
+	}
+
+	@Test
+	@DisplayName("Should remove a card with its diagnosis")
+	void shouldRemoveCardFromDeck() {
+		// Given
+		final Deck updated = this.testDeck.toBuilder().status(DeckStatus.DRAFT).build();
+		final DeckDTO dto = DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build();
+
+		when(this.deckService.removeCard(1L, 100L, 2, "sideboard")).thenReturn(updated);
+		when(this.deckService.validate(1L)).thenReturn(validation());
+		when(this.deckMapper.toDeckDTO(eq(updated), any(DeckValidationResult.class))).thenReturn(dto);
+
+		// When
+		final ResponseEntity<DeckDTO> response = this.deckController.removeCardFromDeck(1, 100, 2, "sideboard");
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		verify(this.deckService).removeCard(1L, 100L, 2, "sideboard");
+		verify(this.deckService).validate(1L);
+	}
+
+	@Test
+	@DisplayName("Should default the removed card section to main")
+	void shouldDefaultRemovedSectionToMain() {
+		// Given
+		when(this.deckService.removeCard(eq(1L), eq(100L), eq(1), eq("main"))).thenReturn(this.testDeck);
+		when(this.deckService.validate(1L)).thenReturn(validation());
+		when(this.deckMapper.toDeckDTO(eq(this.testDeck), any(DeckValidationResult.class)))
+				.thenReturn(DeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).format(1).build());
+
+		// When
+		this.deckController.removeCardFromDeck(1, 100, 1, null);
+
+		// Then
+		verify(this.deckService).removeCard(1L, 100L, 1, "main");
 	}
 
 	@Test

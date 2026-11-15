@@ -698,6 +698,89 @@ paths:
         '404':
           description: Deck not found
 
+  /decks/{id}/cards:
+    post:
+      summary: Add copies of a card to a deck section
+      description: >
+        Adds to the existing quantity in that section; editing a published
+        deck returns it to draft. Format rules are not applied, so the deck may
+        become illegal and stays saved.
+      operationId: addCardToDeck
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeckCardRequest'
+      responses:
+        '200':
+          description: Updated deck with its diagnosis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+        '400':
+          description: Invalid quantity or section
+        '404':
+          description: Deck or card not found
+
+  /decks/{id}/cards/{card_id}:
+    delete:
+      summary: Remove copies of a card from a deck section
+      description: >
+        Subtracts from the existing quantity and deletes the row when it
+        reaches zero. Editing a published deck returns it to draft.
+      operationId: removeCardFromDeck
+      tags:
+        - Decks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - name: card_id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+        - name: quantity
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 99
+        - name: section
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [main, sideboard, maybeboard]
+            default: main
+      responses:
+        '200':
+          description: Updated deck with its diagnosis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Deck'
+        '400':
+          description: Invalid quantity, section or card not in that section
+        '404':
+          description: Deck not found
+
   /tags:
     get:
       summary: List all tags
@@ -1733,6 +1816,26 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/DeckIssue'
+
+    DeckCardRequest:
+      type: object
+      required:
+        - card_id
+        - quantity
+      properties:
+        card_id:
+          type: integer
+          minimum: 1
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 99
+          example: 4
+        section:
+          type: string
+          enum: [main, sideboard, maybeboard]
+          default: main
+          example: "main"
 
     CardTag:
       type: object

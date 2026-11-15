@@ -4,6 +4,7 @@ import com.deckbuilder.apigenerator.openapi.api.DecksApi;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckValidationDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.DeckCardRequestDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
@@ -73,6 +74,25 @@ public class DeckController implements DecksApi {
 		final var draft = this.deckService.unpublish(id.longValue());
 		final var validation = this.deckService.validate(id.longValue());
 		return ResponseEntity.ok(this.deckMapper.toDeckDTO(draft, validation));
+	}
+
+	@Override
+	public ResponseEntity<DeckDTO> addCardToDeck(Integer id, @Valid DeckCardRequestDTO deckCardRequestDTO) {
+		final String section = deckCardRequestDTO.getSection() != null
+				? deckCardRequestDTO.getSection().getValue()
+				: "main";
+		final var updated = this.deckService.addCard(id.longValue(),
+				deckCardRequestDTO.getCard_id().longValue(), deckCardRequestDTO.getQuantity(), section);
+		final var validation = this.deckService.validate(id.longValue());
+		return ResponseEntity.ok(this.deckMapper.toDeckDTO(updated, validation));
+	}
+
+	@Override
+	public ResponseEntity<DeckDTO> removeCardFromDeck(Integer id, Integer card_id, Integer quantity, String section) {
+		final var updated = this.deckService.removeCard(id.longValue(), card_id.longValue(), quantity,
+				section != null ? section : "main");
+		final var validation = this.deckService.validate(id.longValue());
+		return ResponseEntity.ok(this.deckMapper.toDeckDTO(updated, validation));
 	}
 
 	@Override

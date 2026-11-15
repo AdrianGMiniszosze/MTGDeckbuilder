@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -512,6 +514,75 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
             // When/Then
             mockMvc.perform(post("/decks").contentType("application/json").content(body))
                 .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("Should add and remove cards over HTTP")
+        void shouldAddAndRemoveCardsOverHttp() throws Exception {
+            // Given
+            String body = String.format("""
+                {"card_id": %d, "quantity": 4, "section": "main"}
+                """, lightningBolt.getId());
+
+            // When/Then - add
+            mockMvc.perform(post("/decks/{id}/cards", testDeck.getId())
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("draft"))
+                .andExpect(jsonPath("$.validation_status").value("illegal"))
+                .andExpect(jsonPath("$.deck_contents[*].card_id", hasItem(lightningBolt.getId().intValue())))
+                .andExpect(jsonPath("$.deck_contents[*].quantity", hasItem(4)));
+
+            // When/Then - remove
+            mockMvc.perform(delete("/decks/{id}/cards/{cardId}", testDeck.getId(), lightningBolt.getId())
+                    .param("quantity", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deck_contents[*].quantity", hasItem(2)));
+        }
+
+        @Test
+        @DisplayName("Should return a published deck to draft when a card is added")
+        void shouldReturnPublishedDeckToDraftWhenAddingCard() throws Exception {
+            // Given - casual format so it can be published
+            FormatEntity casual = formatRepository.save(FormatEntity.builder()
+                .name("Casual Edit")
+                .description("No format rules")
+                .minDeckSize(0)
+                .tracksLegality(false)
+                .build());
+            DeckEntity deck = createDeck(casual);
+            mockMvc.perform(post("/decks/{id}/publish", deck.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("published"));
+
+            String body = String.format("""
+                {"card_id": %d, "quantity": 1}
+                """, lightningBolt.getId());
+
+            // When/Then
+            mockMvc.perform(post("/decks/{id}/cards", deck.getId())
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("draft"));
+
+            DeckEntity stored = deckRepository.findById(deck.getId()).orElseThrow();
+            assertThat(stored.getStatus()).isEqualTo("draft");
+            assertThat(stored.getPublishedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("Should return 404 when adding an unknown card")
+        void shouldReturn404WhenAddingUnknownCard() throws Exception {
+            // Given
+            String body = """
+                {"card_id": 999999, "quantity": 1}
+                """;
+
+            // When/Then
+            mockMvc.perform(post("/decks/{id}/cards", testDeck.getId())
+                    .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("CARD_NOT_FOUND"));
         }
     }
 

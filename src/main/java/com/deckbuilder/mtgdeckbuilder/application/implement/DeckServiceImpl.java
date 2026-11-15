@@ -3,7 +3,9 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.application.DeckValidationService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
@@ -33,6 +35,7 @@ public class DeckServiceImpl implements DeckService {
 	private final DeckRepository deckRepository;
 	private final DeckEntityMapper deckEntityMapper;
 	private final CardInDeckRepository cardInDeckRepository;
+	private final CardRepository cardRepository;
 	private final DeckValidationService deckValidationService;
 
 	@Override
@@ -43,7 +46,7 @@ public class DeckServiceImpl implements DeckService {
 
 	@Override
 	public Optional<Deck> findById(Long id) {
-		return this.deckRepository.findById(id).map(this.deckEntityMapper::toModel);
+		return this.deckRepository.findById(id).map(this::buildDeckWithCards);
 	}
 
 	@Override
@@ -150,6 +153,10 @@ public class DeckServiceImpl implements DeckService {
 		// Validate section
 		if (!this.isValidSection(section)) {
 			throw new InvalidDeckCompositionException("Invalid section. Must be 'main', 'sideboard', or 'maybeboard'");
+		}
+
+		if (!this.cardRepository.existsById(cardId)) {
+			throw new CardNotFoundException(cardId);
 		}
 
 		// Check if card already exists in this section
@@ -293,6 +300,9 @@ public class DeckServiceImpl implements DeckService {
 		final DeckEntity deck = this.deckRepository.findById(deckId)
 			.orElseThrow(() -> new DeckNotFoundException(deckId));
 		deck.setModified(LocalDateTime.now());
+		// Any card change invalidates a previous publication.
+		deck.setStatus(DeckStatus.DRAFT.getValue());
+		deck.setPublishedAt(null);
 		this.deckRepository.save(deck);
 	}
 }

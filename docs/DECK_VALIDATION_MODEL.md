@@ -1,6 +1,6 @@
 # Modelo de validación de mazos
 
-- **Estado:** aprobado; fases 1-4 implementadas
+- **Estado:** aprobado; fases 1-5 implementadas
 - **Alcance:** estados de mazo, diagnóstico de legalidad, contrato y esquema
 - **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`, D-012
 
@@ -111,13 +111,18 @@ IssueCount:
     warnings: { type: integer, minimum: 0 }
 ```
 
-### 5.3 Endpoints (implementados en fase 3)
+### 5.3 Endpoints (implementados en fases 3 y 5)
 
 | Método | Ruta | Respuesta |
 |---|---|---|
 | `GET` | `/decks/{id}/validation` | `200` con `DeckValidation` (nunca falla por ilegalidad) |
 | `POST` | `/decks/{id}/publish` | `200` con `DeckDTO`; `409` `DECK_NOT_LEGAL` + `issues` si hay errores |
 | `POST` | `/decks/{id}/unpublish` | `200` con `DeckDTO`, vuelve a `draft` |
+| `POST` | `/decks/{id}/cards` | `200` con `DeckDTO` y diagnóstico; suma copias |
+| `DELETE` | `/decks/{id}/cards/{card_id}` | `200` con `DeckDTO`; resta copias y borra la fila al llegar a 0 |
+
+`DeckCardRequest` (`card_id`, `quantity`, `section` con `main` por defecto) evita
+reutilizar `CardDeck`, que exige `deck_id` en el cuerpo aunque venga en la ruta.
 
 El cuerpo del `409` es `DeckNotLegalError`: los campos de `ErrorResponse` más
 `issues`. `DeckValidationMapper` traduce el dominio a `DeckValidationDTO`, incluyendo
@@ -234,7 +239,11 @@ DeckValidationResult evaluate(Long deckId);
 
 - `create` / `update`: sin validación de formato; fuerzan `status = draft` y limpian
   `published_at`.
-- `addCard` / `removeCard`: sin bloqueo por formato; actualizan `decks.updated_at`.
+- `addCard` / `removeCard`: sin bloqueo por formato; comprueban que la carta existe
+  (`404`), actualizan `decks.updated_at` y devuelven el mazo a `draft` (limpian
+  `published_at`).
+- `findById`: carga las filas de `card_deck` para que la respuesta incluya
+  `deck_contents`; antes el detalle salía sin cartas.
 - `validate(id)`: delega en `evaluate()`; es de solo lectura.
 - `publish(id)`: `evaluate()`; con errores lanza `DeckNotLegalException`; sin errores
   guarda `status = published` y `published_at = now()`.
@@ -267,6 +276,9 @@ incorpora `List<DeckIssue>` y `IssueSeverity` serializa su valor en minúsculas.
 | `POST /decks/{id}/publish` con errores | Sí | `409` + `issues` |
 | `POST /decks/{id}/publish` con warnings | No | `200`, `published` |
 | `POST /decks/{id}/unpublish` | No | `200`, `draft` |
+| `POST /decks/{id}/cards` | No | `200`; suma copias, mazo a `draft` |
+| `DELETE /decks/{id}/cards/{card_id}` | No | `200`; resta copias, mazo a `draft` |
+| `POST /decks/{id}/cards` con carta inexistente | Sí | `404` `CARD_NOT_FOUND` |
 | `DELETE /decks/{id}` | No | `204` |
 
 `GET /decks` deja `validation_status`, `issue_count` e `issues` en `null`; el resto de
@@ -288,11 +300,13 @@ Unitarias (implementadas):
   recuento por `oracle_id` con dos impresiones, `maybeboard` ignorado,
   `tracks_legality = FALSE` sin avisos, `DECK_TOO_SMALL` siempre emitido.
 - `DeckServiceImplTest`: `create`/`update` fuerzan `draft`, `addCard`/`removeCard`
-  tocan `updated_at`, `validate` delega en `evaluate`, `publish` publica legal y
+  tocan `updated_at`, devuelven a `draft` un publicado y rechazan una carta
+  inexistente, `validate` delega en `evaluate`, `publish` publica legal y
   solo con warnings, rechaza con errores sin guardar y propaga `404`,
   `unpublish` vuelve a `draft` y limpia `published_at`.
-- `DeckControllerTest`: los tres endpoints devuelven `200` y delegan en el servicio;
-  las respuestas de un mazo llaman a `validate` y mapean con el diagnóstico.
+- `DeckControllerTest`: los endpoints devuelven `200`, aplican `main` por defecto y
+  delegan en el servicio; las respuestas de un mazo llaman a `validate` y mapean
+  con el diagnóstico.
 - `DeckValidationMapperTest`: snake_case (`deck_id`, `validation_status`,
   `card_id`, `deck_content_id`), enums de severidad y `section` nula o en
   minúsculas.
@@ -310,6 +324,9 @@ Integración (implementadas):
 - El detalle `GET /decks/{id}` incluye `status`, `validation_status`, `issue_count` e
   `issues`; `POST /decks` guarda un mazo ilegal con `201` y su diagnóstico, y responde
   `400` si falta `format`.
+- `POST /decks/{id}/cards` y `DELETE /decks/{id}/cards/{card_id}` suman y restan copias
+  sobre HTTP; editar un publicado lo devuelve a `draft` y una carta inexistente da
+  `404 CARD_NOT_FOUND`.
 - `DeckServiceH2IntegrationTest` (PostgreSQL/Testcontainers) guarda, publica y
   despublica contra la base real, y comprueba que un `publish` rechazado deja el
   mazo en `draft` sin `published_at`.
@@ -321,7 +338,7 @@ Integración (implementadas):
 3. Endpoints `validation`, `publish`, `unpublish` + handler 409. **Hecha.**
 4. Contrato: `format` requerido, `status`, `validation_status`, `issues`,
    `copies_limit`; regenerar. **Hecha.**
-5. `addCard` / `removeCard` por HTTP.
+5. `addCard` / `removeCard` por HTTP. **Hecha.**
 6. Importación de datos (ver `docs/DATA_IMPORT.md` cuando exista).
 7. Comandante: campo en esquema y contrato, después `MISSING_COMMANDER` (D-012).
 

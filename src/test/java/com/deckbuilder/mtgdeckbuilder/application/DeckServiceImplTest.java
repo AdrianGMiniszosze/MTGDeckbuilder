@@ -2,7 +2,9 @@ package com.deckbuilder.mtgdeckbuilder.application;
 
 import com.deckbuilder.mtgdeckbuilder.application.implement.DeckServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
@@ -51,6 +53,9 @@ class DeckServiceImplTest {
 
 	@Mock
 	private CardInDeckRepository cardInDeckRepository;
+
+	@Mock
+	private CardRepository cardRepository;
 
 	@Mock
 	private DeckValidationService deckValidationService;
@@ -437,6 +442,7 @@ class DeckServiceImplTest {
 		final String section = "main";
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
+		when(this.cardRepository.existsById(cardId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, section))
 				.thenReturn(Optional.empty());
 		when(this.cardInDeckRepository.save(any(CardInDeckEntity.class))).thenReturn(this.testCardInDeck);
@@ -467,6 +473,7 @@ class DeckServiceImplTest {
 				.quantity(2).section(section).build();
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
+		when(this.cardRepository.existsById(cardId)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(deckId, cardId, section))
 				.thenReturn(Optional.of(existingCard));
 		when(this.cardInDeckRepository.save(any(CardInDeckEntity.class))).thenReturn(existingCard);
@@ -490,6 +497,7 @@ class DeckServiceImplTest {
 		final Long cardId = 100L;
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
+		when(this.cardRepository.existsById(cardId)).thenReturn(true);
 		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(this.testDeckEntity));
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 
@@ -572,6 +580,7 @@ class DeckServiceImplTest {
 		final Long cardId = 100L;
 
 		when(this.deckRepository.existsById(deckId)).thenReturn(true);
+		when(this.cardRepository.existsById(cardId)).thenReturn(true);
 		when(this.deckRepository.findById(deckId)).thenReturn(Optional.of(this.testDeckEntity));
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(eq(deckId), eq(cardId), anyString()))
@@ -818,6 +827,7 @@ class DeckServiceImplTest {
 		this.testDeckEntity.setModified(before);
 
 		when(this.deckRepository.existsById(1L)).thenReturn(true);
+		when(this.cardRepository.existsById(100L)).thenReturn(true);
 		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(1L, 100L, "main"))
 				.thenReturn(Optional.empty());
 		when(this.cardInDeckRepository.save(any(CardInDeckEntity.class))).thenReturn(this.testCardInDeck);
@@ -832,6 +842,47 @@ class DeckServiceImplTest {
 		final ArgumentCaptor<DeckEntity> captor = ArgumentCaptor.forClass(DeckEntity.class);
 		verify(this.deckRepository).save(captor.capture());
 		assertThat(captor.getValue().getModified()).isAfter(before);
+		assertThat(captor.getValue().getStatus()).isEqualTo(DeckStatus.DRAFT.getValue());
+		assertThat(captor.getValue().getPublishedAt()).isNull();
+	}
+
+	@Test
+	@DisplayName("Should return a published deck to draft when adding a card")
+	void shouldReturnToDraft_WhenAddingCardToPublishedDeck() {
+		// Given
+		this.testDeckEntity.setStatus(DeckStatus.PUBLISHED.getValue());
+		this.testDeckEntity.setPublishedAt(LocalDateTime.now());
+
+		when(this.deckRepository.existsById(1L)).thenReturn(true);
+		when(this.cardRepository.existsById(100L)).thenReturn(true);
+		when(this.cardInDeckRepository.findByDeckIdAndCardIdAndSection(1L, 100L, "main"))
+				.thenReturn(Optional.empty());
+		when(this.cardInDeckRepository.save(any(CardInDeckEntity.class))).thenReturn(this.testCardInDeck);
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.addCard(1L, 100L, 4, "main");
+
+		// Then
+		assertThat(this.testDeckEntity.getStatus()).isEqualTo(DeckStatus.DRAFT.getValue());
+		assertThat(this.testDeckEntity.getPublishedAt()).isNull();
+	}
+
+	@Test
+	@DisplayName("Should reject adding a non-existent card")
+	void shouldThrowException_WhenAddingNonExistentCard() {
+		// Given
+		when(this.deckRepository.existsById(1L)).thenReturn(true);
+		when(this.cardRepository.existsById(100L)).thenReturn(false);
+
+		// When/Then
+		assertThatThrownBy(() -> this.deckService.addCard(1L, 100L, 4, "main"))
+				.isInstanceOf(CardNotFoundException.class)
+				.hasMessageContaining("Card not found with id: 100");
+
+		verify(this.cardInDeckRepository, never()).save(any());
 	}
 
 	@Test
