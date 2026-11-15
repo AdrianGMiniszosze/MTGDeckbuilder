@@ -5,6 +5,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.model.CardSearchCriteria;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 import jakarta.persistence.criteria.*;
 import lombok.extern.slf4j.Slf4j;
@@ -65,44 +66,48 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
     public List<CardEntity> findRandomCards(int count, String type, String rarity, Long formatId) {
         log.debug("Finding {} random cards with type={}, rarity={}, formatId={}", count, type, rarity, formatId);
 
-        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
-        CriteriaQuery<CardEntity> query = cb.createQuery(CardEntity.class);
-        Root<CardEntity> cardRoot = query.from(CardEntity.class);
-
-        List<Predicate> predicates = new ArrayList<>();
-
-        // Add type filter
-        if (type != null && !type.trim().isEmpty()) {
-            predicates.add(cb.like(cb.lower(cardRoot.get("cardType")),
-                "%" + type.toLowerCase() + "%"));
-        }
-
-        // Add rarity filter
-        if (rarity != null && !rarity.trim().isEmpty()) {
-            predicates.add(cb.equal(cb.lower(cardRoot.get("rarity")),
-                rarity.toLowerCase()));
-        }
-
-        // Add format filter (requires join with card_legality)
+        final StringBuilder sql = new StringBuilder("SELECT c.* FROM cards c ");
         if (formatId != null) {
-            // For format filtering, we'll use a native query as it's more complex
-            return findRandomCardsWithFormatNative(count, type, rarity, formatId);
+            sql.append("JOIN card_legality cl ON c.id = cl.card_id ");
         }
+        sql.append("WHERE 1=1 ");
 
-        if (!predicates.isEmpty()) {
-            query.where(cb.and(predicates.toArray(new Predicate[0])));
+        if (hasText(type)) {
+            sql.append("AND LOWER(c.card_type) LIKE ? ");
         }
+        if (hasText(rarity)) {
+            sql.append("AND LOWER(c.rarity) = ? ");
+        }
+        if (formatId != null) {
+            sql.append("AND cl.format_id = ? ");
+        }
+        sql.append("ORDER BY RANDOM() LIMIT ?");
 
-        // For random ordering, we'll use native query
-        String sql = buildRandomQuerySql(type, rarity, formatId, count);
+        // Every value is bound as a parameter: type and rarity come from the
+        // request and must never be concatenated into the statement.
+        final Query query = entityManager.createNativeQuery(sql.toString(), CardEntity.class);
+
+        int paramIndex = 1;
+        if (hasText(type)) {
+            query.setParameter(paramIndex++, "%" + type.toLowerCase() + "%");
+        }
+        if (hasText(rarity)) {
+            query.setParameter(paramIndex++, rarity.toLowerCase());
+        }
+        if (formatId != null) {
+            query.setParameter(paramIndex++, formatId);
+        }
+        query.setParameter(paramIndex, count);
 
         @SuppressWarnings("unchecked")
-        List<CardEntity> results = entityManager.createNativeQuery(sql, CardEntity.class)
-            .setParameter("count", count)
-            .getResultList();
+        List<CardEntity> results = query.getResultList();
 
         log.debug("Found {} random cards", results.size());
         return results;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 
     private List<Predicate> buildPredicates(CriteriaBuilder cb, Root<CardEntity> cardRoot, CardSearchCriteria criteria) {
@@ -270,64 +275,5 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
         }
 
         return entityManager.createQuery(countQuery).getSingleResult();
-    }
-
-    private String buildRandomQuerySql(String type, String rarity, Long formatId, int count) {
-        StringBuilder sql = new StringBuilder("SELECT c.* FROM cards c ");
-
-        if (formatId != null) {
-            sql.append("LEFT JOIN card_legality cl ON c.id = cl.card_id ");
-        }
-
-        sql.append("WHERE 1=1 ");
-
-        if (type != null && !type.trim().isEmpty()) {
-            sql.append("AND LOWER(c.card_type) LIKE LOWER(CONCAT('%', '").append(type).append("', '%')) ");
-        }
-
-        if (rarity != null && !rarity.trim().isEmpty()) {
-            sql.append("AND LOWER(c.rarity) = LOWER('").append(rarity).append("') ");
-        }
-
-        if (formatId != null) {
-            sql.append("AND cl.format_id = ").append(formatId).append(" ");
-        }
-
-        sql.append("ORDER BY RANDOM() LIMIT :count");
-
-        return sql.toString();
-    }
-
-    private List<CardEntity> findRandomCardsWithFormatNative(int count, String type, String rarity, Long formatId) {
-        StringBuilder sql = new StringBuilder("SELECT c.* FROM cards c ");
-        sql.append("LEFT JOIN card_legality cl ON c.id = cl.card_id ");
-        sql.append("WHERE 1=1 ");
-
-        if (type != null && !type.trim().isEmpty()) {
-            sql.append("AND LOWER(c.card_type) LIKE LOWER(?) ");
-        }
-
-        if (rarity != null && !rarity.trim().isEmpty()) {
-            sql.append("AND LOWER(c.rarity) = LOWER(?) ");
-        }
-
-        sql.append("AND cl.format_id = ? ");
-        sql.append("ORDER BY RANDOM() LIMIT ?");
-
-        jakarta.persistence.Query query = entityManager.createNativeQuery(sql.toString(), CardEntity.class);
-
-        int paramIndex = 1;
-        if (type != null && !type.trim().isEmpty()) {
-            query.setParameter(paramIndex++, "%" + type + "%");
-        }
-        if (rarity != null && !rarity.trim().isEmpty()) {
-            query.setParameter(paramIndex++, rarity);
-        }
-        query.setParameter(paramIndex++, formatId);
-        query.setParameter(paramIndex, count);
-
-        @SuppressWarnings("unchecked")
-        List<CardEntity> results = query.getResultList();
-        return results;
     }
 }
