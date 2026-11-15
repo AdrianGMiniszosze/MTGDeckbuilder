@@ -42,6 +42,7 @@ ni del historial de chat.
 | D-013 | 2026-11-14 | Los issues viven solo en el mazo, no en cada fila | Aceptada |
 | D-014 | 2026-11-14 | La lista de mazos no calcula el diagnóstico | Aceptada |
 | D-015 | 2026-11-15 | Los listados cargan los tableros con una consulta extra | Aceptada |
+| D-016 | 2026-11-15 | JaCoCo mide cobertura y actúa como trinquete | Aceptada |
 
 ## 4. Entradas
 
@@ -325,3 +326,30 @@ ni del historial de chat.
   con un corto retorno temprano. `DeckServiceImplTest` deja de usar `toModelList`.
 - **Revisar si:** la lista crece a cientos de filas por página o aparece un parámetro
   para pedir solo cabeceras.
+
+### D-016 - JaCoCo mide cobertura y actúa como trinquete
+
+- **Fecha:** 2026-11-15
+- **Estado:** Aceptada
+- **Decisión:** Añadir `jacoco-maven-plugin` (0.8.13) con agente en cada `test`, informe
+  HTML en `target/site/jacoco/` y `check` en `verify` con suelo de bundle al 65 % de
+  líneas y 40 % de ramas. CI ejecuta `jacoco:report jacoco:check` tras las tres tandas
+  de tests y publica el informe como artefacto. Los umbrales son un trinquete: solo
+  suben.
+- **Contexto:** No había ninguna medida de cobertura, así que "¿esto está probado?" se
+  respondía leyendo el código. El primer informe combinado (unitarias + integración +
+  smoke) dio 68,6 % de líneas y 42,3 % de ramas; las mayores lagunas son
+  `CardRepositoryImpl`, `GlobalExceptionHandler` y `CompanionRules`.
+- **Por qué:** El suelo por debajo de la cifra actual impide retroceder sin obligar a
+  arreglar de golpe toda la deuda. Un umbral por clase habría fallado el primer día en
+  clases sin test y se habría desactivado.
+- **Alternativas descartadas:** umbral por clase o por paquete desde el inicio (demasiado
+  ruido); exigir 80 % ya (bloquearía el trabajo en curso); sin `check` y solo informe
+  (nadie mira un informe que no rompe nada).
+- **Consecuencias:** Toda tanda de tests escribe `target/jacoco.exec`, así que el informe
+  es acumulativo; hay que regenerarlo tras correr la suite completa. El `argLine` de
+  surefire usa `@{argLine}` para no pisar el agente de Mockito. Se excluyen las clases
+  generadas de OpenAPI, los `*Impl` de MapStruct y los métodos anotados con
+  `@lombok.Generated`.
+- **Revisar si:** se sube el suelo a 75-80 % tras cubrir `CardRepositoryImpl` y
+  `GlobalExceptionHandler`, o si CI necesita separar la medida del job de tests.

@@ -223,6 +223,23 @@ Testcontainers automatically spins up a temporary PostgreSQL instance — no man
 mvnw.cmd test "-Dtest=*IntegrationTest,CardLegalityRepositoryTest,CardInDeckRepositoryExtendedTest" -DfailIfNoTests=false
 ```
 
+### Coverage *(JaCoCo)*
+
+JaCoCo writes `target/jacoco.exec` during tests and the HTML report to
+`target/site/jacoco/index.html`. Generated OpenAPI classes, MapStruct
+implementations and Lombok-generated methods are excluded.
+
+**Windows**
+```cmd
+mvnw.cmd jacoco:report
+```
+
+The report answers "what is still untested"; the gate (`jacoco:check`, 65 % lines and
+40 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
+unit, smoke and integration suites have all contributed to `target/jacoco.exec`. The
+floors are a ratchet: raise them when coverage improves, never lower them to make a
+build pass.
+
 ---
 
 ## API Overview

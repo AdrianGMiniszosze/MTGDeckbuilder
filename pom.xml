@@ -235,11 +235,70 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.4</version>
                 <configuration>
+                    <!-- @{argLine} is filled by jacoco:prepare-agent; keeping it
+                         first preserves Mockito's inline mock maker agent. -->
                     <argLine>
+                        @{argLine}
                         -XX:+EnableDynamicAgentLoading
                         -javaagent:${settings.localRepository}/org/mockito/mockito-core/5.20.0/mockito-core-5.20.0.jar
                     </argLine>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.13</version>
+                <configuration>
+                    <!-- Only hand-written code counts: generated API/DTOs and
+                         MapStruct implementations are not part of the contract. -->
+                    <excludes>
+                        <exclude>com/deckbuilder/apigenerator/**</exclude>
+                        <exclude>**/*MapperImpl.*</exclude>
+                    </excludes>
+                    <rules>
+                        <!-- Ratchet: floors sit just below the current figures,
+                             so they block regressions without turning every
+                             partial test run into a gate. Raise them when
+                             coverage improves. -->
+                        <rule>
+                            <element>BUNDLE</element>
+                            <limits>
+                                <limit>
+                                    <counter>LINE</counter>
+                                    <value>COVEREDRATIO</value>
+                                    <minimum>0.65</minimum>
+                                </limit>
+                                <limit>
+                                    <counter>BRANCH</counter>
+                                    <value>COVEREDRATIO</value>
+                                    <minimum>0.40</minimum>
+                                </limit>
+                            </limits>
+                        </rule>
+                    </rules>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
 		</plugins>
 	</build>

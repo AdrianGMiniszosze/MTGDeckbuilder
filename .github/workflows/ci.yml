@@ -84,10 +84,23 @@ jobs:
           TESTCONTAINERS_RYUK_DISABLED: "false"
           DOCKER_HOST: "unix:///var/run/docker.sock"
 
+      # Coverage gate. The exec file accumulates the three test runs above, so
+      # this measures unit + integration code with a single report.
+      - name: Coverage report and gate (JaCoCo)
+        run: ./mvnw -B jacoco:report jacoco:check
+
       - name: Upload Surefire test reports
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: surefire-reports
           path: target/surefire-reports/
+          retention-days: 7
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
           retention-days: 7

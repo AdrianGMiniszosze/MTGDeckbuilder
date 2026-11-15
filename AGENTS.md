@@ -41,6 +41,12 @@ Use the wrapper; a global Maven install is not required.
 
 On macOS/Linux substitute `./mvnw`. There is no lint, formatter, or typecheck plugin; verification is codegen + compile + the relevant tests.
 
+Coverage is JaCoCo (`pom.xml`): agent on every `test` run, HTML report at
+`target/site/jacoco/index.html`, and `jacoco:check` enforcing a bundle floor (65 % lines,
+40 % branches) on `verify` or when invoked explicitly. The floors are a ratchet: raise
+them when coverage improves. Generated OpenAPI classes, MapStruct `*Impl` and
+Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`).
+
 ## API contract and generated code
 
 - `src/main/resources/api/openapi.yml` is the source of truth. It generates interfaces (`CardsApi`, `DecksApi`, …) and `*DTO` models into `target/generated-sources/apigenerator`. Controllers implement those generated interfaces, so changing the spec changes controller method signatures/parameter names.
