@@ -374,7 +374,8 @@ Integración (implementadas):
 
 - **Sin datos de legalidad**, todo mazo sale `unknown` salvo en formatos con
   `tracks_legality = FALSE`. Depende del importador.
-- **El script `src/main/resources/scripts/import_cards.py` escribe `unlimited_copies`**
-  (línea 821), que desaparece en `V3`: hay que adaptarlo o retirarlo.
+- **El script `src/main/resources/scripts/import_cards.py`** ya escribe el esquema
+  post-`V3` (`copies_limit`, `scryfall_id`, upsert idempotente); ver D-018 y
+  `docs/DATA_IMPORT.md`. Sigue pendiente el rediseño de caras con `card_faces`.
 - **`DELETE` de cartas desde un import** borraría filas de `card_deck` por el
   `ON DELETE CASCADE`. Un import debe marcar obsoletas, nunca borrar.

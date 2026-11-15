@@ -150,12 +150,22 @@ Script principal inspeccionado:
 
 ### 6.2 Reglas y constraints destacables
 
+> **Desactualizado:** `card_set` ya no existe. La identidad de impresión es
+> `cards.scryfall_id` (UUID de Scryfall); `oracle_id` es la identidad de carta y no es
+> único. Las caras sintéticas usan `(card_name, set_id, collector_number)` solo porque
+> no tienen impresión propia. Ver `docs/DATA_IMPORT.md` y D-018.
+
 - FK con `ON DELETE CASCADE` en relaciones relevantes.
 - Unicidad de variantes de carta: `(card_name, card_set, collector_number)`.
 - `deck_type` restringido a `main`, `sideboard`, `maybeboard`.
 - `card_deck.section` con el mismo dominio (`main`, `sideboard`, `maybeboard`).
 
 ### 6.3 Trigger critico
+
+> **Eliminado en `V3`.** `check_card_quantity()` y el trigger
+> `enforce_card_quantity_limit` ya no existen: la política de mazos vive en Java
+> (`DeckValidationService`) y la BD solo impone forma (ADR-007, D-002). Esta sección se
+> conserva como histórico.
 
 Funcion y trigger:
 
@@ -168,7 +178,7 @@ Validaciones del trigger:
 - Verifica legalidad por formato (`card_legality`).
 - Bloquea cartas `banned`.
 - Aplica limite de copias segun reglas:
-  - ilimitadas por bandera `unlimited_copies`
+  - ilimitadas por `copies_limit = 0` (antes, bandera `unlimited_copies`)
   - tierras basicas
   - `restricted` => max 1
   - formato `Commander` => max 1

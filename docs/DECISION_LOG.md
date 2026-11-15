@@ -44,6 +44,7 @@ ni del historial de chat.
 | D-015 | 2026-11-15 | Los listados cargan los tableros con una consulta extra | Aceptada |
 | D-016 | 2026-11-15 | JaCoCo mide cobertura y actúa como trinquete | Aceptada |
 | D-017 | 2026-11-15 | Las consultas nativas parametrizan todos los filtros | Aceptada |
+| D-018 | 2026-11-15 | El cargador identifica impresiones por `scryfall_id` y es idempotente | Aceptada |
 
 ## 4. Entradas
 
@@ -185,6 +186,9 @@ ni del historial de chat.
   (alarga el boot y corre en cada despliegue).
 - **Consecuencias:** El script no es idempotente: hay que recrear la BD. Antes de
   automatizar hacen falta upsert por `scryfall_id`, `is_obsolete` y no borrar nunca.
+- **Actualización (D-018):** El upsert por `scryfall_id` y la idempotencia de las tablas
+  hijas ya están implementados en el script; sigue pendiente `is_obsolete`, que va con
+  el importador Java.
 - **Revisar si:** aparece la necesidad de refrescar precios o sets con frecuencia.
 - **Detalle:** `docs/DATA_IMPORT.md`.
 
@@ -389,3 +393,43 @@ ni del historial de chat.
   devuelve filas ni altera la tabla.
 - **Revisar si:** se añaden más consultas nativas: todas deben seguir la misma regla, y
   cualquier `+ valor +` dentro de un `String` que acabe en `createNativeQuery` es un bug.
+
+### D-018 - El cargador identifica impresiones por `scryfall_id` y es idempotente
+
+- **Fecha:** 2026-11-15
+- **Estado:** Aceptada
+- **Decisión:** `import_cards.py` usa el campo `id` de Scryfall como `cards.scryfall_id`
+  y hace upsert por esa columna. Las caras sintéticas de una carta multiforma, que no
+  tienen impresión propia, se localizan por `(card_name, set_id, collector_number)`.
+  Todas las tablas hijas usan `ON CONFLICT` y cada carta/cara se escribe bajo un
+  savepoint propio. El fichero se lee en streaming.
+- **Contexto:** El script leía `scryfall_id` de un campo que Scryfall no envía (el UUID
+  está en `id`), así que la columna quedaba `NULL`. Además insertaba sin conflicto,
+  deduplicaba por `card_name` (impidiendo varias impresiones), escribía en la tabla
+  inexistente `card_set`, guardaba el UUID de set de Scryfall en `cards.set_id` y un
+  error de una carta abortaba el lote entero. Los `ON CONFLICT` de los hijos faltaban,
+  así que la segunda pasada rompía. `analyze_skips_in_json` y `diagnose_table_structure`
+  cargaban los 632 MB en memoria.
+- **Por qué:** `scryfall_id` es la única identidad de impresión estable: dos
+  impresiones distintas del mismo `oracle_id` son filas distintas y un reimport debe
+  refrescarlas, no duplicarlas ni saltarlas por nombre. Identificar las caras por la
+  tupla es el único trío estable que queda cuando no hay UUID propio. Los savepoints
+  convierten un dato corrupto en una fila fallida contada, no en una importación
+  perdida.
+- **Alternativas descartadas:**
+  - Seguir deduplicando por `card_name`: pierde reprints, que son la mayoría del bulk.
+  - `DELETE` + `INSERT` por lote: `card_deck.card_id` es `ON DELETE CASCADE` y vaciaría
+    mazos.
+  - Insertar las caras sintéticas con un `scryfall_id` inventado: rompe la unicidad y
+    confunde la identidad de impresión.
+  - Cargar el JSONL entero con `json.load`: necesita varios GB de RAM para un fichero
+    de 632 MB.
+- **Consecuencias:** Reejecutar el script deja el mismo número de filas y refresca
+  textos, legalidades y keywords (y precios cuando se importen). Verificado sobre una
+  muestra de 177 líneas: primera pasada 197 insertadas / 5 actualizadas / 5 saltadas,
+  segunda pasada 0 insertadas / 202 actualizadas, contadores hijos idénticos. Un
+  `scryfall_id` inválido descarta solo su fila. El diseño de caras sigue siendo
+  provisional: el rediseño con `card_faces` va con el importador Java.
+- **Revisar si:** se escribe el importador Java o se añade `card_faces`; entonces la
+  tupla `(card_name, set_id, collector_number)` deja de ser necesaria.
+- **Detalle:** `docs/DATA_IMPORT.md`; relacionada con D-008 y D-004.
