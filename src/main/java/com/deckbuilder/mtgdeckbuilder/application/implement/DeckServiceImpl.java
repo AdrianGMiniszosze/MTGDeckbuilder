@@ -27,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -41,7 +42,7 @@ public class DeckServiceImpl implements DeckService {
 	@Override
 	public List<Deck> getAll(int pageSize, int pageNumber) {
 		final Pageable pageable = PageRequest.of(pageNumber, pageSize);
-		return this.deckEntityMapper.toModelList(this.deckRepository.findAll(pageable).getContent());
+		return this.withCards(this.deckRepository.findAll(pageable).getContent());
 	}
 
 	@Override
@@ -52,12 +53,12 @@ public class DeckServiceImpl implements DeckService {
 	@Override
 	public List<Deck> findByUserId(Long userId, int pageSize, int pageNumber) {
 		final Pageable pageable = PageRequest.of(pageNumber, pageSize);
-		return this.deckEntityMapper.toModelList(this.deckRepository.findByUserId(userId, pageable).getContent());
+		return this.withCards(this.deckRepository.findByUserId(userId, pageable).getContent());
 	}
 
 	@Override
 	public List<Deck> findByFormat(Long formatId) {
-		return this.deckEntityMapper.toModelList(this.deckRepository.findByFormatId(formatId));
+		return this.withCards(this.deckRepository.findByFormatId(formatId));
 	}
 
 	@Override
@@ -279,10 +280,36 @@ public class DeckServiceImpl implements DeckService {
 	 */
 	private Deck buildDeckWithCards(DeckEntity entity) {
 		final List<Deck.CardInDeck> cards = this.cardInDeckRepository.findByDeckId(entity.getId()).stream()
-			.map(card -> new Deck.CardInDeck(card.getId(), card.getCardId(), card.getDeckId(), card.getQuantity(),
-					card.getSection()))
+			.map(this::toCardInDeck)
 			.toList();
 		return this.deckEntityMapper.toModel(entity).toBuilder().cards(cards).build();
+	}
+
+	/**
+	 * Builds deck models attaching their card rows with a single extra query, so
+	 * list endpoints stay free of N+1.
+	 */
+	private List<Deck> withCards(List<DeckEntity> entities) {
+		if (entities.isEmpty()) {
+			return List.of();
+		}
+
+		final List<Long> deckIds = entities.stream().map(DeckEntity::getId).toList();
+		final Map<Long, List<Deck.CardInDeck>> cardsByDeck = this.cardInDeckRepository.findByDeckIdIn(deckIds)
+			.stream()
+			.collect(Collectors.groupingBy(CardInDeckEntity::getDeckId,
+					Collectors.mapping(this::toCardInDeck, Collectors.toList())));
+
+		return entities.stream()
+			.map(entity -> this.deckEntityMapper.toModel(entity).toBuilder()
+				.cards(cardsByDeck.getOrDefault(entity.getId(), List.of()))
+				.build())
+			.toList();
+	}
+
+	private Deck.CardInDeck toCardInDeck(CardInDeckEntity card) {
+		return new Deck.CardInDeck(card.getId(), card.getCardId(), card.getDeckId(), card.getQuantity(),
+				card.getSection());
 	}
 
 	/**

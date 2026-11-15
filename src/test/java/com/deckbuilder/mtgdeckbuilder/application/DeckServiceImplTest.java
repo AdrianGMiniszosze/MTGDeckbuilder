@@ -97,7 +97,9 @@ class DeckServiceImplTest {
 
 		final Page<DeckEntity> page = new PageImpl<>(Arrays.asList(this.testDeckEntity, entity2));
 		when(this.deckRepository.findAll(any(Pageable.class))).thenReturn(page);
-		when(this.deckEntityMapper.toModelList(anyList())).thenReturn(Arrays.asList(this.testDeck, deck2));
+		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of(this.testCardInDeck));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+		when(this.deckEntityMapper.toModel(entity2)).thenReturn(deck2);
 
 		// When
 		final List<Deck> result = this.deckService.getAll(10, 0);
@@ -106,6 +108,48 @@ class DeckServiceImplTest {
 		assertThat(result).hasSize(2);
 		assertThat(result.get(0).getName()).isEqualTo("Test Deck");
 		verify(this.deckRepository).findAll(any(Pageable.class));
+	}
+
+	@Test
+	@DisplayName("Should attach the card rows of every listed deck in one query")
+	void shouldAttachCardsToListedDecks() {
+		// Given
+		final DeckEntity entity2 = new DeckEntity();
+		entity2.setId(2L);
+		entity2.setName("Deck 2");
+		final CardInDeckEntity cardOfDeck2 = CardInDeckEntity.builder().id(2L).deckId(2L).cardId(200L).quantity(1)
+				.section("main").build();
+		final Deck deck2 = this.testDeck.toBuilder().id(2L).name("Deck 2").build();
+
+		when(this.deckRepository.findAll(any(Pageable.class)))
+				.thenReturn(new PageImpl<>(Arrays.asList(this.testDeckEntity, entity2)));
+		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection()))
+				.thenReturn(Arrays.asList(this.testCardInDeck, cardOfDeck2));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+		when(this.deckEntityMapper.toModel(entity2)).thenReturn(deck2);
+
+		// When
+		final List<Deck> result = this.deckService.getAll(10, 0);
+
+		// Then
+		assertThat(result.get(0).getCards()).extracting(Deck.CardInDeck::getCardId).containsExactly(100L);
+		assertThat(result.get(1).getCards()).extracting(Deck.CardInDeck::getCardId).containsExactly(200L);
+		verify(this.cardInDeckRepository).findByDeckIdIn(anyCollection());
+		verify(this.cardInDeckRepository, never()).findByDeckId(anyLong());
+	}
+
+	@Test
+	@DisplayName("Should not query cards when there are no decks")
+	void shouldNotQueryCards_WhenNoDecks() {
+		// Given
+		when(this.deckRepository.findAll(any(Pageable.class))).thenReturn(Page.empty());
+
+		// When
+		final List<Deck> result = this.deckService.getAll(10, 0);
+
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.cardInDeckRepository, never()).findByDeckIdIn(anyCollection());
 	}
 
 	@Test
@@ -145,7 +189,8 @@ class DeckServiceImplTest {
 		// Given
 		final Page<DeckEntity> page = new PageImpl<>(Collections.singletonList(this.testDeckEntity));
 		when(this.deckRepository.findByUserId(eq(1L), any(Pageable.class))).thenReturn(page);
-		when(this.deckEntityMapper.toModelList(anyList())).thenReturn(Collections.singletonList(this.testDeck));
+		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of(this.testCardInDeck));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 
 		// When
 		final List<Deck> result = this.deckService.findByUserId(1L, 10, 0);
@@ -153,6 +198,7 @@ class DeckServiceImplTest {
 		// Then
 		assertThat(result).hasSize(1);
 		assertThat(result.get(0).getUserId()).isEqualTo(1L);
+		assertThat(result.get(0).getCards()).hasSize(1);
 		verify(this.deckRepository).findByUserId(eq(1L), any(Pageable.class));
 	}
 
@@ -161,7 +207,8 @@ class DeckServiceImplTest {
 	void shouldFindDecksByFormat() {
 		// Given
 		when(this.deckRepository.findByFormatId(1L)).thenReturn(Collections.singletonList(this.testDeckEntity));
-		when(this.deckEntityMapper.toModelList(anyList())).thenReturn(Collections.singletonList(this.testDeck));
+		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of(this.testCardInDeck));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 
 		// When
 		final List<Deck> result = this.deckService.findByFormat(1L);
@@ -169,6 +216,7 @@ class DeckServiceImplTest {
 		// Then
 		assertThat(result).hasSize(1);
 		assertThat(result.get(0).getFormatId()).isEqualTo(1L);
+		assertThat(result.get(0).getCards()).hasSize(1);
 		verify(this.deckRepository).findByFormatId(1L);
 	}
 

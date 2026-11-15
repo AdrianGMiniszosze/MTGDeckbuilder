@@ -38,6 +38,10 @@ ni del historial de chat.
 | D-009 | 2026-11-14 | Colecciones y wishlist no viven en `decks` | Aceptada (sin fecha de inicio) |
 | D-010 | 2026-11-14 | Este registro de decisiones existe | Aceptada |
 | D-011 | 2026-11-14 | Directorios en minúsculas, verificados en CI | Aceptada |
+| D-012 | 2026-11-14 | `MISSING_COMMANDER` diferido hasta tener campo de comandante | Aceptada (diferida) |
+| D-013 | 2026-11-14 | Los issues viven solo en el mazo, no en cada fila | Aceptada |
+| D-014 | 2026-11-14 | La lista de mazos no calcula el diagnóstico | Aceptada |
+| D-015 | 2026-11-15 | Los listados cargan los tableros con una consulta extra | Aceptada |
 
 ## 4. Entradas
 
@@ -299,3 +303,25 @@ ni del historial de chat.
 - **Consecuencias:** El campo es nullable en el contrato; el cliente que quiera el
   diagnóstico de un mazo llama a `GET /decks/{id}/validation` o a `GET /decks/{id}`.
 - **Revisar si:** aparece una pantalla que necesite diagnósticos de una página entera.
+
+### D-015 - Los listados cargan los tableros con una consulta extra
+
+- **Fecha:** 2026-11-15
+- **Estado:** Aceptada
+- **Decisión:** `getAll`, `findByUserId` y `findByFormat` piden las filas de
+  `card_deck` de toda la página con `findByDeckIdIn` y las reparten por `deck_id`. Cada
+  mazo del listado lleva sus tableros (`main_board`, `side_board`, `maybe_board`).
+- **Contexto:** El contrato devuelve `CompleteDeck` en `GET /decks`, pero
+  `DeckEntity.cards` es `@OneToMany(mappedBy = "deck")` y el servicio inserta la relación
+  solo con `deck_id`, sin tocar la colección JPA. Resultado: los listados devolvían
+  tableros vacíos aunque el detalle ya los cargaba.
+- **Por qué:** Un `CompleteDeck` sin cartas es una mentira del contrato en la ruta que
+  usa cualquier listado. Cargarlo con dos consultas por página (cabeceras + filas) es
+  barato y no cae en N+1.
+- **Alternativas descartadas:** dejar los tableros vacíos y documentarlo (el cliente no
+  podría pintar la lista); mapear la relación JPA en el servicio (exigiría mantener la
+  colección sincronizada o reescribir la inserción); `JOIN FETCH` por mazo (N+1).
+- **Consecuencias:** Una consulta extra por página, también en la lista vacía → se evita
+  con un corto retorno temprano. `DeckServiceImplTest` deja de usar `toModelList`.
+- **Revisar si:** la lista crece a cientos de filas por página o aparece un parámetro
+  para pedir solo cabeceras.

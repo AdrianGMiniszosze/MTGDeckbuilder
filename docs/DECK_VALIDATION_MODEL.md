@@ -244,6 +244,11 @@ DeckValidationResult evaluate(Long deckId);
   `published_at`).
 - `findById`: carga las filas de `card_deck` para que la respuesta incluya
   `deck_contents`; antes el detalle salía sin cartas.
+- `getAll` / `findByUserId` / `findByFormat`: cargan las filas de todas las páginas
+  con `findByDeckIdIn` (una consulta extra por página, sin N+1) y las reparten por
+  `deck_id`; antes los tableros de los listados salían vacíos porque
+  `DeckEntity.cards` es `@OneToMany(mappedBy = "deck")` y el servicio inserta la
+  relación solo con `deck_id`.
 - `validate(id)`: delega en `evaluate()`; es de solo lectura.
 - `publish(id)`: `evaluate()`; con errores lanza `DeckNotLegalException`; sin errores
   guarda `status = published` y `published_at = now()`.
@@ -260,7 +265,8 @@ incorpora `List<DeckIssue>` y `IssueSeverity` serializa su valor en minúsculas.
 `toCompleteDeckDTO(Deck, DeckValidationResult)` añaden `validation_status`,
 `issue_count` e `issues`; el `status` sale del dominio. `DeckController` llama a
 `validate()` tras crear, actualizar, publicar y despublicar, y en el detalle.
-`GET /decks` usa la versión de un solo argumento, que deja el diagnóstico a `null`.
+`GET /decks` usa la versión de un solo argumento, que deja el diagnóstico a `null`,
+pero el servicio sí adjunta los tableros (`main_board`, `side_board`, `maybe_board`).
 
 ## 8. Comportamiento por acción
 
@@ -282,7 +288,8 @@ incorpora `List<DeckIssue>` y `IssueSeverity` serializa su valor en minúsculas.
 | `DELETE /decks/{id}` | No | `204` |
 
 `GET /decks` deja `validation_status`, `issue_count` e `issues` en `null`; el resto de
-respuestas de un solo mazo los rellenan (D-014).
+respuestas de un solo mazo los rellenan (D-014). Los tres listados sí devuelven los
+tableros de cada mazo.
 
 ## 9. Pruebas
 
@@ -303,7 +310,8 @@ Unitarias (implementadas):
   tocan `updated_at`, devuelven a `draft` un publicado y rechazan una carta
   inexistente, `validate` delega en `evaluate`, `publish` publica legal y
   solo con warnings, rechaza con errores sin guardar y propaga `404`,
-  `unpublish` vuelve a `draft` y limpia `published_at`.
+  `unpublish` vuelve a `draft` y limpia `published_at`. Los listados adjuntan las
+  cartas con una sola llamada a `findByDeckIdIn` y no consultan nada sin mazos.
 - `DeckControllerTest`: los endpoints devuelven `200`, aplican `main` por defecto y
   delegan en el servicio; las respuestas de un mazo llaman a `validate` y mapean
   con el diagnóstico.
@@ -327,6 +335,8 @@ Integración (implementadas):
 - `POST /decks/{id}/cards` y `DELETE /decks/{id}/cards/{card_id}` suman y restan copias
   sobre HTTP; editar un publicado lo devuelve a `draft` y una carta inexistente da
   `404 CARD_NOT_FOUND`.
+- `GET /decks` devuelve los tableros de cada mazo (`main_board` con la carta y su
+  cantidad), no solo las cabeceras.
 - `DeckServiceH2IntegrationTest` (PostgreSQL/Testcontainers) guarda, publica y
   despublica contra la base real, y comprueba que un `publish` rechazado deja el
   mazo en `draft` sin `published_at`.

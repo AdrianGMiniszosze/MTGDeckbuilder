@@ -488,6 +488,20 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
         }
 
         @Test
+        @DisplayName("Should include the main board of every listed deck")
+        void shouldIncludeBoardsInDeckList() throws Exception {
+            // Given - a deck with four copies in the main board
+            addCard(testDeck.getId(), lightningBolt.getId(), 4, "main");
+
+            // When/Then
+            mockMvc.perform(get("/decks"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(testDeck.getId().intValue()))
+                .andExpect(jsonPath("$[0].main_board[*].card_id", hasItem(lightningBolt.getId().intValue())))
+                .andExpect(jsonPath("$[0].main_board[*].quantity", hasItem(4)));
+        }
+
+        @Test
         @DisplayName("Should save an illegal deck with 201 and its diagnosis")
         void shouldSaveIllegalDeck() throws Exception {
             // Given - an empty Standard deck is illegal but saving is free
