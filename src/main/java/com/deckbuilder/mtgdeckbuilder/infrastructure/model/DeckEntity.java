@@ -28,7 +28,7 @@ public class DeckEntity {
 	private String tournament;
 
 	@Column(name = "is_private")
-	private Boolean isPrivate;
+	private Boolean isPrivate = true;
 
 	@Column(name = "created_at", nullable = false)
 	private LocalDateTime created;
@@ -63,6 +63,11 @@ public class DeckEntity {
 		this.modified = this.created;
 		if (this.status == null) {
 			this.status = "draft";
+		}
+		// The column is NOT NULL and the contract defaults new decks to private;
+		// the mapper cannot apply OpenAPI defaults to Boolean fields.
+		if (this.isPrivate == null) {
+			this.isPrivate = true;
 		}
 	}
 

@@ -4,10 +4,17 @@ import com.deckbuilder.apigenerator.openapi.api.model.CardDTO;
 import com.deckbuilder.mtgdeckbuilder.model.Card;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.Named;
 import org.mapstruct.NullValuePropertyMappingStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.Locale;
 
 @Mapper(componentModel = "spring", nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
 public interface CardMapper {
+	Logger LOGGER = LoggerFactory.getLogger(CardMapper.class);
+
 	@Mapping(source = "name", target = "card_name")
 	@Mapping(source = "typeLine", target = "type_line")
 	@Mapping(source = "cardType", target = "card_type")
@@ -23,7 +30,7 @@ public interface CardMapper {
 	@Mapping(source = "toughness", target = "toughness")
 	@Mapping(source = "colorIdentity", target = "color_identity")
 	@Mapping(source = "language", target = "language")
-	@Mapping(source = "rarity", target = "rarity")
+	@Mapping(source = "rarity", target = "rarity", qualifiedByName = "rarityToDto")
 	@Mapping(source = "copiesLimit", target = "copies_limit")
 	@Mapping(source = "gameChanger", target = "game_changer")
 	@Mapping(source = "collectorNumber", target = "collector_number")
@@ -46,7 +53,7 @@ public interface CardMapper {
 	@Mapping(target = "toughness", source = "toughness")
 	@Mapping(target = "colorIdentity", source = "color_identity")
 	@Mapping(target = "language", source = "language")
-	@Mapping(target = "rarity", source = "rarity")
+	@Mapping(target = "rarity", source = "rarity", qualifiedByName = "rarityToString")
 	@Mapping(target = "copiesLimit", source = "copies_limit")
 	@Mapping(target = "isBasicLand", ignore = true)
 	@Mapping(target = "gameChanger", source = "game_changer")
@@ -77,4 +84,35 @@ public interface CardMapper {
 
 	// List mapping methods
 	java.util.List<CardDTO> toDtoList(java.util.List<Card> cards);
+
+	/**
+	 * Converts the rarity stored in the database (Scryfall's lowercase value)
+	 * to the contract enum. {@code Enum.valueOf} cannot be used here: database
+	 * values are lowercase while the generated constants are uppercase.
+	 * Unknown values fall back to {@code special} so one unexpected row does
+	 * not break a whole card listing.
+	 */
+	@Named("rarityToDto")
+	default CardDTO.Rarity rarityToDto(String rarity) {
+		if (rarity == null) {
+			return null;
+		}
+		final String normalized = rarity.trim().toLowerCase(Locale.ROOT);
+		for (final CardDTO.Rarity value : CardDTO.Rarity.values()) {
+			if (value.getValue().equals(normalized)) {
+				return value;
+			}
+		}
+		LOGGER.warn("Unknown card rarity '{}', falling back to special", rarity);
+		return CardDTO.Rarity.SPECIAL;
+	}
+
+	/**
+	 * Converts the contract enum back to the lowercase value stored in the
+	 * database.
+	 */
+	@Named("rarityToString")
+	default String rarityToString(CardDTO.Rarity rarity) {
+		return rarity == null ? null : rarity.getValue();
+	}
 }

@@ -13,14 +13,13 @@ to be run by hand against a migrated database. See docs/DATA_IMPORT.md.
   keyed by (card_name, set_id, collector_number).
 - Derives cards.copies_limit from rule text ("any number / up to N cards named").
 - Maps Scryfall legalities onto the formats seeded by Flyway.
-- Extracts keywords and adds them to the tags table (cached to avoid duplicates).
+- Extracts keywords into card_keywords (card_tag is reserved for semantic tags).
 - Child tables use ON CONFLICT DO NOTHING, so a re-import is idempotent.
 - Prices and rulings are not imported yet.
 """
 
 import json
 import os
-import random
 import re
 import sys
 from typing import Dict, Iterator, List
@@ -137,7 +136,6 @@ class CardImporter:
     def __init__(self):
         self.conn = None
         self.cursor = None
-        self.tag_cache: Dict[str, int] = {}  # keyword -> tag_id
         self.set_cache: Dict[str, int] = {}  # set_name -> set_id
         self.format_cache: Dict[str, int] = {}  # lowercase format name -> format_id
 
@@ -146,7 +144,6 @@ class CardImporter:
         self.cards_updated = 0
         self.cards_skipped = 0
         self.rows_failed = 0
-        self.tags_created = 0
 
         # Detailed skip tracking
         self.skip_reasons = {
@@ -184,13 +181,6 @@ class CardImporter:
             print(f"✗ Failed to connect to database: {e}")
             sys.exit(1)
 
-    def load_tag_cache(self):
-        """Load existing tags into cache to avoid duplicates"""
-        self.cursor.execute("SELECT id, name FROM tags")
-        for tag_id, name in self.cursor.fetchall():
-            self.tag_cache[name.lower()] = tag_id
-        print(f"✓ Loaded {len(self.tag_cache)} existing tags into cache")
-
     def load_set_cache(self):
         """Load existing sets into cache"""
         self.cursor.execute("SELECT id, name FROM sets")
@@ -204,36 +194,6 @@ class CardImporter:
         for format_id, name in self.cursor.fetchall():
             self.format_cache[name.lower()] = format_id
         print(f"✓ Loaded {len(self.format_cache)} formats into cache")
-
-    def get_or_create_tag(self, keyword: str) -> int:
-        """Get tag ID from cache or create new tag.
-
-        ON CONFLICT avoids the IntegrityError that used to abort the whole
-        batch, and matching on lower(name) reuses a differently-cased tag.
-        """
-        keyword_lower = keyword.lower()
-        cached = self.tag_cache.get(keyword_lower)
-        if cached:
-            return cached
-
-        self.cursor.execute(
-            "INSERT INTO tags (name) VALUES (%s) ON CONFLICT (name) DO NOTHING RETURNING id",
-            (keyword,),
-        )
-        row = self.cursor.fetchone()
-        if row is None:
-            self.cursor.execute(
-                "SELECT id FROM tags WHERE lower(name) = %s ORDER BY id LIMIT 1",
-                (keyword_lower,),
-            )
-            row = self.cursor.fetchone()
-        if row is None:
-            raise RuntimeError(f"Could not resolve tag '{keyword}'")
-
-        tag_id = row[0]
-        self.tag_cache[keyword_lower] = tag_id
-        self.tags_created += 1
-        return tag_id
 
     def get_or_create_set(self, set_name: str, set_code: str = None) -> int:
         """Get set ID from cache or create new set.
@@ -400,7 +360,7 @@ class CardImporter:
 
     def _insert_child_rows(self, card_id: int, card_data: dict, card_type: str,
                            card_supertype: str, card_subtype: str):
-        """Write colors, types, keywords and tags for one card.
+        """Write colors, types and keywords for one card.
 
         Every child table is keyed by (card_id, value), so a re-import must
         ignore the duplicate instead of aborting the transaction.
@@ -439,17 +399,16 @@ class CardImporter:
                         (card_id, supertype_name.strip()),
                     )
 
-        keyword_tag_ids = []
+        # Keywords live in card_keywords only. card_tag is reserved for
+        # semantic tags produced by other sources, so the importer does not
+        # create tags with a meaningless weight.
         for keyword in card_data.get('keywords') or []:
             if keyword and keyword.strip():
-                keyword_tag_ids.append((self.get_or_create_tag(keyword.strip()), keyword.strip()))
-
-        for _, keyword in keyword_tag_ids:
-            self.cursor.execute(
-                "INSERT INTO card_keywords (card_id, keyword) VALUES (%s, %s) "
-                "ON CONFLICT (card_id, keyword) DO NOTHING",
-                (card_id, keyword),
-            )
+                self.cursor.execute(
+                    "INSERT INTO card_keywords (card_id, keyword) VALUES (%s, %s) "
+                    "ON CONFLICT (card_id, keyword) DO NOTHING",
+                    (card_id, keyword.strip()),
+                )
 
         if card_subtype:
             for subtype in self.parse_subtypes(card_subtype):
@@ -459,20 +418,6 @@ class CardImporter:
                         "ON CONFLICT (card_id, subtype) DO NOTHING",
                         (card_id, subtype.strip()),
                     )
-
-        for tag_id, _ in keyword_tag_ids:
-            self.cursor.execute("""
-                INSERT INTO card_tag (
-                    card_id, tag_id, confidence, weight, source, model_version
-                ) VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (card_id, tag_id) DO NOTHING
-            """, (
-                card_id, tag_id,
-                1.0,  # High confidence for official keywords
-                random.random(),  # Random weight between 0 and 1
-                'scryfall_import',  # Source of the tag
-                'v1.0'  # Model version
-            ))
 
     def write_card(self, card_data: dict) -> tuple:
         """Upsert one printing and its child rows.
@@ -950,8 +895,7 @@ class CardImporter:
                     self.conn.commit()
                     print(f"  Processed {processed} cards... "
                           f"(Inserted: {self.cards_inserted}, Updated: {self.cards_updated}, "
-                          f"Skipped: {self.cards_skipped}, Failed rows: {self.rows_failed}, "
-                          f"Tags created: {self.tags_created})")
+                          f"Skipped: {self.cards_skipped}, Failed rows: {self.rows_failed})")
         except Exception as e:
             print(f"✗ Failed to read JSON file: {e}")
             self.conn.rollback()
@@ -969,7 +913,6 @@ class CardImporter:
         print(f"↻ Cards updated:      {self.cards_updated}")
         print(f"⊘ Cards skipped:      {self.cards_skipped}")
         print(f"✗ Failed rows:        {self.rows_failed}")
-        print(f"🏷  Tags created:       {self.tags_created}")
 
         # Multi-face card statistics
         total_multi_face = sum(
@@ -1295,7 +1238,6 @@ JSON File: {json_file}
         print("🚀 Proceeding with import...")
 
         # Load caches and start import
-        importer.load_tag_cache()
         importer.load_set_cache()
         importer.load_format_cache()
         importer.import_cards(json_file, batch_size=100)

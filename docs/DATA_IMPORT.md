@@ -1,7 +1,7 @@
 # Importación de datos
 
 - **Estado:** cargador provisional, no el importador definitivo
-- **Alcance:** cómo poblar `cards`, `card_legality`, `sets` y `tags` desde Scryfall
+- **Alcance:** cómo poblar `cards`, `card_legality`, `sets` y `card_keywords` desde Scryfall
 - **Relacionado:** ADR-007, `docs/DECK_VALIDATION_MODEL.md`, `docs/DECISION_LOG.md`
 
 ## 1. Qué hay hoy
@@ -26,9 +26,9 @@ probar con datos del juego real en lugar de fixtures inventados.
 | Límite de copias | `copies_limit` derivado de `oracle_text` (ver tabla) |
 | Tierras básicas | `is_basic_land = TRUE` cuando el tipo es `Basic ... Land` |
 | Legalidades | Escribe `card_legality` para los formatos sembrados |
-| Palabras clave | Crea `tags`, `card_keywords` y `card_tag` con `source = 'scryfall_import'` |
+| Palabras clave | Escribe `card_keywords`; no crea `tags` ni `card_tag` (reservados a tags semánticos, D-019) |
 | Caras múltiples | Separa cada cara y crea una carta combinada con relaciones |
-| Hijos idempotentes | `ON CONFLICT DO NOTHING` en colores, tipos, keywords, tags y relaciones |
+| Hijos idempotentes | `ON CONFLICT DO NOTHING` en colores, tipos, keywords y relaciones |
 | Aislamiento de fallos | Savepoint por carta/cara: una fila mala se descarta y el lote sigue |
 | Lectura en streaming | Recorre el JSONL línea a línea; no carga los ~600 MB en memoria |
 | Consola Windows | Reconfigura `stdout`/`stderr` a UTF-8 y tolera BOM en el fichero |
@@ -178,8 +178,8 @@ boot, exige el fichero en el servidor y falla a medias sin dejar estado claro.
 2. **Nunca borrar cartas**: `card_deck.card_id` es `ON DELETE CASCADE`, así que un
    import que limpie vacía mazos. Las cartas ausentes se marcan con
    `cards.is_obsolete BOOLEAN NOT NULL DEFAULT FALSE`.
-3. **Idempotencia**: ejecutar dos veces deja el mismo estado y no duplica `card_tag`,
-   `card_legality` ni relaciones. ✅ (ya en el script)
+3. **Idempotencia**: ejecutar dos veces deja el mismo estado y no duplica
+   `card_keywords`, `card_legality` ni relaciones. ✅ (ya en el script)
 4. **Registro del resultado**: filas insertadas, actualizadas, marcadas obsoletas y
    errores por carta, en un resumen final y con código de salida distinto de cero si
    hay fallos. Insertadas/actualizadas/saltadas/fallidas ya se cuentan; faltan

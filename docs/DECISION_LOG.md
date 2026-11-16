@@ -45,6 +45,8 @@ ni del historial de chat.
 | D-016 | 2026-11-15 | JaCoCo mide cobertura y actúa como trinquete | Aceptada |
 | D-017 | 2026-11-15 | Las consultas nativas parametrizan todos los filtros | Aceptada |
 | D-018 | 2026-11-15 | El cargador identifica impresiones por `scryfall_id` y es idempotente | Aceptada |
+| D-019 | 2026-11-16 | `card_tag` se reserva para tags semánticos | Aceptada |
+| D-020 | 2026-11-16 | Los enums del contrato se convierten por valor, no por nombre | Aceptada |
 
 ## 4. Entradas
 
@@ -433,3 +435,59 @@ ni del historial de chat.
 - **Revisar si:** se escribe el importador Java o se añade `card_faces`; entonces la
   tupla `(card_name, set_id, collector_number)` deja de ser necesaria.
 - **Detalle:** `docs/DATA_IMPORT.md`; relacionada con D-008 y D-004.
+
+### D-019 - `card_tag` se reserva para tags semánticos
+
+- **Fecha:** 2026-11-16
+- **Estado:** Aceptada
+- **Decisión:** El cargador deja de escribir `tags` y `card_tag` para las keywords
+  de Scryfall; solo puebla `card_keywords`. `card_tag` queda para tags semánticos
+  con un `source` del contrato. Se eliminan las filas existentes con
+  `source = 'scryfall_import'` y los tags que queden huérfanos.
+- **Contexto:** El script creaba un tag por keyword y lo enlazaba en `card_tag` con
+  `weight = random()` y `source = 'scryfall_import'`, valor que no existe en el
+  enum del contrato. Esas 68.156 filas rompían la lectura de tags y dejaban la
+  tabla que usarán recomendación y embeddings llena de ruido.
+- **Por qué:** Una keyword oficial y un tag semántico son conceptos distintos: la
+  primera ya vive en `card_keywords` y el peso aleatorio no aporta información.
+- **Alternativas descartadas:**
+  - Añadir `scryfall_import` al enum: conserva el ruido y el peso inventado.
+  - Mapear esos orígenes a `heuristic`: miente sobre de dónde salió el tag.
+- **Consecuencias:** `tags` queda vacía hasta que exista etiquetado semántico y el
+  resumen del import ya no muestra "Tags created". Si aparece un `source`
+  desconocido en la BD, el mapper degrada a `heuristic` y registra un warning, para
+  que un dato inesperado no tumbe la lectura de la carta.
+- **Revisar si:** se implementa el etiquetado semántico, el agente o la
+  recomendación, que son los primeros consumidores reales de `card_tag`.
+
+### D-020 - Los enums del contrato se convierten por valor, no por nombre
+
+- **Fecha:** 2026-11-16
+- **Estado:** Aceptada
+- **Decisión:** `CardMapper` y `CardTagMapper` convierten los enums del contrato
+  con métodos `default` que comparan `getValue()` en minúsculas; nunca con
+  `Enum.valueOf` sobre texto de la BD. El contrato de rareza acepta los seis
+  valores de Scryfall, incluido `bonus`. Una rareza desconocida degrada a
+  `special` y un origen desconocido a `heuristic`, en ambos casos con warning.
+- **Contexto:** La prueba HTTP con datos reales devolvía `500` con
+  `No enum constant ...CardDTO$Rarity.common` en `/cards`, `/cards/search`,
+  `/cards/random` y `/cards/{id}`. MapStruct generaba
+  `Enum.valueOf(Rarity.class, card.getRarity())`, y la BD guarda `common` en
+  minúsculas mientras la constante generada es `COMMON`; en sentido inverso habría
+  guardado `COMMON`. `CardTagDTO.Source` tenía el mismo problema. Los tests con
+  mocks nunca ejecutaban la conversión.
+- **Por qué:** Scryfall publica las rarezas en minúsculas. `bonus` es una etiqueta
+  propia de Scryfall (las 9 cartas del slot especial de Vintage Masters, los Power
+  Nine), distinta de `special` (timeshifted, masterpieces): remapearla perdería
+  información y la rareza no interviene en la validación de mazos.
+- **Alternativas descartadas:**
+  - Remapear `bonus` a `special`: mezcla dos conceptos distintos.
+  - Normalizar la BD a mayúsculas: rompe la fidelidad con Scryfall y los filtros.
+  - Lanzar excepción ante un valor desconocido: un dato nuevo de Scryfall tumbaría
+    el listado entero en vez de una sola etiqueta.
+- **Consecuencias:** Tres enums de rareza del contrato pasan a seis valores; tests
+  de mapper en ambas direcciones (incluye `bonus` y valores desconocidos); el
+  smoke con datos reales deja de devolver `500`.
+- **Revisar si:** Scryfall añade otra rareza (el fallback la degrada a `special`
+  con warning) o si el contrato pasa a exigir fidelidad estricta de origen.
+- **Detalle:** `docs/DATA_IMPORT.md`; relacionada con D-018 y D-019.

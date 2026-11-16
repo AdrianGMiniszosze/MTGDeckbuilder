@@ -138,6 +138,24 @@ class DeckServiceH2IntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("Should default new decks to private when is_private is omitted")
+    void shouldDefaultNewDecksToPrivate() {
+        // Given - no isPrivate, as when the API request omits the field
+        Deck deck = Deck.builder()
+                .name("Private by default")
+                .userId(testUser.getId())
+                .formatId(standardFormat.getId())
+                .build();
+
+        // When
+        Deck createdDeck = deckService.create(deck);
+
+        // Then
+        assertThat(createdDeck.getIsPrivate()).isTrue();
+        assertThat(deckRepository.findById(createdDeck.getId()).orElseThrow().getIsPrivate()).isTrue();
+    }
+
+    @Test
     @DisplayName("Should add cards to deck successfully")
     void shouldAddCardsToDeckSuccessfully() {
         // Given - Create a deck first
