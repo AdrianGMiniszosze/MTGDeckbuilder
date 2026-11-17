@@ -50,7 +50,7 @@ existentes no cambian de responsabilidad.
 | `…application.importing` | `CardImportService` | Orquesta lectura → mapeo → escritura → obsoletas; devuelve `ImportSummary` |
 | `…application.importing` | `CopyLimitRules`, `LegalityRules`, `CardShapeRules` | Reglas puras, sin BD, testeables con JUnit |
 | `…application.importing` | `ScryfallCardMapper` | `JsonNode` → `ImportCard` (record), incluido `copies_limit`, caras y precios |
-| `…infrastructure.importer` | `ScryfallBulkReader` | `BufferedReader` UTF-8, tolerancia a BOM, una línea → `JsonNode` |
+| `…infrastructure.importer` | `ScryfallBulkReader` | `Files.lines` UTF-8 en streaming, tolerancia a BOM, una línea → `JsonNode`; el `Stream` debe cerrarse |
 | `…infrastructure.importer` | `CardImportDao` | `JdbcTemplate`: upserts, reemplazo de hijos, caras, precios, obsoletas |
 | `…infrastructure.importer` | `ImportLock` | `pg_try_advisory_lock` por sesión |
 | `src/main/resources/application-import.properties` | — | `spring.main.web-application-type=none`, banner off, logging |
