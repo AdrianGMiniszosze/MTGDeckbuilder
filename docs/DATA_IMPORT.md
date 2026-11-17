@@ -3,6 +3,7 @@
 - **Estado:** cargador provisional, no el importador definitivo
 - **Alcance:** cómo poblar `cards`, `card_legality`, `sets` y `card_keywords` desde Scryfall
 - **Relacionado:** ADR-007, `docs/DECK_VALIDATION_MODEL.md`, `docs/DECISION_LOG.md`
+- **Sustitución planificada:** `docs/IMPORTER_PLAN.md` (fase 6, propuesta con D-023–D-031)
 
 ## 1. Qué hay hoy
 

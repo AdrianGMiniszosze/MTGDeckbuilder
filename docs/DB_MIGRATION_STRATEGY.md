@@ -11,6 +11,11 @@ This document defines the migration policy for schema changes in `MTGDeckbuilder
 
 ## Scryfall import schema (V4-V5)
 
+> **Nota (2026-11-17):** esta sección describe el plan antiguo. En el esquema vigente
+> `V1` ya crea `card_faces`, `card_rulings` y los precios en `cards`, `V3` añade
+> `copies_limit` y `V4` es el rol de comandante. La importación Java entra en `V5`
+> (`cards.is_obsolete`); ver `docs/IMPORTER_PLAN.md`.
+
 - `card_legality` stores one status per card printing and format; the status values support Scryfall's `legal`, `not_legal`, `restricted`, and `banned` values.
 - The latest nullable USD, EUR, and MTGO TIX price values live directly on `cards` with `price_observed_at`; V5 moved them out of V4's temporary `card_prices` table and preserves existing values.
 - `card_faces` stores ordered face records per printing. Frequently queried face fields are columns; `face_data` retains the complete Scryfall face object for forward-compatible fields.
