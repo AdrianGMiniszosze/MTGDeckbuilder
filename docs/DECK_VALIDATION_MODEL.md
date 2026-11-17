@@ -1,8 +1,8 @@
 # Modelo de validación de mazos
 
-- **Estado:** aprobado; fases 1-5 implementadas
+- **Estado:** aprobado; fases 1-5 y comandante (fase 7) implementados
 - **Alcance:** estados de mazo, diagnóstico de legalidad, contrato y esquema
-- **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`, D-012
+- **Relacionado:** ADR-007 (reemplaza ADR-002), ADR-006, `docs/SCHEMA_DESIGN.md`, D-012, D-021
 
 ## 1. Problema
 
@@ -50,7 +50,12 @@ las reglas de companion (que viven en Java) y no cubre `DELETE`.
 | `SIDEBOARD_TOO_LARGE` | error | Sideboard > `max_sideboard_size` |
 | `DECK_TOO_LARGE` | error | Main > `max_deck_size` |
 | `DECK_TOO_SMALL` | error | Main < `min_deck_size`; se emite siempre, solo bloquea al publicar |
-| `MISSING_COMMANDER` | error | **Diferido** (D-012): no hay campo de comandante en esquema ni contrato |
+| `MISSING_COMMANDER` | error | `requires_commander` y el mazo no declara ningún comandante |
+| `TOO_MANY_COMMANDERS` | error | Más de dos filas en `deck_commander` (defensa; el contrato ya limita a 2) |
+| `INVALID_COMMANDER` | error | El comandante no está en `main`, no existe, o no puede ser comandante |
+| `INVALID_COMMANDER_PAIR` | error | Dos comandantes sin una mecánica de pareja válida |
+| `COMMANDER_NOT_LEGAL` | error | El comandante tiene `banned` o `not_legal` en el formato |
+| `COLOR_IDENTITY_VIOLATION` | error | Carta de main/sideboard fuera de la identidad de color de los comandantes |
 | `COMPANION_RULE_VIOLATION` | error | `CompanionRules`, Umori, Yorion, Zirda |
 | `LEGALITY_UNKNOWN` | warning | El formato rastrea legalidad pero no hay fila para esa carta |
 
@@ -61,6 +66,30 @@ Reglas de aplicación:
 - `formats.tracks_legality = FALSE` (Casual) desactiva legalidad **y**
   `LEGALITY_UNKNOWN`: no se emite ningún aviso por falta de datos.
 
+### 4.1 Comandante
+
+- El comandante es una carta **del mazo**: debe existir en `card_deck` con
+  `section = main`. El campo solo marca la fila; no añade cartas.
+- Solo se evalúa con `formats.requires_commander = TRUE`. En el resto de formatos,
+  `commander_card_ids` se persiste igual pero no genera issues.
+- Carta válida como comandante (`CommanderRules`): criatura legendaria, o cualquier carta
+  cuyo texto diga "can be your commander" (planeswalkers legendarios, por ejemplo).
+- Parejas admitidas:
+  | Mecánica | Condición |
+  |---|---|
+  | Partner with `<nombre>` | El nombre debe coincidir en ambas direcciones |
+  | Partner (sin nombre) | Ambos comandantes con `Partner` genérico |
+  | Friends forever | Ambos con la keyword |
+  | Choose a Background | Uno con la keyword y el otro un Background |
+  | Doctor's companion | Uno con la keyword y el otro un Doctor |
+- Un Background declarado solo es `INVALID_COMMANDER`: no es comandante por sí mismo.
+- La identidad de color se lee de `cards.color_identity`; la unión de los comandantes
+  declarados debe contener la identidad de cada carta de `main` y `sideboard`
+  (`maybeboard` queda fuera). Un comandante ilegal en el formato usa
+  `COMMANDER_NOT_LEGAL`, no `CARD_BANNED`/`CARD_NOT_LEGAL`.
+- Recordar que `MISSING_COMMANDER` es un error de publicación: se puede guardar en
+  `draft` sin comandante y verlo como aviso/error en el diagnóstico.
+
 ## 5. Contrato (`openapi.yml`)
 
 ### 5.1 Campos nuevos y cambios (implementado)
@@ -70,12 +99,18 @@ Reglas de aplicación:
 | Campo | Tipo | Notas |
 |---|---|---|
 | `format` | `integer` | **`required`**. Sustituye al 409 por `NOT NULL` |
+| `commander_card_ids` | `array<int>` | `maxItems: 2`; cartas de `deck_contents` (main) que son comandante |
 | `status` | `draft` \| `published` | `readOnly` |
 | `validation_status` | `legal` \| `illegal` \| `unknown` | `readOnly`, calculado; `null` en la lista |
 | `issue_count` | `{errors, warnings}` | `readOnly`, calculado; `null` en la lista |
 | `issues` | `array<DeckIssue>` | `readOnly`, calculado; `null` en la lista |
 
-`CompleteDeck`: expone los mismos cuatro campos de diagnóstico que `Deck`.
+`CompleteDeck`: expone los mismos cuatro campos de diagnóstico que `Deck` y también
+`commander_card_ids`.
+
+`commander_card_ids` se comporta como `deck_contents`: si el campo llega ausente o
+`null` en `PUT`, la selección actual se conserva; una lista vacía la limpia. En `POST` y
+`PUT` los ids se deduplican y se devuelven ordenados por `card_id`.
 
 `CardDeck`: sin `issues` (D-013). `Card`: `unlimited_copies` → **`copies_limit`**
 (`integer`, nullable). Breaking, sin consumidores.
@@ -212,6 +247,29 @@ trigger nunca cubrió.
 escrituras que no pasen por la API. Hoy la API es el único escritor. Si aparece un
 segundo escritor (importador o scripts de administración), se reevalúa.
 
+### 6.5 Comandante: `V4__commander.sql`
+
+```sql
+CREATE TABLE deck_commander (
+    deck_id BIGINT NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
+    card_id BIGINT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    PRIMARY KEY (deck_id, card_id)
+);
+
+CREATE INDEX idx_deck_commander_card_id ON deck_commander (card_id);
+```
+
+- Tabla propia en lugar de una columna en `decks` porque las parejas declaran dos
+  comandantes (D-021).
+- PK `(deck_id, card_id)` impide duplicados; las FKs con `ON DELETE CASCADE` borran las
+  filas al eliminar el mazo o la carta.
+- El índice por `card_id` responde a "¿qué mazos usan esta carta como comandante?".
+- La BD **no** exige que la carta esté en `card_deck`: es política y vive en
+  `DeckValidationService`.
+- Entidad `DeckCommanderEntity` con `@IdClass(DeckCommanderId.class)` y
+  `DeckCommanderRepository` (`findByDeckId`, `findByDeckIdIn`, `deleteByDeckId`), igual
+  que `card_deck`, para no reintroducir N+1 en los listados.
+
 ## 7. Java
 
 ### 7.1 Refactor del validador (implementado)
@@ -231,24 +289,52 @@ DeckValidationResult evaluate(Long deckId);
 - `getMaxAllowedQuantity` considera `cards.copies_limit` y el estado `restricted`.
 - `evaluate` agrupa copias por `oracle_id` (o `card_id` si falta el oracle), cuenta main
   + sideboard, ignora `maybeboard` y omite legalidad si `tracks_legality = FALSE`.
-- **Comandante diferido (D-012):** `MISSING_COMMANDER` no se emite porque ni el esquema
-  ni el contrato tienen un campo de comandante; declarar la regla la haría
-  insatisfacible. Se implementará junto con ese campo.
+- **Comandante (implementado, D-021):** si `requires_commander`, lee `deck_commander`,
+  emite `MISSING_COMMANDER` sin filas y valida presencia en `main`, legalidad de cada
+  comandante, pareja y identidad de color. La lista se ordena por `card_id` para que el
+  diagnóstico sea determinista.
+
+### 7.1.1 `CommanderRules`
+
+Clase utilitaria sin estado ni base de datos, para poder probar cada variante de pareja
+de forma aislada:
+
+| Método | Uso |
+|---|---|
+| `isCommanderOnItsOwn(card)` | Criatura legendaria o texto "can be your commander" |
+| `isBackground(card)` | Enchantment con subtipo Background |
+| `isDoctor(card)` | Creature con subtipo Doctor |
+| `validateAlone(card)` | Mensaje de por qué no puede ser comandante, o `null` |
+| `validatePair(first, second)` | Mensaje si la pareja no es legal, o `null` |
+| `isPartnerWithPair` / `isGenericPartnerPair` / `isFriendsForeverPair` / `isBackgroundPair` / `isDoctorsCompanionPair` | Cada mecánica por separado |
+| `colorIdentity(card)` | `cards.color_identity` ("W,U") → `Set<String>` ordenado e inmutable |
+
+Las keywords se leen de `cards.card_keywords`; si la fila no las tiene, se cae al texto
+de la carta. Los apóstrofes tipográficos (`’`) se normalizan para que "Doctor’s
+companion" funcione igual que "Doctor's companion".
 
 ### 7.2 `DeckServiceImpl` (implementado)
 
 - `create` / `update`: sin validación de formato; fuerzan `status = draft` y limpian
-  `published_at`.
+  `published_at`. Persisten o reemplazan `deck_commander` cuando el payload trae
+  `commander_card_ids`; `null` conserva la selección y `[]` la limpia. El borrado va
+  seguido de `flush()` porque la clave es asignada: sin él, el reinsert de un comandante
+  conservado se fusionaría con la fila recién borrada.
+- `update` **no** fusiona una entidad nueva: `DeckEntityMapper.updateEntity` copia el
+  modelo sobre la entidad ya gestionada e ignora `cards`. Fusionar una `DeckEntity`
+  recién construida (con la lista de cartas vacía) hacía que `orphanRemoval` borrase
+  todas las filas de `card_deck` aunque el payload no tocara `deck_contents`.
 - `addCard` / `removeCard`: sin bloqueo por formato; comprueban que la carta existe
   (`404`), actualizan `decks.updated_at` y devuelven el mazo a `draft` (limpian
   `published_at`).
 - `findById`: carga las filas de `card_deck` para que la respuesta incluya
-  `deck_contents`; antes el detalle salía sin cartas.
+  `deck_contents` y las de `deck_commander` para `commander_card_ids`; antes el detalle
+  salía sin cartas.
 - `getAll` / `findByUserId` / `findByFormat`: cargan las filas de todas las páginas
   con `findByDeckIdIn` (una consulta extra por página, sin N+1) y las reparten por
-  `deck_id`; antes los tableros de los listados salían vacíos porque
-  `DeckEntity.cards` es `@OneToMany(mappedBy = "deck")` y el servicio inserta la
-  relación solo con `deck_id`.
+  `deck_id`; lo mismo con los comandantes. Antes los tableros de los listados salían
+  vacíos porque `DeckEntity.cards` es `@OneToMany(mappedBy = "deck")` y el servicio
+  inserta la relación solo con `deck_id`.
 - `validate(id)`: delega en `evaluate()`; es de solo lectura.
 - `publish(id)`: `evaluate()`; con errores lanza `DeckNotLegalException`; sin errores
   guarda `status = published` y `published_at = now()`.
@@ -276,6 +362,10 @@ pero el servicio sí adjunta los tableros (`main_board`, `side_board`, `maybe_bo
 | `POST /decks` sin `format` | Sí | `400` validación |
 | `POST /decks` con `card_id` inexistente | Sí | `404` |
 | `POST /decks` con `quantity <= 0` | Sí | `400` |
+| `POST`/`PUT` con `commander_card_ids` fuera de `main` | No | `200`; `INVALID_COMMANDER` en el diagnóstico |
+| `POST /decks/{id}/publish` en Commander sin comandante | Sí | `409` + `MISSING_COMMANDER` |
+| Publicar Commander con pareja ilegal | Sí | `409` + `INVALID_COMMANDER_PAIR` |
+| Publicar Commander con carta fuera de identidad | Sí | `409` + `COLOR_IDENTITY_VIOLATION` |
 | `PUT /decks/{id}` | No | `200`; si estaba publicado, vuelve a `draft` |
 | `GET /decks/{id}` | No | Incluye `status`, `validation_status` e `issues` |
 | `GET /decks/{id}/validation` | No | `200` siempre |
@@ -300,6 +390,8 @@ tableros de cada mazo.
 - `cards.copies_limit` existe y `unlimited_copies` ya no.
 - El trigger `check_card_quantity` **ya no existe**.
 - Los constraints de `card_deck` siguen rechazando `quantity <= 0` y sección inválida.
+- `deck_commander` existe con PK `(deck_id, card_id)`, rechaza duplicados y borra en
+  cascada al eliminar el mazo o la carta (4 migraciones aplicadas).
 
 Unitarias (implementadas):
 
@@ -319,7 +411,20 @@ Unitarias (implementadas):
   `card_id`, `deck_content_id`), enums de severidad y `section` nula o en
   minúsculas.
 - `DeckMapperTest`: `status`, `validation_status`, `issue_count` e `issues` en `Deck`
-  y `CompleteDeck`; la lista deja el diagnóstico a `null`.
+  y `CompleteDeck`; la lista deja el diagnóstico a `null`; `commander_card_ids` va y
+  vuelve en las cinco variantes.
+- `CommanderRulesTest`: comandante por sí solo, Background aislado, cada variante de
+  pareja (incluida la que no coincide), lectura por keyword y por texto, apóstrofes
+  tipográficos, entradas nulas e identidad de color.
+- `DeckValidationServiceTest`: además, `MISSING_COMMANDER`, `TOO_MANY_COMMANDERS`,
+  comandante ausente del mazo o fuera de `main`, carta que no puede ser comandante,
+  cada pareja válida e inválida, Background solo, Doctor no legendario,
+  `COMMANDER_NOT_LEGAL`, comandante sin legalidad (`LEGALITY_UNKNOWN`) y
+  `COLOR_IDENTITY_VIOLATION` en main/sideboard con maybeboard ignorado.
+- `DeckServiceImplTest`: persistir comandantes al crear, reemplazarlos al actualizar,
+  conservarlos si el campo es `null`, limpiarlos con `[]`, rechazar ids nulos y
+  adjuntarlos en los listados con una sola consulta.
+- `CompositeKeyTest`: `DeckCommanderId` por valor.
 
 Integración (implementadas):
 
@@ -338,8 +443,11 @@ Integración (implementadas):
 - `GET /decks` devuelve los tableros de cada mazo (`main_board` con la carta y su
   cantidad), no solo las cabeceras.
 - `DeckServiceH2IntegrationTest` (PostgreSQL/Testcontainers) guarda, publica y
-  despublica contra la base real, y comprueba que un `publish` rechazado deja el
-  mazo en `draft` sin `published_at`.
+  despublica contra la base real, comprueba que un `publish` rechazado deja el
+  mazo en `draft` sin `published_at` y recorre el ciclo de comandantes: crear con dos,
+  reemplazar conservando uno, preservar al omitir el campo y limpiar con `[]`.
+- `DeckValidationIntegrationTest` lee el comandante real de `deck_commander` y comprueba
+  que sin fila el diagnóstico es `MISSING_COMMANDER`.
 
 ## 10. Fases
 
@@ -350,7 +458,8 @@ Integración (implementadas):
    `copies_limit`; regenerar. **Hecha.**
 5. `addCard` / `removeCard` por HTTP. **Hecha.**
 6. Importación de datos (ver `docs/DATA_IMPORT.md` cuando exista).
-7. Comandante: campo en esquema y contrato, después `MISSING_COMMANDER` (D-012).
+7. Comandante: campo en esquema y contrato, `MISSING_COMMANDER`, parejas e identidad de
+   color. **Hecha** (`V4`, D-021).
 
 ## 11. Decisiones cerradas
 
@@ -366,7 +475,12 @@ Integración (implementadas):
 | Formato "for fun" | Fila `Casual`, no `NULL` |
 | `unlimited_copies` | Sustituido por `copies_limit` (`NULL`/`0`/`N`) |
 | Recuento de copias | Por `oracle_id` |
-| `MISSING_COMMANDER` | Diferido hasta tener campo de comandante (D-012) |
+| `MISSING_COMMANDER` | Error cuando el formato exige comandante (D-012, D-021) |
+| Comandante | Carta del mazo (fila en `main`), máx. 2, tabla `deck_commander` |
+| Parejas | Partner with / Partner / Friends forever / Background / Doctor's companion |
+| Identidad de color | Unión de comandantes; main + sideboard, `maybeboard` fuera |
+| Comandante ilegal | `COMMANDER_NOT_LEGAL` en vez de `CARD_BANNED`/`CARD_NOT_LEGAL` |
+| `commander_card_ids` ausente | Conserva la selección; `[]` la limpia |
 | `issues` por fila | No; solo en el mazo (D-013) |
 | Diagnóstico en la lista | No se calcula; `null` (D-014) |
 
@@ -379,3 +493,6 @@ Integración (implementadas):
   `docs/DATA_IMPORT.md`. Sigue pendiente el rediseño de caras con `card_faces`.
 - **`DELETE` de cartas desde un import** borraría filas de `card_deck` por el
   `ON DELETE CASCADE`. Un import debe marcar obsoletas, nunca borrar.
+- **Las parejas de comandante dependen de `card_keywords` y `card_text`.** Si un import
+  deja la carta sin keywords, la lectura cae al texto; si también falta el texto, la
+  pareja se rechaza. `V4` no puede validar esto y no debe intentarlo.

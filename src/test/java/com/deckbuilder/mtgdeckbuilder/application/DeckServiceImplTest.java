@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application;
 import com.deckbuilder.mtgdeckbuilder.application.implement.DeckServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckCommanderRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
@@ -10,6 +11,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundExcep
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
@@ -59,6 +61,9 @@ class DeckServiceImplTest {
 
 	@Mock
 	private DeckValidationService deckValidationService;
+
+	@Mock
+	private DeckCommanderRepository deckCommanderRepository;
 
 	@InjectMocks
 	private DeckServiceImpl deckService;
@@ -287,6 +292,102 @@ class DeckServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Should persist commanders when creating a deck")
+	void shouldPersistCommanders_WhenCreatingDeck() {
+		// Given
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null)
+				.commanderCardIds(List.of(100L, 200L)).build();
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.create(newDeck);
+
+		// Then
+		verify(this.deckCommanderRepository).deleteByDeckId(1L);
+		verify(this.deckCommanderRepository).save(new DeckCommanderEntity(1L, 100L));
+		verify(this.deckCommanderRepository).save(new DeckCommanderEntity(1L, 200L));
+	}
+
+	@Test
+	@DisplayName("Should replace commanders when updating a deck")
+	void shouldReplaceCommanders_WhenUpdatingDeck() {
+		// Given
+		final Deck update = this.testDeck.toBuilder().id(1L).commanderCardIds(List.of(200L, 300L)).build();
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.update(1L, update);
+
+		// Then
+		verify(this.deckCommanderRepository).deleteByDeckId(1L);
+		verify(this.deckCommanderRepository).save(new DeckCommanderEntity(1L, 200L));
+		verify(this.deckCommanderRepository).save(new DeckCommanderEntity(1L, 300L));
+	}
+
+	@Test
+	@DisplayName("Should preserve commanders when the update omits them")
+	void shouldPreserveCommanders_WhenUpdateOmitsThem() {
+		// Given
+		final Deck update = this.testDeck.toBuilder().id(1L).commanderCardIds(null).build();
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.update(1L, update);
+
+		// Then
+		verify(this.deckCommanderRepository, never()).deleteByDeckId(anyLong());
+		verify(this.deckCommanderRepository, never()).save(any(DeckCommanderEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should reject a null commander id")
+	void shouldRejectNullCommanderId() {
+		// Given
+		final Deck newDeck = this.testDeck.toBuilder().id(null).created(null).modified(null)
+				.commanderCardIds(Collections.singletonList(null)).build();
+		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+
+		// When/Then
+		assertThatThrownBy(() -> this.deckService.create(newDeck))
+				.isInstanceOf(InvalidDeckCompositionException.class)
+				.hasMessageContaining("Commander card ids must not be null");
+		verify(this.deckCommanderRepository, never()).save(any(DeckCommanderEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should attach the commanders of every listed deck in one query")
+	void shouldAttachCommandersToListedDecks() {
+		// Given
+		final DeckEntity entity2 = new DeckEntity();
+		entity2.setId(2L);
+		entity2.setName("Deck 2");
+		final Deck deck2 = this.testDeck.toBuilder().id(2L).name("Deck 2").build();
+
+		when(this.deckRepository.findAll(any(Pageable.class)))
+				.thenReturn(new PageImpl<>(Arrays.asList(this.testDeckEntity, entity2)));
+		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of());
+		when(this.deckCommanderRepository.findByDeckIdIn(anyCollection()))
+				.thenReturn(List.of(new DeckCommanderEntity(1L, 10L), new DeckCommanderEntity(1L, 5L)));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+		when(this.deckEntityMapper.toModel(entity2)).thenReturn(deck2);
+
+		// When
+		final List<Deck> result = this.deckService.getAll(10, 0);
+
+		// Then
+		assertThat(result.get(0).getCommanderCardIds()).containsExactly(5L, 10L);
+		assertThat(result.get(1).getCommanderCardIds()).isEmpty();
+		verify(this.deckCommanderRepository).findByDeckIdIn(anyCollection());
+	}
+
+	@Test
 	@DisplayName("Should reject an unknown section when creating a deck")
 	void shouldRejectUnknownSection_WhenCreatingDeck() {
 		// Given
@@ -338,7 +439,6 @@ class DeckServiceImplTest {
 		// Given
 		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").cards(null).build();
 		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
-		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
 		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(updatedDeck);
 
@@ -355,7 +455,6 @@ class DeckServiceImplTest {
 		// Given
 		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
 		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
-		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
 		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(updatedDeck);
 
@@ -367,6 +466,25 @@ class DeckServiceImplTest {
 		assertThat(result.getName()).isEqualTo("Updated Deck");
 		verify(this.deckRepository).findById(1L);
 		verify(this.deckRepository).save(any(DeckEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should preserve privacy when the update omits it")
+	void shouldPreservePrivacy_WhenUpdateOmitsIt() {
+		// Given
+		this.testDeckEntity.setIsPrivate(false);
+		final Deck update = this.testDeck.toBuilder().isPrivate(null).build();
+		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
+		when(this.deckRepository.save(any(DeckEntity.class))).thenReturn(this.testDeckEntity);
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		this.deckService.update(1L, update);
+
+		// Then
+		final ArgumentCaptor<Deck> captor = ArgumentCaptor.forClass(Deck.class);
+		verify(this.deckEntityMapper).updateEntity(captor.capture(), any(DeckEntity.class));
+		assertThat(captor.getValue().getIsPrivate()).isFalse();
 	}
 
 	@Test
@@ -899,7 +1017,6 @@ class DeckServiceImplTest {
 		final Deck updatedDeck = this.testDeck.toBuilder().name("Updated Deck").build();
 
 		when(this.deckRepository.findById(1L)).thenReturn(Optional.of(this.testDeckEntity));
-		when(this.deckEntityMapper.toEntity(any(Deck.class))).thenReturn(this.testDeckEntity);
 		when(this.deckRepository.save(any(DeckEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(updatedDeck);
 

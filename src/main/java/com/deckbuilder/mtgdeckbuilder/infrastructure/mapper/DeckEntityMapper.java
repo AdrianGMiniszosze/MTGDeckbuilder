@@ -5,6 +5,7 @@ import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
 import org.mapstruct.Named;
 
 import java.util.List;
@@ -16,7 +17,21 @@ public interface DeckEntityMapper {
 	@Mapping(target = "status", source = "status", qualifiedByName = "statusToDb")
 	DeckEntity toEntity(Deck model);
 
-	// MapStruct will map companionCardId automatically as names match
+	/**
+	 * Copies an update onto the already-managed entity. The collection is
+	 * ignored on purpose: merging a fresh {@link DeckEntity} whose {@code cards}
+	 * list is empty would make {@code orphanRemoval} delete every stored row.
+	 * Deck contents are replaced explicitly by {@code DeckServiceImpl}.
+	 */
+	@Mapping(target = "id", ignore = true)
+	@Mapping(target = "created", ignore = true)
+	@Mapping(target = "cards", ignore = true)
+	@Mapping(target = "status", source = "status", qualifiedByName = "statusToDb")
+	void updateEntity(Deck model, @MappingTarget DeckEntity entity);
+
+	// MapStruct will map companionCardId automatically as names match.
+	// Commanders live in deck_commander and are attached by DeckServiceImpl.
+	@Mapping(target = "commanderCardIds", ignore = true)
 	@Mapping(target = "status", source = "status", qualifiedByName = "dbToStatus")
 	Deck toModel(DeckEntity entity);
 

@@ -1,10 +1,12 @@
 package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.CompanionRules;
+import com.deckbuilder.mtgdeckbuilder.application.CommanderRules;
 import com.deckbuilder.mtgdeckbuilder.application.DeckValidationService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckCommanderRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
@@ -13,6 +15,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompos
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
@@ -35,6 +38,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -63,6 +67,7 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 	private final FormatRepository formatRepository;
 	private final CardLegalityRepository cardLegalityRepository;
 	private final CardInDeckRepository cardInDeckRepository;
+	private final DeckCommanderRepository deckCommanderRepository;
 
 	@Override
 	@Transactional(readOnly = true)
@@ -82,12 +87,16 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 		final List<CardInDeckEntity> entries = this.cardInDeckRepository.findByDeckId(deckId);
 		final Map<Long, CardEntity> cardsById = this.cardsById(entries);
 		final List<DeckIssue> issues = new ArrayList<>();
+		final List<Long> commanderCardIds = format.isRequiresCommander() ? this.commanderCardIds(deckId) : List.of();
 
 		this.checkCopyLimits(entries, cardsById, format, issues);
 		if (format.isTracksLegality()) {
-			this.checkLegality(entries, cardsById, format, issues);
+			this.checkLegality(entries, cardsById, format, Set.copyOf(commanderCardIds), issues);
 		}
 		this.checkSectionSizes(entries, format, issues);
+		if (format.isRequiresCommander()) {
+			this.checkCommanderRules(entries, cardsById, commanderCardIds, issues);
+		}
 		if (deck.getCompanionCardId() != null) {
 			this.checkCompanionRules(deck, entries, cardsById, format, issues);
 		}
@@ -193,7 +202,7 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 	// ---------------------------------------------------------------------
 
 	private void checkLegality(List<CardInDeckEntity> entries, Map<Long, CardEntity> cardsById, FormatEntity format,
-			List<DeckIssue> issues) {
+			Set<Long> commanderIds, List<DeckIssue> issues) {
 		final Map<Long, String> legality = this.legalityByCardId(format.getId(), cardsById.keySet());
 
 		for (final CardInDeckEntity entry : entries) {
@@ -205,16 +214,21 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 				continue;
 			}
 
+			final boolean commander = commanderIds.contains(entry.getCardId());
 			final String status = legality.get(entry.getCardId());
 			if (status == null) {
 				issues.add(this.cardIssue(IssueSeverity.WARNING, DeckIssueCode.LEGALITY_UNKNOWN, card, entry,
 						String.format("%s has no legality data for this format; treated as unknown.", card.getName())));
 			} else if ("banned".equals(status)) {
-				issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.CARD_BANNED, card, entry,
-						String.format("%s is banned in this format.", card.getName())));
+				issues.add(this.cardIssue(IssueSeverity.ERROR,
+						commander ? DeckIssueCode.COMMANDER_NOT_LEGAL : DeckIssueCode.CARD_BANNED, card, entry,
+						String.format(commander ? "%s is banned in this format and cannot be the commander."
+								: "%s is banned in this format.", card.getName())));
 			} else if ("not_legal".equals(status)) {
-				issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.CARD_NOT_LEGAL, card, entry,
-						String.format("%s is not legal in this format.", card.getName())));
+				issues.add(this.cardIssue(IssueSeverity.ERROR,
+						commander ? DeckIssueCode.COMMANDER_NOT_LEGAL : DeckIssueCode.CARD_NOT_LEGAL, card, entry,
+						String.format(commander ? "%s is not legal in this format and cannot be the commander."
+								: "%s is not legal in this format.", card.getName())));
 			}
 		}
 	}
@@ -358,6 +372,140 @@ public class DeckValidationServiceImpl implements DeckValidationService {
 				issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.COMPANION_RULE_VIOLATION, card, entry,
 						"Companion Zirda: each permanent card in the main deck must have an activated ability."));
 			}
+		}
+	}
+
+	// ---------------------------------------------------------------------
+	// Commander rules
+	// ---------------------------------------------------------------------
+
+	/**
+	 * Commander rows of a deck, ordered by card id so diagnostics and responses
+	 * are deterministic.
+	 */
+	private List<Long> commanderCardIds(Long deckId) {
+		return this.deckCommanderRepository.findByDeckId(deckId)
+			.stream()
+			.map(DeckCommanderEntity::getCardId)
+			.sorted()
+			.toList();
+	}
+
+	/**
+	 * A commander is a card of the deck: it must exist in {@code main} and, when
+	 * the format asks for one, the deck must declare it. Pairs are checked
+	 * against the partner variants and colors must fit the commanders' identity.
+	 */
+	private void checkCommanderRules(List<CardInDeckEntity> entries, Map<Long, CardEntity> cardsById,
+			List<Long> commanderCardIds, List<DeckIssue> issues) {
+		if (commanderCardIds.isEmpty()) {
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.MISSING_COMMANDER)
+				.message("Commander format: the deck must declare at least one commander.")
+				.build());
+			return;
+		}
+		if (commanderCardIds.size() > 2) {
+			issues.add(DeckIssue.builder()
+				.severity(IssueSeverity.ERROR)
+				.code(DeckIssueCode.TOO_MANY_COMMANDERS)
+				.message(String.format("A deck can declare at most two commanders; found %d.", commanderCardIds.size()))
+				.build());
+			return;
+		}
+
+		final Map<Long, CardInDeckEntity> mainEntries = new LinkedHashMap<>();
+		for (final CardInDeckEntity entry : entries) {
+			if (MAIN.equals(entry.getSection())) {
+				mainEntries.putIfAbsent(entry.getCardId(), entry);
+			}
+		}
+
+		final List<CardEntity> commanders = new ArrayList<>();
+		for (final Long commanderId : commanderCardIds) {
+			final CardEntity card = cardsById.get(commanderId);
+			final CardInDeckEntity entry = mainEntries.get(commanderId);
+			if (card == null || entry == null) {
+				issues.add(DeckIssue.builder()
+					.severity(IssueSeverity.ERROR)
+					.code(DeckIssueCode.INVALID_COMMANDER)
+					.message(card == null ? String.format("Commander card %d does not exist in this deck.", commanderId)
+							: String.format("%s must be in the main deck to be the commander.", card.getName()))
+					.cardId(commanderId)
+					.deckContentId(entry != null ? entry.getId() : null)
+					.section(MAIN)
+					.build());
+				continue;
+			}
+			commanders.add(card);
+		}
+
+		if (commanders.size() == 1) {
+			final CardEntity commander = commanders.getFirst();
+			this.reportViolation(DeckIssueCode.INVALID_COMMANDER, commander, mainEntries.get(commander.getId()),
+					CommanderRules.validateAlone(commander), issues);
+		} else if (commanders.size() == 2) {
+			final CardEntity first = commanders.get(0);
+			final CardEntity second = commanders.get(1);
+			final String pairViolation = CommanderRules.validatePair(first, second);
+			if (pairViolation != null) {
+				issues.add(DeckIssue.builder()
+					.severity(IssueSeverity.ERROR)
+					.code(DeckIssueCode.INVALID_COMMANDER_PAIR)
+					.message(pairViolation)
+					.cardId(first.getId())
+					.deckContentId(mainEntries.get(first.getId()).getId())
+					.section(MAIN)
+					.build());
+			} else {
+				for (final CardEntity commander : commanders) {
+					if (CommanderRules.isCommanderOnItsOwn(commander) || CommanderRules.isBackground(commander)) {
+						continue;
+					}
+					this.reportViolation(DeckIssueCode.INVALID_COMMANDER, commander,
+							mainEntries.get(commander.getId()), CommanderRules.validateAlone(commander), issues);
+				}
+			}
+		}
+
+		if (!commanders.isEmpty()) {
+			this.checkColorIdentity(entries, cardsById, commanders, issues);
+		}
+	}
+
+	/**
+	 * Every card in main or sideboard must fit the union of the commanders'
+	 * color identity; {@code maybeboard} is not part of the playable deck.
+	 */
+	private void checkColorIdentity(List<CardInDeckEntity> entries, Map<Long, CardEntity> cardsById,
+			List<CardEntity> commanders, List<DeckIssue> issues) {
+		final Set<String> commanderIdentity = commanders.stream()
+			.flatMap(commander -> CommanderRules.colorIdentity(commander).stream())
+			.collect(Collectors.toCollection(TreeSet::new));
+
+		for (final CardInDeckEntity entry : entries) {
+			if (!COUNTED_SECTIONS.contains(entry.getSection())) {
+				continue;
+			}
+			final CardEntity card = cardsById.get(entry.getCardId());
+			if (card == null) {
+				continue;
+			}
+			final Set<String> identity = CommanderRules.colorIdentity(card);
+			if (commanderIdentity.containsAll(identity)) {
+				continue;
+			}
+			issues.add(this.cardIssue(IssueSeverity.ERROR, DeckIssueCode.COLOR_IDENTITY_VIOLATION, card, entry,
+					String.format("%s has color identity %s, outside the commander identity %s.", card.getName(),
+							String.join(",", identity), String.join(",", commanderIdentity))));
+		}
+	}
+
+	private void reportViolation(DeckIssueCode code, CardEntity card, CardInDeckEntity entry, String message,
+			List<DeckIssue> issues) {
+		if (message != null) {
+			issues.add(this.cardIssue(IssueSeverity.ERROR, code, card, entry, message));
 		}
 	}
 

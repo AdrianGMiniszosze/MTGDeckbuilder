@@ -38,6 +38,29 @@ class DeckMapperTest {
 	}
 
 	@Test
+	@DisplayName("Should map commander ids in both directions")
+	void mapsCommanderIds() {
+		final Deck deck = Deck.builder().id(1L).name("Commander Deck").userId(2L).formatId(3L)
+			.commanderCardIds(List.of(10L, 20L)).build();
+
+		final DeckDTO dto = this.mapper.toDeckDTO(deck, null);
+
+		assertThat(dto.getCommander_card_ids()).containsExactly(10, 20);
+		assertThat(this.mapper.toDeck(dto).getCommanderCardIds()).containsExactly(10L, 20L);
+	}
+
+	@Test
+	@DisplayName("Should map commander ids into every deck response")
+	void mapsCommanderIdsIntoCompleteDeckAndList() {
+		final Deck deck = Deck.builder().id(1L).name("Commander Deck").userId(2L).formatId(3L)
+			.commanderCardIds(List.of(7L)).build();
+
+		assertThat(this.mapper.toDeckDTO(deck).getCommander_card_ids()).containsExactly(7);
+		assertThat(this.mapper.toCompleteDeckDTO(deck).getCommander_card_ids()).containsExactly(7);
+		assertThat(this.mapper.toCompleteDeckDTO(deck, null).getCommander_card_ids()).containsExactly(7);
+	}
+
+	@Test
 	void mapsSectionEnumToDatabaseValue() {
 		final CardDeckDTO dto = CardDeckDTO.builder()
 			.card_id(1)

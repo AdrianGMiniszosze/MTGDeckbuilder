@@ -1,15 +1,16 @@
 package com.deckbuilder.mtgdeckbuilder.integration;
 
 import com.deckbuilder.mtgdeckbuilder.application.DeckValidationService;
-import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
-import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckCommanderRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
@@ -29,6 +30,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.EntityManager;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -38,6 +41,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -65,7 +69,13 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
     private CardInDeckRepository cardInDeckRepository;
 
     @Autowired
+    private DeckCommanderRepository deckCommanderRepository;
+
+    @Autowired
     private DeckValidationService deckValidationService;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Autowired
     private MockMvc mockMvc;
@@ -518,6 +528,67 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
         }
 
         @Test
+        @DisplayName("Should preserve contents and commanders when the PUT omits them")
+        void shouldPreserveRowsWhenPutOmitsThem() throws Exception {
+            // Given
+            addCard(testDeck.getId(), lightningBolt.getId(), 4, "main");
+            deckCommanderRepository.save(new DeckCommanderEntity(testDeck.getId(), lightningBolt.getId()));
+            // Commit the setup to the database so the request cannot miss it: with
+            // all rows unflushed the orphan-removal bug stayed invisible.
+            entityManager.flush();
+            entityManager.clear();
+
+            String body = String.format("""
+                {"deck_name": "Renamed", "user_id": %d, "format": %d}
+                """, testUser.getId(), standardFormat.getId());
+
+            // When/Then - the generated DTO turns an omitted array into [], so the
+            // controller has to rely on the recorded JSON fields.
+            mockMvc.perform(put("/decks/{id}", testDeck.getId()).contentType("application/json").content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deck_name").value("Renamed"))
+                .andExpect(jsonPath("$.commander_card_ids", hasItem(lightningBolt.getId().intValue())));
+
+            // Then - the stored rows survive
+            assertThat(cardInDeckRepository.findByDeckId(testDeck.getId())).hasSize(1);
+            assertThat(deckCommanderRepository.findByDeckId(testDeck.getId())).hasSize(1);
+
+            mockMvc.perform(get("/decks/{id}", testDeck.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.main_board[*].card_id", hasItem(lightningBolt.getId().intValue())))
+                .andExpect(jsonPath("$.commander_card_ids", hasItem(lightningBolt.getId().intValue())));
+        }
+
+        @Test
+        @DisplayName("Should clear contents and commanders when the PUT sends empty arrays")
+        void shouldClearRowsWhenPutSendsEmptyArrays() throws Exception {
+            // Given
+            addCard(testDeck.getId(), lightningBolt.getId(), 4, "main");
+            deckCommanderRepository.save(new DeckCommanderEntity(testDeck.getId(), lightningBolt.getId()));
+            entityManager.flush();
+            entityManager.clear();
+
+            String body = String.format("""
+                {"deck_name": "Cleared", "user_id": %d, "format": %d,
+                 "deck_contents": [], "commander_card_ids": []}
+                """, testUser.getId(), standardFormat.getId());
+
+            // When/Then
+            mockMvc.perform(put("/decks/{id}", testDeck.getId()).contentType("application/json").content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deck_name").value("Cleared"))
+                .andExpect(jsonPath("$.commander_card_ids").isEmpty());
+
+            assertThat(cardInDeckRepository.findByDeckId(testDeck.getId())).isEmpty();
+            assertThat(deckCommanderRepository.findByDeckId(testDeck.getId())).isEmpty();
+
+            mockMvc.perform(get("/decks/{id}", testDeck.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.main_board").isEmpty())
+                .andExpect(jsonPath("$.commander_card_ids").isEmpty());
+        }
+
+        @Test
         @DisplayName("Should reject a deck without a format")
         void shouldRejectDeckWithoutFormat() throws Exception {
             // Given
@@ -598,6 +669,39 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error").value("CARD_NOT_FOUND"));
         }
+    }
+
+    @Test
+    @DisplayName("Should read the commander from deck_commander")
+    void shouldReadCommanderFromDeckCommander() {
+        // Given - a format that requires a commander and a legendary creature
+        FormatEntity commanderRules = formatRepository.save(FormatEntity.builder()
+            .name("Commander Rules Test")
+            .description("Commander validation")
+            .minDeckSize(0)
+            .maxCopies(1)
+            .singleton(true)
+            .requiresCommander(true)
+            .tracksLegality(false)
+            .build());
+        CardEntity legend = createCard("Test Legend", "Creature", "Human", false);
+        legend.setTypeLine("Legendary Creature — Human");
+        legend = cardRepository.save(legend);
+
+        DeckEntity deck = createDeck(commanderRules);
+        addCard(deck.getId(), legend.getId(), 1, "main");
+        deckCommanderRepository.save(new DeckCommanderEntity(deck.getId(), legend.getId()));
+
+        // When/Then - declared commander
+        assertThat(deckValidationService.evaluate(deck.getId()).getIssues()).isEmpty();
+
+        // When/Then - no commander row
+        deckCommanderRepository.deleteByDeckId(deck.getId());
+        deckCommanderRepository.flush();
+
+        assertThat(deckValidationService.evaluate(deck.getId()).getIssues())
+            .extracting(DeckIssue::getCode)
+            .containsExactly(DeckIssueCode.MISSING_COMMANDER);
     }
 
     private CardInDeckEntity addCard(Long deckId, Long cardId, int quantity, String section) {

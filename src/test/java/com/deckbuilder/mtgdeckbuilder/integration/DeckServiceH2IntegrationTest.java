@@ -3,12 +3,14 @@ package com.deckbuilder.mtgdeckbuilder.integration;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckCommanderRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
@@ -53,6 +55,9 @@ class DeckServiceH2IntegrationTest extends PostgresIntegrationTest {
 
     @Autowired
     private CardInDeckRepository cardInDeckRepository;
+
+    @Autowired
+    private DeckCommanderRepository deckCommanderRepository;
 
     private UserEntity testUser;
     private FormatEntity standardFormat;
@@ -344,6 +349,78 @@ class DeckServiceH2IntegrationTest extends PostgresIntegrationTest {
         assertThat(result.getStatus()).isEqualTo(DeckStatus.DRAFT);
         assertThat(result.getErrors()).hasSize(1);
         assertThat(result.getErrors().getFirst().getCode()).isEqualTo(DeckIssueCode.MAX_COPIES_EXCEEDED);
+    }
+
+    @Test
+    @DisplayName("Should persist, replace and clear commanders")
+    void shouldPersistCommanders() {
+        // Given
+        CardEntity partner = createCard("Regna, the Redeemer", "Legendary Creature — Angel", "Creature");
+
+        // When
+        Deck deck = deckService.create(Deck.builder()
+                .name("Commander Deck")
+                .description("Partner pair")
+                .userId(testUser.getId())
+                .formatId(standardFormat.getId())
+                .isPrivate(false)
+                .commanderCardIds(List.of(testCard.getId(), partner.getId()))
+                .build());
+
+        // Then
+        assertThat(deck.getCommanderCardIds()).containsExactly(testCard.getId(), partner.getId());
+        assertThat(deckCommanderRepository.findByDeckId(deck.getId())).hasSize(2);
+
+        // Replacing keeps only the new selection, even when an id is kept.
+        Deck replaced = deckService.update(deck.getId(),
+                deck.toBuilder().commanderCardIds(List.of(partner.getId())).build());
+        assertThat(replaced.getCommanderCardIds()).containsExactly(partner.getId());
+
+        // Omitting the field preserves the current selection.
+        Deck preserved = deckService.update(deck.getId(),
+                deck.toBuilder().name("Renamed").commanderCardIds(null).build());
+        assertThat(preserved.getCommanderCardIds()).containsExactly(partner.getId());
+
+        // Sending an empty list clears it.
+        Deck cleared = deckService.update(deck.getId(), deck.toBuilder().commanderCardIds(List.of()).build());
+        assertThat(cleared.getCommanderCardIds()).isEmpty();
+        assertThat(deckCommanderRepository.findByDeckId(deck.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Should preserve privacy when an update omits is_private")
+    void shouldPreservePrivacyWhenUpdateOmitsIt() {
+        // Given
+        Deck deck = createDeck(casualFormat());
+
+        // When - the contract makes is_private optional
+        Deck updated = deckService.update(deck.getId(),
+                deck.toBuilder().name("Renamed").isPrivate(null).build());
+
+        // Then - the column is NOT NULL and the stored value survives
+        assertThat(updated.getIsPrivate()).isFalse();
+        assertThat(deckRepository.findById(deck.getId()).orElseThrow().getIsPrivate()).isFalse();
+    }
+
+    private CardEntity createCard(String name, String typeLine, String cardType) {
+        CardEntity card = new CardEntity();
+        card.setName(name);
+        card.setManaCost("{0}");
+        card.setCmc(1);
+        card.setColorIdentity("W");
+        card.setTypeLine(typeLine);
+        card.setCardType(cardType);
+        card.setRarity("mythic");
+        card.setCardText("Test commander");
+        card.setImageUrl("http://example.com/commander.jpg");
+        card.setLanguage("en");
+        card.setCollectorNumber("999");
+        card.setCopiesLimit(null);
+        card.setFoil(false);
+        card.setGameChanger(false);
+        card.setPromo(false);
+        card.setVariation(false);
+        return cardRepository.save(card);
     }
 
     private FormatEntity casualFormat() {

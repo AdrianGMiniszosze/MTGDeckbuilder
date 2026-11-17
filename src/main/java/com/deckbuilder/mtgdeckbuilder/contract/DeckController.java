@@ -9,6 +9,7 @@ import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -50,7 +51,14 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<DeckDTO> updateDeck(Integer id, @Valid DeckDTO deckDTO) {
-		final var deck = this.deckMapper.toDeck(deckDTO);
+		Deck deck = this.deckMapper.toDeck(deckDTO);
+		// Omitted arrays preserve the stored rows; an explicit [] clears them.
+		if (!DeckPayloadFields.wasSent(DeckPayloadFields.DECK_CONTENTS)) {
+			deck = deck.toBuilder().cards(null).build();
+		}
+		if (!DeckPayloadFields.wasSent(DeckPayloadFields.COMMANDER_CARD_IDS)) {
+			deck = deck.toBuilder().commanderCardIds(null).build();
+		}
 		final var updated = this.deckService.update(id.longValue(), deck);
 		final var validation = this.deckService.validate(id.longValue());
 		return ResponseEntity.ok(this.deckMapper.toDeckDTO(updated, validation));

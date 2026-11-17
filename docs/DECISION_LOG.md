@@ -38,7 +38,7 @@ ni del historial de chat.
 | D-009 | 2026-11-14 | Colecciones y wishlist no viven en `decks` | Aceptada (sin fecha de inicio) |
 | D-010 | 2026-11-14 | Este registro de decisiones existe | Aceptada |
 | D-011 | 2026-11-14 | Directorios en minúsculas, verificados en CI | Aceptada |
-| D-012 | 2026-11-14 | `MISSING_COMMANDER` diferido hasta tener campo de comandante | Aceptada (diferida) |
+| D-012 | 2026-11-14 | `MISSING_COMMANDER` diferido hasta tener campo de comandante | Implementada (D-021) |
 | D-013 | 2026-11-14 | Los issues viven solo en el mazo, no en cada fila | Aceptada |
 | D-014 | 2026-11-14 | La lista de mazos no calcula el diagnóstico | Aceptada |
 | D-015 | 2026-11-15 | Los listados cargan los tableros con una consulta extra | Aceptada |
@@ -47,6 +47,8 @@ ni del historial de chat.
 | D-018 | 2026-11-15 | El cargador identifica impresiones por `scryfall_id` y es idempotente | Aceptada |
 | D-019 | 2026-11-16 | `card_tag` se reserva para tags semánticos | Aceptada |
 | D-020 | 2026-11-16 | Los enums del contrato se convierten por valor, no por nombre | Aceptada |
+| D-021 | 2026-11-16 | Comandante dentro del mazo, con pareja opcional en `deck_commander` | Aceptada |
+| D-022 | 2026-11-17 | El `PUT` actualiza la entidad gestionada, no fusiona una copia | Aceptada |
 
 ## 4. Entradas
 
@@ -273,6 +275,9 @@ ni del historial de chat.
 - **Consecuencias:** `MISSING_COMMANDER` no aparece en los resultados actuales. Commander
   se evalúa con copias, legalidad y tamaño, pero no con la presencia de comandante.
   Registrado en `docs/DECK_VALIDATION_MODEL.md` §4 y §7.1.
+- **Actualización (D-021):** El campo ya existe (`commander_card_ids` + `deck_commander`),
+  así que la regla se implementa y `MISSING_COMMANDER` vuelve a emitirse. Se mantiene como
+  error de publicación: un mazo Commander sin comandante no es jugable.
 - **Revisar si:** se añade `commander_card_id` (o equivalente) a `decks` y al contrato.
 
 ### D-013 - Los issues viven solo en el mazo, no en cada fila
@@ -369,6 +374,10 @@ ni del historial de chat.
   `MtgdeckbuilderApplication` y las ramas sueltas de `CardServiceImpl` y
   `CompanionRules`); si no, el suelo ya no tiene margen para bajar y cualquier código
   nuevo sin test romperá el build, que es justo el objetivo.
+- **Actualización (D-021):** tras cubrir el comandante, el informe combinado quedó en
+  99,87 % de líneas y 95,21 % de ramas, y el suelo subió a **99,8 / 95**.
+- **Actualización (2026-11-16, tras el `PUT` parcial):** 99,88 % de líneas y 95,31 % de
+  ramas; el suelo de ramas sube a **95,3**.
 
 ### D-017 - Las consultas nativas parametrizan todos los filtros
 
@@ -491,3 +500,101 @@ ni del historial de chat.
 - **Revisar si:** Scryfall añade otra rareza (el fallback la degrada a `special`
   con warning) o si el contrato pasa a exigir fidelidad estricta de origen.
 - **Detalle:** `docs/DATA_IMPORT.md`; relacionada con D-018 y D-019.
+
+### D-021 - Comandante dentro del mazo, con pareja opcional en `deck_commander`
+
+- **Fecha:** 2026-11-16
+- **Estado:** Aceptada
+- **Decisión:** El comandante se declara con `commander_card_ids` en `Deck` y
+  `CompleteDeck` (`array<int>`, `maxItems: 2`) y se persiste en la tabla
+  `deck_commander(deck_id, card_id)` con PK compuesta y FKs `ON DELETE CASCADE`. La carta
+  **debe existir ya en `card_deck` con `section = main`**: el campo solo marca la fila, no
+  añade la carta. Enviar el campo ausente o `null` conserva la selección; una lista vacía
+  la limpia (mismo criterio que `deck_contents`). La lista se devuelve ordenada por
+  `card_id` para que respuestas y diagnóstico sean deterministas. Las reglas de qué carta
+  puede ser comandante y qué parejas son válidas viven en `CommanderRules`, no en SQL.
+- **Contexto:** D-012 difirió `MISSING_COMMANDER` porque no existía el dato. Al añadirlo
+  había que elegir entre una columna en `decks` o una tabla. Los partners de Commander
+  (2016 en adelante) y las variantes posteriores —`Choose a Background`,
+  `Doctor's companion`, `Friends forever`, `Partner with <nombre>`— permiten dos
+  comandantes, así que una sola columna no cubre el formato real. Tampoco servía
+  `@ElementCollection`: los listados cargan los tableros de toda la página en una consulta
+  (D-015) y una colección perezosa por mazo reintroduciría el N+1.
+- **Por qué:**
+  - Guardar el rol en tabla propia con PK `(deck_id, card_id)` impide duplicados y deja
+    que la BD borre en cascada con el mazo o con la carta, sin triggers.
+  - El comandante cuenta dentro de los 100: exigir su fila en `main` mantiene una sola
+    fuente de verdad para el contenido y evita que el campo "añada" cartas invisibles.
+  - El par ausente/`null` frente a lista vacía sigue el patrón ya establecido por
+    `deck_contents`, así que un `PUT` parcial no borra datos por accidente.
+  - Ordenar por `card_id` hace que dos peticiones equivalentes devuelvan el mismo JSON y
+    que los `issues` no cambien de orden entre ejecuciones.
+  - Las variantes de pareja son texto impreso (`keywords` y `card_text`), así que se
+    resuelven en Java, donde ya viven las reglas, y no en la BD.
+- **Alternativas descartadas:**
+  - `decks.commander_card_id` (una columna): no admite parejas, que son legales desde
+    2016, y obligaría a otra migración en cuanto se soportaran.
+  - `@ElementCollection` sobre `DeckEntity`: N+1 en los listados o carga perezosa rota
+    fuera de transacción.
+  - Copiar el comandante dentro de `deck_contents` con una sección `commander`: lo saca
+    de `main`, deja de contar para los 100 y duplica la carta en el mazo.
+  - Validar la pareja en SQL: el texto de la carta no es consultable con reglas estables y
+    D-002 ya decidió que la política vive en Java.
+- **Consecuencias:**
+  - `V4__commander.sql` crea la tabla, el índice por `card_id` y los comentarios.
+  - Códigos nuevos: `TOO_MANY_COMMANDERS`, `INVALID_COMMANDER`, `INVALID_COMMANDER_PAIR`,
+    `COMMANDER_NOT_LEGAL`, `COLOR_IDENTITY_VIOLATION`. Una carta ilegal que además es
+    comandante emite `COMMANDER_NOT_LEGAL` en vez de `CARD_BANNED`/`CARD_NOT_LEGAL` para
+    que el cliente sepa que el arreglo es cambiar el comandante.
+  - `MISSING_COMMANDER` se emite cuando `formats.requires_commander` está activo y no hay
+    filas; `TOO_MANY_COMMANDERS` queda como defensa para datos persistidos o antiguos,
+    porque el contrato ya rechaza más de dos con `maxItems: 2`.
+  - `DeckServiceImpl.replaceDeckCommanders` hace `flush()` tras el `deleteByDeckId`: la
+    clave es asignada y el reinsert de un comandante conservado se fusionaría con la fila
+    borrada.
+  - La identidad de color se comprueba contra la unión de los comandantes declarados en
+    `main` y `sideboard`; `maybeboard` queda fuera porque no es parte jugable.
+- **Revisar si:** se implementa el importador Java de datos (podría normalizar las
+  variantes de pareja en un campo propio), si se quieren comandantes fuera de `main`, o si
+  se añaden formatos con reglas de comandante distintas (Brawl, Oathbreaker).
+- **Detalle:** `docs/DECK_VALIDATION_MODEL.md` §4, §5, §6 y §7; relacionada con D-001,
+  D-002, D-012 y D-015.
+
+### D-022 - El `PUT` actualiza la entidad gestionada, no fusiona una copia
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** `DeckServiceImpl.update` carga la entidad existente y deja que
+  `DeckEntityMapper.updateEntity` copie el modelo sobre ella (`@MappingTarget`),
+  ignorando `id`, `created` y `cards`. No se vuelve a llamar a `toEntity` ni se fusiona
+  una instancia nueva.
+- **Contexto:** `DeckEntity.cards` es
+  `@OneToMany(mappedBy = "deck", cascade = ALL, orphanRemoval = true)`. El `PUT` parcial
+  omite `deck_contents` cuando el cliente no quiere tocar el contenido; el servicio
+  recibía `cards = null` y no ejecutaba `replaceDeckCards`. Aun así las filas
+  desaparecían: fusionar una `DeckEntity` recién construida (con la lista de cartas
+  vacía) hace que Hibernate compare esa lista con la colección persistida y aplique
+  `orphanRemoval` a todas las filas.
+- **Por qué:**
+  - Actualizar sobre la instancia gestionada deja la colección intacta sin depender del
+    orden de los `flush`.
+  - El mapper sigue siendo la única traducción modelo ↔ entidad; solo se añade la
+    variante de actualización.
+  - Ignorar `cards` es explícito: el contenido se reemplaza en
+    `replaceDeckCards`, no por el mapeo genérico.
+- **Alternativas descartadas:**
+  - `entity.setCards(null)` antes del `save`: funciona por un detalle de Hibernate
+    (una colección nula no se fusiona) y volvería a romperse con la siguiente colección.
+  - Cargar y reinsertar las cartas en cada `PUT`: borra y reescribe filas que el
+    cliente no ha tocado.
+  - Quitar `orphanRemoval`: deja filas huérfanas cuando de verdad se elimina un mazo.
+- **Consecuencias:**
+  - `DeckEntityMapper.updateEntity` es la ruta de actualización; `toEntity` queda para
+    `create`.
+  - El test HTTP de conservación hace `flush()` + `clear()` del setup. Con la
+    transacción del test abierta las filas no estaban en la BD al fusionar, así que el
+    bug pasaba inadvertido.
+  - Un `PUT` que solo cambia el nombre conserva contenido, comandantes e `is_private`.
+- **Revisar si:** se añade otra colección con `orphanRemoval` a `DeckEntity` o se
+  introduce un segundo escritor de mazos.
+- **Detalle:** `docs/DECK_VALIDATION_MODEL.md` §7.2; relacionada con D-013, D-015 y D-021.

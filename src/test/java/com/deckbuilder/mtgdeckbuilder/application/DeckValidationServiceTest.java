@@ -4,6 +4,7 @@ import com.deckbuilder.mtgdeckbuilder.application.implement.DeckValidationServic
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardLegalityRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckCommanderRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
@@ -12,6 +13,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompos
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.FormatEntity;
 import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
@@ -62,6 +64,9 @@ class DeckValidationServiceTest {
 
 	@Mock
 	private CardInDeckRepository cardInDeckRepository;
+
+	@Mock
+	private DeckCommanderRepository deckCommanderRepository;
 
 	@InjectMocks
 	private DeckValidationServiceImpl deckValidationService;
@@ -777,6 +782,288 @@ class DeckValidationServiceTest {
 				.hasMessageContaining("greater than 0");
 	}
 
+	// ==================== COMMANDER ====================
+
+	@Test
+	@DisplayName("Should require a commander when the format needs one")
+	void shouldRequireCommander() {
+		final CardEntity legend = commanderCard(1L, "Legend", "Legendary Creature — Human", null, "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(legend),
+				List.of(legality(1L, FORMAT_ID, "legal")));
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.MISSING_COMMANDER);
+		assertThat(issue.getSeverity()).isEqualTo(IssueSeverity.ERROR);
+		assertThat(issue.getCardId()).isNull();
+		assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.ILLEGAL);
+	}
+
+	@Test
+	@DisplayName("Should reject more than two commanders")
+	void shouldRejectMoreThanTwoCommanders() {
+		final List<CardEntity> cards = List.of(
+				commanderCard(1L, "One", "Legendary Creature — Human", null, "W"),
+				commanderCard(2L, "Two", "Legendary Creature — Human", null, "U"),
+				commanderCard(3L, "Three", "Legendary Creature — Human", null, "B"));
+		this.givenCommanders(commanderFormat(),
+				List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main"), entry(12L, 3L, 1, "main")), cards,
+				legalitiesFor(3), 1L, 2L, 3L);
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		assertThat(singleIssue(result).getCode()).isEqualTo(DeckIssueCode.TOO_MANY_COMMANDERS);
+	}
+
+	@Test
+	@DisplayName("Should reject a commander that is not in the main deck")
+	void shouldRejectCommanderOutsideMain() {
+		final CardEntity legend = commanderCard(1L, "Legend", "Legendary Creature — Human", null, "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "sideboard")), List.of(legend),
+				List.of(legality(1L, FORMAT_ID, "legal")), 1L);
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.INVALID_COMMANDER);
+		assertThat(issue.getMessage()).contains("must be in the main deck");
+		assertThat(issue.getSection()).isEqualTo("main");
+	}
+
+	@Test
+	@DisplayName("Should reject a commander that does not exist in the deck")
+	void shouldRejectUnknownCommander() {
+		this.givenCommanders(commanderFormat(), List.of(), List.of(), List.of(), 99L);
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.INVALID_COMMANDER);
+		assertThat(issue.getMessage()).contains("does not exist");
+	}
+
+	@Test
+	@DisplayName("Should reject a card that cannot be a commander")
+	void shouldRejectNonCommander() {
+		final CardEntity bears = commanderCard(1L, "Grizzly Bears", "Creature — Bear", null, "G");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(bears),
+				List.of(legality(1L, FORMAT_ID, "legal")), 1L);
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		final DeckIssue issue = singleIssue(result);
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.INVALID_COMMANDER);
+		assertThat(issue.getMessage()).contains("cannot be a commander");
+	}
+
+	@Test
+	@DisplayName("Should accept a legendary creature as commander")
+	void shouldAcceptLegendaryCommander() {
+		final CardEntity legend = commanderCard(1L, "Legend", "Legendary Creature — Human", null, "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(legend),
+				List.of(legality(1L, FORMAT_ID, "legal")), 1L);
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		assertThat(result.getIssues()).isEmpty();
+		assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.LEGAL);
+	}
+
+	@Test
+	@DisplayName("Should accept a card that says it can be the commander")
+	void shouldAcceptCardThatSaysItCanBeCommander() {
+		final CardEntity teferi = commanderCard(1L, "Teferi, Temporal Archmage",
+				"Legendary Planeswalker — Teferi", "Teferi, Temporal Archmage can be your commander.", "U");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(teferi),
+				List.of(legality(1L, FORMAT_ID, "legal")), 1L);
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should accept a Partner with pair")
+	void shouldAcceptPartnerWithPair() {
+		final CardEntity krav = commanderCard(1L, "Krav, the Unredeemed", "Legendary Creature — Demon",
+				"Partner with Regna, the Redeemer", "B");
+		final CardEntity regna = commanderCard(2L, "Regna, the Redeemer", "Legendary Creature — Angel",
+				"Partner with Krav, the Unredeemed", "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(krav, regna), legalitiesFor(2), 1L, 2L);
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should reject a Partner with pair whose names do not match")
+	void shouldRejectPartnerWithMismatch() {
+		final CardEntity krav = commanderCard(1L, "Krav, the Unredeemed", "Legendary Creature — Demon",
+				"Partner with Someone Else", "B");
+		final CardEntity regna = commanderCard(2L, "Regna, the Redeemer", "Legendary Creature — Angel",
+				"Partner with Krav, the Unredeemed", "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(krav, regna), legalitiesFor(2), 1L, 2L);
+
+		assertThat(singleIssue(this.deckValidationService.evaluate(DECK_ID)).getCode())
+			.isEqualTo(DeckIssueCode.INVALID_COMMANDER_PAIR);
+	}
+
+	@Test
+	@DisplayName("Should accept generic partners")
+	void shouldAcceptGenericPartners() {
+		final CardEntity first = commanderCard(1L, "Thrasios, Triton Hero", "Legendary Creature — Human", "Partner",
+				"G");
+		final CardEntity second = commanderCard(2L, "Tymna the Weaver", "Legendary Creature — Human Cleric",
+				"Partner", "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(first, second), legalitiesFor(2), 1L, 2L);
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should accept Friends forever")
+	void shouldAcceptFriendsForever() {
+		final CardEntity first = commanderCard(1L, "Will, Scion of Peace", "Legendary Creature — Human",
+				"Friends forever", "W");
+		final CardEntity second = commanderCard(2L, "Rowan, Scion of War", "Legendary Creature — Human Wizard",
+				"Friends forever", "B");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(first, second), legalitiesFor(2), 1L, 2L);
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should accept Choose a Background with a Background")
+	void shouldAcceptBackgroundPair() {
+		final CardEntity commander = commanderCard(1L, "Burakos, Party Leader", "Legendary Creature — Orc",
+				"Choose a Background", "B");
+		final CardEntity background = commanderCard(2L, "Folk Hero", "Legendary Enchantment — Background", null, "W",
+				"Background");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(commander, background), legalitiesFor(2), 1L, 2L);
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should accept Doctor's companion with a Doctor")
+	void shouldAcceptDoctorsCompanionPair() {
+		final CardEntity companion = commanderCard(1L, "Clara Oswald", "Legendary Creature — Human",
+				"Doctor's companion", "U");
+		final CardEntity doctor = commanderCard(2L, "The Fourth Doctor", "Legendary Creature — Time Lord", null, "R",
+				"Time Lord", "Doctor");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(companion, doctor), legalitiesFor(2), 1L, 2L);
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("Should reject two legends without a pairing mechanic")
+	void shouldRejectPairWithoutMechanic() {
+		final CardEntity first = commanderCard(1L, "Legend One", "Legendary Creature — Human", null, "W");
+		final CardEntity second = commanderCard(2L, "Legend Two", "Legendary Creature — Elf", null, "G");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(first, second), legalitiesFor(2), 1L, 2L);
+
+		assertThat(singleIssue(this.deckValidationService.evaluate(DECK_ID)).getCode())
+			.isEqualTo(DeckIssueCode.INVALID_COMMANDER_PAIR);
+	}
+
+	@Test
+	@DisplayName("Should reject a Background declared alone")
+	void shouldRejectBackgroundAlone() {
+		final CardEntity background = commanderCard(1L, "Folk Hero", "Legendary Enchantment — Background", null, "W",
+				"Background");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(background),
+				List.of(legality(1L, FORMAT_ID, "legal")), 1L);
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.INVALID_COMMANDER);
+		assertThat(issue.getMessage()).contains("Background");
+	}
+
+	@Test
+	@DisplayName("Should reject a Doctor's companion paired with a non-legendary Doctor")
+	void shouldRejectPairWithIneligibleDoctor() {
+		final CardEntity companion = commanderCard(1L, "Clara Oswald", "Legendary Creature — Human",
+				"Doctor's companion", "U");
+		final CardEntity doctor = commanderCard(2L, "Not Legendary Doctor", "Creature — Doctor", null, "R", "Doctor");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(companion, doctor), legalitiesFor(2), 1L, 2L);
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.INVALID_COMMANDER);
+		assertThat(issue.getCardId()).isEqualTo(2L);
+	}
+
+	@Test
+	@DisplayName("Should flag a banned commander with its own code")
+	void shouldFlagBannedCommander() {
+		final CardEntity legend = commanderCard(1L, "Banned Legend", "Legendary Creature — Human", null, "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(legend),
+				List.of(legality(1L, FORMAT_ID, "banned")), 1L);
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		assertThat(result.getIssues()).extracting(DeckIssue::getCode)
+			.containsExactly(DeckIssueCode.COMMANDER_NOT_LEGAL);
+	}
+
+	@Test
+	@DisplayName("Should warn when the commander has no legality row")
+	void shouldWarnUnknownCommanderLegality() {
+		final CardEntity legend = commanderCard(1L, "Unimported Legend", "Legendary Creature — Human", null, "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main")), List.of(legend), List.of(), 1L);
+
+		final DeckValidationResult result = this.deckValidationService.evaluate(DECK_ID);
+
+		assertThat(singleIssue(result).getCode()).isEqualTo(DeckIssueCode.LEGALITY_UNKNOWN);
+		assertThat(result.getValidationStatus()).isEqualTo(ValidationStatus.UNKNOWN);
+	}
+
+	@Test
+	@DisplayName("Should flag a card outside the commander color identity")
+	void shouldFlagOffColorCard() {
+		final CardEntity commander = commanderCard(1L, "Mono White Legend", "Legendary Creature — Human", null, "W");
+		final CardEntity offColor = commanderCard(2L, "Blue Spell", "Instant", null, "U");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "main")),
+				List.of(commander, offColor), legalitiesFor(2), 1L);
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.COLOR_IDENTITY_VIOLATION);
+		assertThat(issue.getCardId()).isEqualTo(2L);
+		assertThat(issue.getDeckContentId()).isEqualTo(11L);
+		assertThat(issue.getSection()).isEqualTo("main");
+	}
+
+	@Test
+	@DisplayName("Should check the sideboard but ignore the maybeboard for color identity")
+	void shouldCheckSideboardColorIdentityOnly() {
+		final CardEntity commander = commanderCard(1L, "Mono White Legend", "Legendary Creature — Human", null, "W");
+		final CardEntity sideboardCard = commanderCard(2L, "Blue Sideboard", "Instant", null, "U");
+		final CardEntity maybeCard = commanderCard(3L, "Blue Maybe", "Instant", null, "U");
+		this.givenCommanders(commanderFormat(),
+				List.of(entry(10L, 1L, 1, "main"), entry(11L, 2L, 1, "sideboard"), entry(12L, 3L, 1, "maybeboard")),
+				List.of(commander, sideboardCard, maybeCard), legalitiesFor(3), 1L);
+
+		final DeckIssue issue = singleIssue(this.deckValidationService.evaluate(DECK_ID));
+		assertThat(issue.getCode()).isEqualTo(DeckIssueCode.COLOR_IDENTITY_VIOLATION);
+		assertThat(issue.getSection()).isEqualTo("sideboard");
+	}
+
+	@Test
+	@DisplayName("Should skip deck rows whose card is missing")
+	void shouldSkipMissingCardRows() {
+		final CardEntity commander = commanderCard(1L, "Legend", "Legendary Creature — Human", null, "W");
+		this.givenCommanders(commanderFormat(), List.of(entry(10L, 1L, 1, "main"), entry(11L, 99L, 1, "sideboard")),
+				List.of(commander), legalitiesFor(1), 1L);
+
+		assertThat(this.deckValidationService.evaluate(DECK_ID).getIssues()).isEmpty();
+	}
+
 	// ==================== FIXTURES ====================
 
 	private void given(FormatEntity format, List<CardInDeckEntity> entries, List<CardEntity> cards,
@@ -800,6 +1087,16 @@ class DeckValidationServiceTest {
 		}
 	}
 
+	private void givenCommanders(FormatEntity format, List<CardInDeckEntity> entries, List<CardEntity> cards,
+			List<CardLegalityEntity> legalities, Long... commanderIds) {
+		this.given(format, entries, cards, legalities);
+		final List<DeckCommanderEntity> commanders = new ArrayList<>();
+		for (final Long commanderId : commanderIds) {
+			commanders.add(new DeckCommanderEntity(DECK_ID, commanderId));
+		}
+		when(this.deckCommanderRepository.findByDeckId(DECK_ID)).thenReturn(commanders);
+	}
+
 	private static DeckIssue singleIssue(DeckValidationResult result) {
 		assertThat(result.getIssues()).hasSize(1);
 		return result.getIssues().get(0);
@@ -807,6 +1104,31 @@ class DeckValidationServiceTest {
 
 	private static FormatEntity baseFormat() {
 		return format(FORMAT_ID, 0, null, 15, 4, false, true);
+	}
+
+	private static FormatEntity commanderFormat() {
+		return FormatEntity.builder()
+				.id(FORMAT_ID)
+				.name("Commander")
+				.minDeckSize(0)
+				.maxDeckSize(null)
+				.maxSideboardSize(null)
+				.maxCopies(1)
+				.singleton(true)
+				.requiresCommander(true)
+				.tracksLegality(true)
+				.build();
+	}
+
+	private static CardEntity commanderCard(long id, String name, String typeLine, String text, String colorIdentity,
+			String... subtypes) {
+		final CardEntity card = card(id, name, typeLine.contains("Creature") ? "Creature" : "Enchantment");
+		card.setTypeLine(typeLine);
+		card.setCardText(text);
+		card.setSubtypes(List.of(subtypes));
+		card.setKeywords(List.of());
+		card.setColorIdentity(colorIdentity);
+		return card;
 	}
 
 	private static FormatEntity format(long id, int minDeckSize, Integer maxDeckSize, Integer maxSideboardSize,

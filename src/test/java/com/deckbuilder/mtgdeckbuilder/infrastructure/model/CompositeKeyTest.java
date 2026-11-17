@@ -61,6 +61,21 @@ class CompositeKeyTest {
     }
 
     @Test
+    @DisplayName("Should compare deck commander keys by value")
+    void shouldCompareDeckCommanderIds() {
+        final DeckCommanderId key = new DeckCommanderId(1L, 2L);
+
+        assertThat(key.equals(key)).isTrue();
+        assertThat(key.equals(null)).isFalse();
+        assertThat(key.equals("card")).isFalse();
+        assertThat(key).isEqualTo(new DeckCommanderId(1L, 2L));
+        assertThat(key).isNotEqualTo(new DeckCommanderId(1L, 3L));
+        assertThat(key).isNotEqualTo(new DeckCommanderId(3L, 2L));
+        assertThat(key).hasSameHashCodeAs(new DeckCommanderId(1L, 2L));
+        assertThat(key).isNotEqualTo(new DeckCommanderId(null, null));
+    }
+
+    @Test
     @DisplayName("Should compare card ruling keys by value")
     void shouldCompareCardRulingIds() {
         final UUID oracleId = UUID.randomUUID();

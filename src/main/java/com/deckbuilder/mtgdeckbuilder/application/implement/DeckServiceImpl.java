@@ -4,6 +4,7 @@ import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.application.DeckValidationService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardInDeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckCommanderRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotLegalException;
@@ -11,6 +12,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundExcep
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
@@ -24,8 +26,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -38,6 +42,7 @@ public class DeckServiceImpl implements DeckService {
 	private final CardInDeckRepository cardInDeckRepository;
 	private final CardRepository cardRepository;
 	private final DeckValidationService deckValidationService;
+	private final DeckCommanderRepository deckCommanderRepository;
 
 	@Override
 	public List<Deck> getAll(int pageSize, int pageNumber) {
@@ -74,6 +79,7 @@ public class DeckServiceImpl implements DeckService {
 		entity = this.deckRepository.save(entity);
 
 		this.replaceDeckCards(entity.getId(), deck.getCards());
+		this.replaceDeckCommanders(entity.getId(), deck.getCommanderCardIds());
 
 		return this.buildDeckWithCards(entity);
 	}
@@ -86,15 +92,22 @@ public class DeckServiceImpl implements DeckService {
 
 		final LocalDateTime now = LocalDateTime.now();
 		deck = deck.toBuilder().id(id).created(existing.getCreated()).modified(now).build();
+		// is_private is optional in the contract; omitting it must not wipe the
+		// stored value or violate the NOT NULL column (PrePersist does not run
+		// on updates).
+		if (deck.getIsPrivate() == null) {
+			deck = deck.toBuilder().isPrivate(existing.getIsPrivate()).build();
+		}
 
-		DeckEntity entity = this.deckEntityMapper.toEntity(deck);
-		entity.setCreated(existing.getCreated());
+		DeckEntity entity = existing;
+		this.deckEntityMapper.updateEntity(deck, entity);
 		// Editing a published deck returns it to draft (ADR-007).
 		entity.setStatus(DeckStatus.DRAFT.getValue());
 		entity.setPublishedAt(null);
 		entity = this.deckRepository.save(entity);
 
 		this.replaceDeckCards(id, deck.getCards());
+		this.replaceDeckCommanders(id, deck.getCommanderCardIds());
 
 		return this.buildDeckWithCards(entity);
 	}
@@ -248,6 +261,28 @@ public class DeckServiceImpl implements DeckService {
 	}
 
 	/**
+	 * Replaces the commander rows when the payload includes the field. A null
+	 * list means the caller did not send commander_card_ids, so the current
+	 * selection is preserved (same rule as deck_contents).
+	 */
+	private void replaceDeckCommanders(Long deckId, List<Long> commanderCardIds) {
+		if (commanderCardIds == null) {
+			return;
+		}
+		if (commanderCardIds.stream().anyMatch(Objects::isNull)) {
+			throw new InvalidDeckCompositionException("Commander card ids must not be null");
+		}
+
+		this.deckCommanderRepository.deleteByDeckId(deckId);
+		// Commanders use an assigned key: flushing the delete first keeps the
+		// reinsertion of a kept commander from being merged into the deleted row.
+		this.deckCommanderRepository.flush();
+		for (final Long cardId : new LinkedHashSet<>(commanderCardIds)) {
+			this.deckCommanderRepository.save(new DeckCommanderEntity(deckId, cardId));
+		}
+	}
+
+	/**
 	 * Validates card entries and merges duplicates of the same card and section.
 	 */
 	private List<Deck.CardInDeck> normalizeCards(Long deckId, List<Deck.CardInDeck> cards) {
@@ -282,7 +317,16 @@ public class DeckServiceImpl implements DeckService {
 		final List<Deck.CardInDeck> cards = this.cardInDeckRepository.findByDeckId(entity.getId()).stream()
 			.map(this::toCardInDeck)
 			.toList();
-		return this.deckEntityMapper.toModel(entity).toBuilder().cards(cards).build();
+		final List<Long> commanderCardIds = this.deckCommanderRepository.findByDeckId(entity.getId())
+			.stream()
+			.map(DeckCommanderEntity::getCardId)
+			.sorted()
+			.toList();
+		return this.deckEntityMapper.toModel(entity)
+			.toBuilder()
+			.cards(cards)
+			.commanderCardIds(commanderCardIds)
+			.build();
 	}
 
 	/**
@@ -299,10 +343,16 @@ public class DeckServiceImpl implements DeckService {
 			.stream()
 			.collect(Collectors.groupingBy(CardInDeckEntity::getDeckId,
 					Collectors.mapping(this::toCardInDeck, Collectors.toList())));
+		final Map<Long, List<Long>> commandersByDeck = this.deckCommanderRepository.findByDeckIdIn(deckIds)
+			.stream()
+			.collect(Collectors.groupingBy(DeckCommanderEntity::getDeckId,
+					Collectors.mapping(DeckCommanderEntity::getCardId,
+							Collectors.collectingAndThen(Collectors.toList(), ids -> ids.stream().sorted().toList()))));
 
 		return entities.stream()
 			.map(entity -> this.deckEntityMapper.toModel(entity).toBuilder()
 				.cards(cardsByDeck.getOrDefault(entity.getId(), List.of()))
+				.commanderCardIds(commandersByDeck.getOrDefault(entity.getId(), List.of()))
 				.build())
 			.toList();
 	}

@@ -15,8 +15,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies that a completely empty database can be provisioned by Flyway alone
- * (V1 baseline + V2 format seed + V3 deck validation model) and that the
- * resulting schema keeps data shape while format policy lives in Java.
+ * (V1 baseline + V2 format seed + V3 deck validation model + V4 commander) and
+ * that the resulting schema keeps data shape while format policy lives in Java.
  */
 class FlywayMigrationSmokeIntegrationTest {
 
@@ -35,10 +35,10 @@ class FlywayMigrationSmokeIntegrationTest {
 
             var result = flyway.migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(3);
+            assertThat(result.migrationsExecuted).isEqualTo(4);
             assertThat(flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .containsExactly("1", "2", "3");
+                    .containsExactly("1", "2", "3", "4");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
@@ -54,6 +54,7 @@ class FlywayMigrationSmokeIntegrationTest {
 
                 assertDeckStateConstraints(connection, standardFormatId, userId);
                 assertCardDeckIntegrity(connection, standardFormatId, userId);
+                assertDeckCommanderIntegrity(connection, standardFormatId, userId);
             }
         }
     }
@@ -63,7 +64,7 @@ class FlywayMigrationSmokeIntegrationTest {
                 "users", "sets", "cards", "card_colors", "card_color_identity",
                 "card_types", "card_supertypes", "card_subtypes", "card_keywords",
                 "card_faces", "card_rulings", "formats", "card_legality", "decks",
-                "card_deck", "tags", "card_tag", "card_relationships"}) {
+                "card_deck", "deck_commander", "tags", "card_tag", "card_relationships"}) {
             assertThat(hasTable(connection, table)).as("table %s", table).isTrue();
         }
     }
@@ -90,6 +91,8 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(hasColumn(connection, "formats", "tracks_legality")).isTrue();
 
         assertThat(hasColumn(connection, "card_legality", "format_id")).isTrue();
+        assertThat(hasColumn(connection, "deck_commander", "deck_id")).isTrue();
+        assertThat(hasColumn(connection, "deck_commander", "card_id")).isTrue();
         assertThat(hasColumn(connection, "users", "role")).isTrue();
         assertThat(hasColumn(connection, "users", "is_active")).isTrue();
     }
@@ -206,6 +209,33 @@ class FlywayMigrationSmokeIntegrationTest {
                 .isInstanceOf(SQLException.class);
     }
 
+    private static void assertDeckCommanderIntegrity(Connection connection, long formatId, long userId)
+            throws Exception {
+        long deckId = insertDeck(connection, "Commander Deck", formatId, userId);
+        long commander = insertCard(connection, "Commander", false, null);
+        long secondCard = insertCard(connection, "Second Commander", false, null);
+
+        // The database stores the role only: it does not require a main-deck row
+        // (that is Java policy) and it allows the pair mechanics it cannot know.
+        insertDeckCommander(connection, deckId, commander);
+        insertDeckCommander(connection, deckId, secondCard);
+
+        // One row per (deck, card).
+        assertThatThrownBy(() -> insertDeckCommander(connection, deckId, commander))
+                .isInstanceOf(SQLException.class);
+
+        // Deleting the deck cascades to its commanders.
+        long transientDeck = insertDeck(connection, "Transient Commander Deck", formatId, userId);
+        insertDeckCommander(connection, transientDeck, commander);
+        execute(connection, "DELETE FROM decks WHERE id = " + transientDeck);
+        assertThat(countRows(connection, "deck_commander WHERE deck_id = " + transientDeck)).isZero();
+
+        // Deleting the card cascades too, without touching the deck.
+        execute(connection, "DELETE FROM cards WHERE id = " + secondCard);
+        assertThat(countRows(connection, "deck_commander WHERE card_id = " + secondCard)).isZero();
+        assertThat(countRows(connection, "decks WHERE id = " + deckId)).isEqualTo(1);
+    }
+
     private static long insertUser(Connection connection) throws Exception {
         String sql = """
                 INSERT INTO users(name, username, email, hashed_password)
@@ -283,6 +313,23 @@ class FlywayMigrationSmokeIntegrationTest {
             statement.setInt(3, quantity);
             statement.setString(4, section);
             statement.executeUpdate();
+        }
+    }
+
+    private static void insertDeckCommander(Connection connection, long deckId, long cardId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO deck_commander(deck_id, card_id) VALUES (?, ?)")) {
+            statement.setLong(1, deckId);
+            statement.setLong(2, cardId);
+            statement.executeUpdate();
+        }
+    }
+
+    private static long countRows(Connection connection, String fromWhere) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM " + fromWhere);
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getLong(1);
         }
     }
 

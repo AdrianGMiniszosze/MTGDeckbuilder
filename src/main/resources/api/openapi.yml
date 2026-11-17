@@ -1565,6 +1565,16 @@ components:
         user_id:
           type: integer
           minimum: 1
+        commander_card_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          maxItems: 2
+          description: >-
+            Cards from deck_contents (section main) that act as the deck's
+            commander. At most two, for partner pairs. Ignored by formats
+            that do not require a commander.
         deck_contents:
           type: array
           items:
@@ -1651,6 +1661,16 @@ components:
         format:
           type: integer
           minimum: 1
+        commander_card_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+          maxItems: 2
+          description: >-
+            Cards from main_board that act as the deck's commander. At most
+            two, for partner pairs. Ignored by formats that do not require a
+            commander.
         status:
           type: string
           enum: [draft, published]
