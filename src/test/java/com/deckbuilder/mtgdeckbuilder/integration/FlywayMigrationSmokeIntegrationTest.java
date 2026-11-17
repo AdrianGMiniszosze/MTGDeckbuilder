@@ -9,14 +9,16 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Verifies that a completely empty database can be provisioned by Flyway alone
- * (V1 baseline + V2 format seed + V3 deck validation model + V4 commander) and
- * that the resulting schema keeps data shape while format policy lives in Java.
+ * (V1 baseline + V2 format seed + V3 deck validation model + V4 commander +
+ * V5 import support) and that the resulting schema keeps data shape while
+ * format policy lives in Java.
  */
 class FlywayMigrationSmokeIntegrationTest {
 
@@ -35,10 +37,10 @@ class FlywayMigrationSmokeIntegrationTest {
 
             var result = flyway.migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(4);
+            assertThat(result.migrationsExecuted).isEqualTo(5);
             assertThat(flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .containsExactly("1", "2", "3", "4");
+                    .containsExactly("1", "2", "3", "4", "5");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
@@ -48,6 +50,7 @@ class FlywayMigrationSmokeIntegrationTest {
                 assertCanonicalColumns(connection);
                 assertLegacyColumnsAreGone(connection);
                 assertSeedFormats(connection);
+                assertImportSupport(connection);
 
                 long userId = insertUser(connection);
                 long standardFormatId = formatId(connection, "Standard");
@@ -64,7 +67,8 @@ class FlywayMigrationSmokeIntegrationTest {
                 "users", "sets", "cards", "card_colors", "card_color_identity",
                 "card_types", "card_supertypes", "card_subtypes", "card_keywords",
                 "card_faces", "card_rulings", "formats", "card_legality", "decks",
-                "card_deck", "deck_commander", "tags", "card_tag", "card_relationships"}) {
+                "card_deck", "deck_commander", "tags", "card_tag", "card_relationships",
+                "import_seen"}) {
             assertThat(hasTable(connection, table)).as("table %s", table).isTrue();
         }
     }
@@ -76,6 +80,7 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(hasColumn(connection, "cards", "scryfall_id")).isTrue();
         assertThat(hasColumn(connection, "cards", "oracle_id")).isTrue();
         assertThat(hasColumn(connection, "cards", "copies_limit")).isTrue();
+        assertThat(hasColumn(connection, "cards", "is_obsolete")).isTrue();
 
         assertThat(hasColumn(connection, "decks", "format_id")).isTrue();
         assertThat(hasColumn(connection, "decks", "is_private")).isTrue();
@@ -140,6 +145,25 @@ class FlywayMigrationSmokeIntegrationTest {
             assertThat(rules.maxCopies()).as(name).isEqualTo(4);
             assertThat(rules.tracksLegality()).as(name).isTrue();
         }
+    }
+
+    private static void assertImportSupport(Connection connection) throws Exception {
+        // Existing rows are not obsolete by default; only the importer sets the mark.
+        long cardId = insertCard(connection, "Obsolete Candidate", false, null);
+        assertThat(readBoolean(connection, "SELECT is_obsolete FROM cards WHERE id = " + cardId)).isFalse();
+
+        execute(connection, "UPDATE cards SET is_obsolete = TRUE WHERE id = " + cardId);
+        assertThat(readBoolean(connection, "SELECT is_obsolete FROM cards WHERE id = " + cardId)).isTrue();
+
+        assertThat(hasIndex(connection, "idx_cards_obsolete")).isTrue();
+
+        // import_seen is UNLOGGED and keyed by run plus printing.
+        assertThat(tablePersistence(connection, "import_seen")).isEqualTo("u");
+        UUID runId = UUID.randomUUID();
+        UUID scryfallId = UUID.randomUUID();
+        insertImportSeen(connection, runId, scryfallId);
+        assertThatThrownBy(() -> insertImportSeen(connection, runId, scryfallId))
+                .isInstanceOf(SQLException.class);
     }
 
     private static void assertDeckStateConstraints(Connection connection, long formatId, long userId)
@@ -325,6 +349,15 @@ class FlywayMigrationSmokeIntegrationTest {
         }
     }
 
+    private static void insertImportSeen(Connection connection, UUID runId, UUID scryfallId) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(
+                "INSERT INTO import_seen(run_id, scryfall_id) VALUES (?, ?)")) {
+            statement.setObject(1, runId);
+            statement.setObject(2, scryfallId);
+            statement.executeUpdate();
+        }
+    }
+
     private static long countRows(Connection connection, String fromWhere) throws Exception {
         try (PreparedStatement statement = connection.prepareStatement("SELECT COUNT(*) FROM " + fromWhere);
              ResultSet resultSet = statement.executeQuery()) {
@@ -388,6 +421,41 @@ class FlywayMigrationSmokeIntegrationTest {
              ResultSet resultSet = statement.executeQuery()) {
             resultSet.next();
             return resultSet.getObject(1, Integer.class);
+        }
+    }
+
+    private static boolean readBoolean(Connection connection, String sql) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getBoolean(1);
+        }
+    }
+
+    private static boolean hasIndex(Connection connection, String index) throws Exception {
+        String sql = "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = ?";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, index);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
+    private static String tablePersistence(Connection connection, String table) throws Exception {
+        String sql = """
+                SELECT c.relpersistence
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relname = ?
+                """;
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, table);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getString(1);
+            }
         }
     }
 

@@ -186,8 +186,8 @@ boot, exige el fichero en el servidor y falla a medias sin dejar estado claro.
    hay fallos. Insertadas/actualizadas/saltadas/fallidas ya se cuentan; faltan
    obsoletas y el código de salida.
 
-`is_obsolete` todavía no existe en el esquema; entra cuando se escriba el importador
-Java, no antes.
+`V5__import_support.sql` ya crea `is_obsolete` y la tabla `import_seen`; el importador
+Java que las usa es la fase 6 de `docs/IMPORTER_PLAN.md`.
 
 ## 7. Fases
 
