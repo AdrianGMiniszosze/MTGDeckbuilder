@@ -1,13 +1,18 @@
 package com.deckbuilder.mtgdeckbuilder.application.importing;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 /**
  * Card-level data needed to upsert one Scryfall printing into {@code cards}.
  *
  * <p>
- * Child rows (colors, types, legalities, faces, keywords) and prices are added
- * by later importer phases, so this record stays a snapshot of the card row.
+ * Child rows (attributes, legalities, faces) travel in
+ * {@link ImportCardAttributes}; prices and set data are card columns. Keeping
+ * one immutable snapshot per printing lets the DAO write every row inside the
+ * same unit of work.
  */
 public record ImportCard(
 		UUID scryfallId,
@@ -32,5 +37,11 @@ public record ImportCard(
 		String language,
 		String collectorNumber,
 		boolean promo,
-		boolean variation) {
+		boolean variation,
+		String setName,
+		String setCode,
+		LocalDate setReleasedAt,
+		String setType,
+		Map<String, BigDecimal> prices,
+		ImportCardAttributes attributes) {
 }

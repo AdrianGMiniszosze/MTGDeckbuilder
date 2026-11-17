@@ -147,9 +147,9 @@ Se portan del script, pero con tests y sin `print()`:
 | Legalidades | `LegalityRules` | 6 claves de Scryfall → `format_id`; valores `legal`/`not_legal`/`restricted`/`banned`; claves sin formato se ignoran |
 | Forma de la carta | `CardShapeRules` | `card_type`, `card_supertype`, `cmc`, `type_line`, `image_url` con los mismos fallbacks de hoy |
 | Colores / keywords | `ScryfallCardMapper` | Desde los arrays de Scryfall; no se parsea el texto |
-| Caras | `ScryfallCardMapper` | `face_index` por orden; columnas normalizadas + `face_data` crudo |
-| Precios | `ScryfallCardMapper` | `usd*`, `eur*`, `tix` si vienen; `price_observed_at = now()` |
-| Sets | `CardImportDao` | Busca `sets` por nombre y rellena `code` si falta; el UUID de set de Scryfall no se usa |
+| Caras | `ScryfallCardMapper` | `face_index` por orden; columnas normalizadas + `face_data` crudo; el texto de las caras se concatena en `cards.card_text` |
+| Precios | `ScryfallCardMapper` | `usd*`, `eur*`, `tix` si vienen; `price_observed_at = now()` solo si hay algún precio |
+| Sets | `CardImportDao` | Busca `sets` por nombre, rellena `code`/`released_at`/`set_type` si faltan; el UUID de set de Scryfall no se usa |
 | Marcas | `ScryfallCardMapper` | `promo`, `variation`, `foil`, `game_changer`, `language` |
 
 Nota: `card_legality` solo se escribe para formatos sembrados; lo demás es
@@ -219,6 +219,9 @@ java -jar mtgdeckbuilder.jar --spring.profiles.active=import \
 - Fixture compartido: `src/test/resources/importer/default-cards-sample.jsonl`, unas 10
   líneas con los casos del párrafo anterior. Lo usa el IT y sirve para probar a mano
   (`--import.limit`) sin descargar el bulk.
+- `src/test/resources/importer/default-cards-sample-v2.jsonl` solo trae las cartas que
+  cambian; el IT lo usa para comprobar el reemplazo de hijos, legalidades, caras y precios
+  sin duplicar filas.
 - Los nombres mantienen los filtros de CI: `*Test` sin Docker, `*IntegrationTest` con
   Docker. No hace falta tocar `.github/workflows/ci.yml` ni `README.md` en ese punto.
 - El trinquete de JaCoCo (**99,8 % líneas / 95,3 % ramas**) obliga a que cada rama nueva
