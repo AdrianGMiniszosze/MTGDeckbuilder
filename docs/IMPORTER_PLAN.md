@@ -89,8 +89,10 @@ En Docker, el fichero se monta en el contenedor; no se copia a la imagen.
 6. Si un lote falla, reintentar sus filas una a una para aislar la mala; contarla como
    fallida y seguir. Sin `savepoint` por carta: el lote ya es atómico.
 7. Al terminar el fichero: `import_seen` de este `run_id` es la lista de vivos. Marcar
-   obsoletas y desmarcar las que han vuelto. Se omite cuando la carga es parcial
-   (`--import.limit`), con un `WARN` que lo deja claro en el resumen.
+   obsoletas (con `updated_at = now()`) y desmarcar las que han vuelto. Se omite cuando la
+   carga es parcial (`--import.limit`), con un `WARN` que lo deja claro en el resumen. Si la
+   ejecución no vio ninguna carta (`seen = 0`, por fichero vacío o truncado), **no** se barre:
+   se avisa y se sale con `2`.
 8. Si hay fichero de rulings, segunda pasada con el mismo patrón (lote + upsert).
 9. Borrar las filas de `import_seen` de este `run_id`, liberar el lock, imprimir resumen
    y salir con `0`/`1`.

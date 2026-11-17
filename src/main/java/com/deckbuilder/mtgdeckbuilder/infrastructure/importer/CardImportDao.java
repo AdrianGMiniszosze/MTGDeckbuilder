@@ -15,6 +15,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Writes card rows for the importer.
@@ -29,6 +30,12 @@ import java.util.Map;
  * <p>
  * Child rows are deleted and reinserted for every card (D-027), so a keyword
  * or legality that Scryfall retires does not survive the next import.
+ *
+ * <p>
+ * Every upsert also records the printing in {@code import_seen} under the run
+ * that saw it. The final anti-join marks printings absent from the run as
+ * obsolete instead of deleting them: {@code card_deck} references cards with
+ * {@code ON DELETE CASCADE} (D-026). A card seen again clears the mark.
  */
 @Repository
 public class CardImportDao {
@@ -73,6 +80,7 @@ public class CardImportDao {
 			    eur_etched = EXCLUDED.eur_etched,
 			    tix = EXCLUDED.tix,
 			    price_observed_at = COALESCE(EXCLUDED.price_observed_at, cards.price_observed_at),
+			    is_obsolete = FALSE,
 			    updated_at = now()
 			RETURNING id, (xmax = 0) AS inserted
 			""";
@@ -107,6 +115,26 @@ public class CardImportDao {
 	private static final String INSERT_LEGALITY =
 			"INSERT INTO card_legality (card_id, format_id, legality_status) VALUES (?, ?, ?)";
 
+	private static final String INSERT_SEEN = """
+			INSERT INTO import_seen (run_id, scryfall_id)
+			VALUES (?, ?)
+			ON CONFLICT DO NOTHING
+			""";
+
+	private static final String MARK_OBSOLETE = """
+			UPDATE cards c
+			   SET is_obsolete = TRUE, updated_at = now()
+			 WHERE c.scryfall_id IS NOT NULL
+			   AND c.is_obsolete = FALSE
+			   AND NOT EXISTS (
+			       SELECT 1 FROM import_seen s
+			        WHERE s.run_id = ? AND s.scryfall_id = c.scryfall_id)
+			""";
+
+	private static final String DELETE_SEEN = "DELETE FROM import_seen WHERE run_id = ?";
+	private static final String DELETE_OTHER_SEEN = "DELETE FROM import_seen WHERE run_id <> ?";
+	private static final String COUNT_SEEN = "SELECT COUNT(*) FROM import_seen WHERE run_id = ?";
+
 	private static final String INSERT_FACE = """
 			INSERT INTO card_faces (
 			    card_id, face_index, name, mana_cost, type_line, oracle_text,
@@ -125,11 +153,40 @@ public class CardImportDao {
 		this.objectMapper = objectMapper;
 	}
 
-	public UpsertResult upsert(ImportCard card) {
+	public UpsertResult upsert(ImportCard card, UUID runId) {
 		final Long setId = resolveSet(card);
 		final UpsertResult result = upsertCard(card, setId);
 		replaceChildren(result.cardId(), card.attributes());
+		jdbcTemplate.update(INSERT_SEEN, runId, card.scryfallId());
 		return result;
+	}
+
+	/**
+	 * Marks printings that were not seen by {@code runId} as obsolete.
+	 * @throws IllegalStateException when the run saw nothing, because an empty or
+	 * truncated file must never retire the whole catalogue.
+	 */
+	public int markObsolete(UUID runId) {
+		if (countSeen(runId) == 0) {
+			throw new IllegalStateException(
+					"Refusing to mark cards obsolete: no seen rows for run " + runId);
+		}
+		return jdbcTemplate.update(MARK_OBSOLETE, runId);
+	}
+
+	public int countSeen(UUID runId) {
+		final Integer count = jdbcTemplate.queryForObject(COUNT_SEEN, Integer.class, runId);
+		return count == null ? 0 : count;
+	}
+
+	/** Removes this run's rows once the sweep has finished, including on failure. */
+	public int clearSeen(UUID runId) {
+		return jdbcTemplate.update(DELETE_SEEN, runId);
+	}
+
+	/** Removes rows left behind by runs that died before their cleanup. */
+	public int clearOtherRuns(UUID runId) {
+		return jdbcTemplate.update(DELETE_OTHER_SEEN, runId);
 	}
 
 	private UpsertResult upsertCard(ImportCard card, Long setId) {

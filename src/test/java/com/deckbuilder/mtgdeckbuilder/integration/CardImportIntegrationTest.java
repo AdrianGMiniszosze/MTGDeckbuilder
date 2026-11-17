@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.integration;
 import com.deckbuilder.mtgdeckbuilder.application.importing.ImportCard;
 import com.deckbuilder.mtgdeckbuilder.application.importing.ScryfallCardMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.importer.CardImportDao;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.importer.ImportLock;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.importer.ScryfallBulkReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,6 +20,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,6 +29,7 @@ import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("Card import (reader, mapper and card DAO)")
 class CardImportIntegrationTest {
@@ -67,7 +70,7 @@ class CardImportIntegrationTest {
 
 	@BeforeEach
 	void resetDatabase() {
-		jdbc.execute("TRUNCATE users, cards, sets RESTART IDENTITY CASCADE");
+		jdbc.execute("TRUNCATE users, cards, sets, import_seen RESTART IDENTITY CASCADE");
 		// Fresh DAO so the set/format caches do not survive a truncate.
 		dao = new CardImportDao(jdbc, new ObjectMapper());
 	}
@@ -85,7 +88,7 @@ class CardImportIntegrationTest {
 		final List<ImportCard> cards = readFixture(FIXTURE);
 		assertThat(cards).hasSize(6);
 
-		assertThat(upsertAll(cards)).isEqualTo(6);
+		assertThat(upsertAll(cards, UUID.randomUUID())).isEqualTo(6);
 		assertThat(count("SELECT COUNT(*) FROM cards")).isEqualTo(6);
 		final long kravId = id(KRAV_ID);
 
@@ -167,7 +170,7 @@ class CardImportIntegrationTest {
 		assertThat(count("SELECT COUNT(*) FROM cards WHERE oracle_id = ?", KRAV_ORACLE)).isEqualTo(2);
 
 		// A second pass refreshes the same rows and reports updates, not inserts.
-		assertThat(upsertAll(readFixture(FIXTURE))).isZero();
+		assertThat(upsertAll(readFixture(FIXTURE), UUID.randomUUID())).isZero();
 		assertThat(count("SELECT COUNT(*) FROM cards")).isEqualTo(6);
 		assertThat(id(KRAV_ID)).isEqualTo(kravId);
 		assertThat(count("SELECT COUNT(*) FROM card_colors")).isEqualTo(7);
@@ -180,13 +183,13 @@ class CardImportIntegrationTest {
 	@Test
 	@DisplayName("Should replace children, legalities, faces and prices on reimport")
 	void shouldReplaceChildrenOnReimport() throws Exception {
-		upsertAll(readFixture(FIXTURE));
+		upsertAll(readFixture(FIXTURE), UUID.randomUUID());
 		final long kravId = id(KRAV_ID);
 
 		final long userId = insertUser();
 		final long deckId = insertDeck(userId, kravId);
 
-		assertThat(upsertAll(readFixture(FIXTURE_V2))).isZero();
+		assertThat(upsertAll(readFixture(FIXTURE_V2), UUID.randomUUID())).isZero();
 
 		assertThat(id(KRAV_ID)).isEqualTo(kravId);
 		assertThat(strings(KRAV_ID, "card_keywords", "keyword")).isEmpty();
@@ -215,7 +218,7 @@ class CardImportIntegrationTest {
 	void shouldFillMissingSetCode() throws Exception {
 		jdbc.update("INSERT INTO sets (name) VALUES (?)", "Test Set");
 
-		upsertAll(readFixture(FIXTURE));
+		upsertAll(readFixture(FIXTURE), UUID.randomUUID());
 
 		final Map<String, Object> set = jdbc.queryForMap(
 				"SELECT * FROM sets WHERE name = ?", "Test Set");
@@ -223,6 +226,96 @@ class CardImportIntegrationTest {
 		assertThat(localDate(set.get("released_at"))).isEqualTo(LocalDate.of(2026, 1, 1));
 		assertThat(set.get("set_type")).isEqualTo("expansion");
 		assertThat(count("SELECT COUNT(*) FROM sets")).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("Should mark vanished cards obsolete and reactivate them when they return")
+	void shouldMarkObsoleteAndReactivate() throws Exception {
+		final UUID runA = UUID.randomUUID();
+		upsertAll(readFixture(FIXTURE), runA);
+
+		final long kravCardId = id(KRAV_ID);
+		final long userId = insertUser();
+		final long deckId = insertDeck(userId, kravCardId);
+
+		assertThat(dao.countSeen(runA)).isEqualTo(6);
+		assertThat(dao.markObsolete(runA)).isZero();
+		assertThat(count("SELECT COUNT(*) FROM cards WHERE is_obsolete")).isZero();
+
+		jdbc.update("UPDATE cards SET updated_at = TIMESTAMP '2000-01-01 00:00:00'");
+
+		final UUID runB = UUID.randomUUID();
+		upsertAll(readFixture(FIXTURE_V2), runB);
+		assertThat(dao.countSeen(runB)).isEqualTo(2);
+		assertThat(dao.markObsolete(runB)).isEqualTo(4);
+
+		assertThat(value(MOUNTAIN_ID, "is_obsolete")).isEqualTo(true);
+		assertThat(value(PETITIONERS_ID, "is_obsolete")).isEqualTo(true);
+		assertThat(value(DWARVES_ID, "is_obsolete")).isEqualTo(true);
+		assertThat(value(KRAV_ID, "is_obsolete")).isEqualTo(false);
+		assertThat(value(DELVER_ID, "is_obsolete")).isEqualTo(false);
+		assertThat(((java.sql.Timestamp) value(MOUNTAIN_ID, "updated_at")).toLocalDateTime())
+			.isAfter(LocalDateTime.of(2000, 1, 1, 0, 0));
+		assertThat(count("SELECT COUNT(*) FROM cards")).isEqualTo(6);
+
+		final UUID runC = UUID.randomUUID();
+		upsertAll(readFixture(FIXTURE), runC);
+		assertThat(dao.markObsolete(runC)).isZero();
+		assertThat(count("SELECT COUNT(*) FROM cards WHERE is_obsolete")).isZero();
+		assertThat(value(MOUNTAIN_ID, "is_obsolete")).isEqualTo(false);
+
+		assertThat(count("SELECT COUNT(*) FROM card_deck WHERE deck_id = ? AND card_id = ?", deckId, kravCardId))
+			.isEqualTo(1);
+		assertThat(count("SELECT COUNT(*) FROM decks WHERE id = ?", deckId)).isEqualTo(1);
+	}
+
+	@Test
+	@DisplayName("Should refuse to sweep when the run saw no cards")
+	void shouldRefuseObsoleteSweepWithoutSeenRows() throws Exception {
+		upsertAll(readFixture(FIXTURE), UUID.randomUUID());
+
+		assertThatThrownBy(() -> dao.markObsolete(UUID.randomUUID()))
+			.isInstanceOf(IllegalStateException.class)
+			.hasMessageContaining("no seen rows");
+
+		assertThat(count("SELECT COUNT(*) FROM cards WHERE is_obsolete")).isZero();
+	}
+
+	@Test
+	@DisplayName("Should clear stale runs at the start and its own run at the end")
+	void shouldClearSeenRows() throws Exception {
+		final UUID previous = UUID.randomUUID();
+		upsertAll(readFixture(FIXTURE), previous);
+		assertThat(dao.countSeen(previous)).isEqualTo(6);
+
+		final UUID current = UUID.randomUUID();
+		assertThat(dao.clearOtherRuns(current)).isEqualTo(6);
+		assertThat(dao.countSeen(previous)).isZero();
+
+		upsertAll(readFixture(FIXTURE), current);
+		assertThat(dao.countSeen(current)).isEqualTo(6);
+		assertThat(dao.clearSeen(current)).isEqualTo(6);
+		assertThat(count("SELECT COUNT(*) FROM import_seen")).isZero();
+	}
+
+	@Test
+	@DisplayName("Should allow only one import lock at a time")
+	void shouldHoldImportLock() throws Exception {
+		final DriverManagerDataSource dataSource = dataSource();
+
+		try (ImportLock first = ImportLock.tryAcquire(dataSource).orElseThrow()) {
+			assertThat(first).isNotNull();
+			assertThat(ImportLock.tryAcquire(dataSource)).isEmpty();
+		}
+
+		try (ImportLock again = ImportLock.tryAcquire(dataSource).orElseThrow()) {
+			assertThat(again).isNotNull();
+		}
+	}
+
+	private static DriverManagerDataSource dataSource() {
+		return new DriverManagerDataSource(
+				postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
 	}
 
 	private static void assertSet(Map<String, Object> card) {
@@ -287,8 +380,8 @@ class CardImportIntegrationTest {
 		}
 	}
 
-	private static long upsertAll(List<ImportCard> cards) {
-		return cards.stream().filter(card -> dao.upsert(card).inserted()).count();
+	private static long upsertAll(List<ImportCard> cards, UUID runId) {
+		return cards.stream().filter(card -> dao.upsert(card, runId).inserted()).count();
 	}
 
 	private static int count(String sql, Object... args) {

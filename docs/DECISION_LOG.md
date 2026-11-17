@@ -783,3 +783,28 @@ ni del historial de chat.
   `--import.limit` existe solo para desarrollo y el resumen lo marca como carga parcial.
 - **Revisar si:** se programa semanalmente o se quiere `--import.dry-run`.
 - **Detalle:** `docs/IMPORTER_PLAN.md` §4, §8; relacionada con D-023.
+
+### D-032 - Barrido seguro: guarda `seen = 0`, `updated_at` y limpieza por `run_id`
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** (1) Si una importación completa no vio ninguna carta (`seen = 0`), no se
+  ejecuta el barrido de obsoletas: se avisa y se sale con `2`. (2) El barrido actualiza
+  `cards.updated_at`. (3) Al empezar se borran las filas de `import_seen` de otros
+  `run_id`; al terminar se borran las del propio, también si hubo filas fallidas.
+- **Contexto:** Un fichero vacío o mal descargado haría que el anti-join marcara todo el
+  catálogo como obsoleto. `import_seen` es una tabla real y compartida por el pool: si un
+  proceso muere, sus filas quedan ahí y no deben acumularse ni mezclarse con la siguiente
+  pasada.
+- **Por qué:** La guarda convierte un error de datos en un fallo visible (`2`) en vez de una
+  retirada masiva; `updated_at` mantiene la coherencia con el resto de escrituras; la
+  limpieza evita crecimiento y contaminación entre ejecuciones.
+- **Alternativas descartadas:** Barrer con `seen = 0` (peligroso); no tocar `updated_at`
+  (mezcla fecha de contenido y de estado); limpiar solo al final (los restos de un proceso
+  muerto se quedan para siempre); no limpiar (tabla que crece sin control).
+- **Consecuencias:** El runner de 6.5 debe comprobar `countSeen(runId) == 0` antes del
+  barrido (el DAO también lo rechaza) y usar un `try/finally` para `clearSeen`. `--import.limit`
+  sigue sin barrer aunque `seen > 0`.
+- **Revisar si:** se añade un modo `--import.resume` o se quiere conservar el `run_id` para
+  auditoría.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §4; relacionada con D-026 y D-031.
