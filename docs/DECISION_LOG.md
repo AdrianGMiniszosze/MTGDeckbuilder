@@ -49,6 +49,15 @@ ni del historial de chat.
 | D-020 | 2026-11-16 | Los enums del contrato se convierten por valor, no por nombre | Aceptada |
 | D-021 | 2026-11-16 | Comandante dentro del mazo, con pareja opcional en `deck_commander` | Aceptada |
 | D-022 | 2026-11-17 | El `PUT` actualiza la entidad gestionada, no fusiona una copia | Aceptada |
+| D-023 | 2026-11-17 | Importador como CLI Java con perfil `import` | Aceptada |
+| D-024 | 2026-11-17 | Escritura del importador con JDBC y SQL explícito | Aceptada |
+| D-025 | 2026-11-17 | Streaming y lotes con reintento fila a fila | Aceptada |
+| D-026 | 2026-11-17 | `is_obsolete` para lo retirado; nunca borrar cartas | Aceptada |
+| D-027 | 2026-11-17 | Hijos y legalidades se reemplazan por carta | Aceptada |
+| D-028 | 2026-11-17 | Caras reales en `card_faces`; sin limpieza automática | Aceptada |
+| D-029 | 2026-11-17 | Precios: último valor en `cards`, sin histórico | Aceptada |
+| D-030 | 2026-11-17 | Rulings por `oracle_id` desde un bulk aparte | Aceptada |
+| D-031 | 2026-11-17 | Advisory lock, códigos de salida y resumen | Aceptada |
 
 ## 4. Entradas
 
@@ -598,3 +607,179 @@ ni del historial de chat.
 - **Revisar si:** se añade otra colección con `orphanRemoval` a `DeckEntity` o se
   introduce un segundo escritor de mazos.
 - **Detalle:** `docs/DECK_VALIDATION_MODEL.md` §7.2; relacionada con D-013, D-015 y D-021.
+
+### D-023 - Importador como CLI Java con perfil `import`
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** La importación es un `ApplicationRunner` con `@Profile("import")` que lee
+  un JSONL, escribe y termina con código de salida. Se ejecuta con
+  `--spring.profiles.active=import --import.file=…`; no hay endpoint HTTP, no corre en el
+  arranque normal y no se usa Spring Batch.
+- **Contexto:** El script Python ya se desincronizó varias veces del esquema
+  (`unlimited_copies`, `card_set`, el `set_id` UUID de Scryfall) y no comparte tests ni
+  configuración con la aplicación.
+- **Por qué:** Un fichero de ~1 GB no es una petición web; la CLI da código de salida,
+  logs y permite montar el fichero. Un único lenguaje evita la deriva. Spring Batch no
+  aporta nada a un job de una pasada.
+- **Alternativas descartadas:** endpoint administrativo (timeouts, seguridad, memoria);
+  importar al arrancar (alarga el boot y falla a medias); Python con tests (sigue siendo
+  un segundo stack); Spring Batch (dependencia y ceremonia para dos pasadas).
+- **Consecuencias:** `import_cards.py` se retira tras validar la CLI. El JAR sirve para
+  ambos modos.
+- **Revisar si:** la importación pasa a ser un job programado con reintentos y alertas.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §3, §8; relacionada con D-008 y D-018.
+
+### D-024 - Escritura con JDBC y SQL explícito, sin Hibernate
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** El importador escribe con `JdbcTemplate`: `INSERT … ON CONFLICT …
+  RETURNING id` y tablas hijas reemplazadas por carta.
+- **Contexto:** Son cientos de miles de filas y siete tablas hijas; la ruta de escritura
+  de la API ya demostró que las colecciones gestionadas de Hibernate esconden trampas
+  (D-022).
+- **Por qué:** El SQL es el mismo que ya valida Flyway y el script; no hay identity map,
+  ni `flush`, ni `orphanRemoval`, ni lazy loading. El rendimiento es predecible y el
+  `RETURNING id` evita una consulta por carta.
+- **Alternativas descartadas:** repositorios JPA con `saveAll` y `batch_size` (dirty
+  checking y merges innecesarios); `COPY` a tabla temporal + `MERGE` (más rápido pero
+  duplica el modelo y complica las caras).
+- **Consecuencias:** El importador tiene su propio DAO; los repositorios JPA no se
+  tocan. Las reglas de dominio siguen en `application`.
+- **Revisar si:** la duración real supera lo aceptable o se migra a `COPY`.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §7; relacionada con D-022.
+
+### D-025 - Streaming línea a línea y lotes con reintento fila a fila
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** Se lee el fichero línea a línea con un `BufferedReader` UTF-8 (tolerando
+  BOM) y se escriben lotes de 500 cartas. Si un lote falla, se reintentan sus filas una a
+  una para aislar la mala. `--import.limit` permite cargas parciales de desarrollo.
+- **Contexto:** El bulk ronda 1 GB; cargarlo entero necesita varios GB de RAM. Un fallo
+  de constraint en un lote de JDBC lo invalida completo.
+- **Por qué:** Memoria constante y un dato corrupto cuesta una fila, no la importación.
+  El límite permite probar con el fixture o con las primeras líneas del bulk real.
+- **Alternativas descartadas:** `readAllBytes`/`json.load` (RAM); savepoint por carta
+  (más viajes a la BD en el camino feliz).
+- **Consecuencias:** `--import.batch-size` es configurable; el resumen separa fallidas.
+  Una carga con `--import.limit` no marca obsoletas.
+- **Revisar si:** aparecen lotes fallidos con frecuencia (entonces conviene validar antes
+  de escribir).
+- **Detalle:** `docs/IMPORTER_PLAN.md` §4, §7, §8.
+
+### D-026 - `is_obsolete` para lo que desaparece; nunca borrar cartas
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** `V5` añade `cards.is_obsolete BOOLEAN NOT NULL DEFAULT FALSE` y una tabla
+  `import_seen (run_id, scryfall_id)` `UNLOGGED`. Cada ejecución registra los
+  `scryfall_id` vistos con su `run_id` y, al final, marca obsoletas las no vistas y
+  desmarca las que vuelven.
+- **Contexto:** `card_deck.card_id` es `ON DELETE CASCADE`: cualquier limpieza de cartas
+  vacía mazos. El script actual no marca nada, así que lo retirado se queda para siempre
+  como si fuera válido.
+- **Por qué:** La obsolescencia es un dato, no una desaparición; se puede filtrar en
+  búsquedas y el histórico de mazos no se rompe. La tabla evita mantener cientos de miles
+  de UUID en memoria y funciona entre lotes; `run_id` aísla ejecuciones y `UNLOGGED`
+  evita el coste de WAL en un dato que se puede perder (si el proceso muere, la
+  importación se repite).
+- **Alternativas descartadas:** `DELETE` de no vistos (cascada sobre mazos); lista en
+  memoria (crece con el fichero); tabla `TEMP` (desaparece entre conexiones del pool);
+  columna `last_seen_import` (mismo coste pero más ambigua de consultar).
+- **Consecuencias:** Las consultas de búsqueda deberán decidir si filtran obsoletas
+  (hoy no filtran). Una carga parcial (`--import.limit`) nunca marca obsoletas: no ha
+  visto el catálogo entero.
+- **Revisar si:** se añade búsqueda semántica o el catálogo necesita ocultar retiradas.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §5, §7.
+
+### D-027 - Hijos y legalidades se reemplazan por carta
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** Para cada carta reimportada se borran y reinsertan sus filas de
+  `card_colors`, `card_color_identity`, `card_types`, `card_supertypes`, `card_subtypes`,
+  `card_keywords`, `card_legality` y `card_faces`, dentro de la misma transacción.
+- **Contexto:** El script usa `ON CONFLICT DO NOTHING`, así que una keyword o legalidad
+  que Scryfall retira se queda para siempre y las tablas derivan.
+- **Por qué:** El estado hijo debe ser exactamente el del bulk. Las tablas hijas no
+  tienen referencias externas y son pequeñas por carta, así que el coste es bajo.
+- **Alternativas descartadas:** `DO NOTHING` (deriva); `DELETE` global + recarga (rompe
+  la atomicidad por carta y multiplica el trabajo).
+- **Consecuencias:** Reimportar corrige datos antiguos, no solo añade.
+- **Revisar si:** el reemplazo por carta domina el tiempo de importación.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §7.
+
+### D-028 - Caras reales en `card_faces`; sin limpieza automática de sintéticas
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** Las caras se escriben en `card_faces` (`card_id`, `face_index`) con
+  columnas normalizadas y `face_data` con el objeto crudo. El importador deja de crear
+  filas de `cards` con `scryfall_id NULL`.
+- **Contexto:** Las filas sintéticas existen para que el validador y el buscador
+  funcionaran antes de tener `card_faces`; su identidad depende de una tupla
+  `(card_name, set_id, collector_number)` y desaparece al rediseñar (D-018).
+- **Por qué:** `card_faces` ya está en `V1` con entidad y claves; es el modelo correcto y
+  no duplica cartas jugables.
+- **Alternativas descartadas:** mantener ambas (dos fuentes de verdad); borrar sintéticas
+  en la migración (`ON DELETE CASCADE` sobre `card_deck`).
+- **Consecuencias:** La BD local se recrea antes de la primera pasada completa; el
+  importador avisa si encuentra sintéticas. La limpieza automática queda fuera de alcance.
+- **Revisar si:** hay una BD con mazos reales que no se pueda recrear.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §5.2.
+
+### D-029 - Precios: último valor en `cards`, sin histórico
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** Se escriben `usd`, `usd_foil`, `usd_etched`, `eur`, `eur_foil`,
+  `eur_etched` y `tix` en `cards`, con `price_observed_at = now()` cuando llega algún
+  precio.
+- **Contexto:** Las columnas existen desde `V1` y hoy están `NULL`; el script no las
+  importa.
+- **Por qué:** Es el dato que necesita el constructor de mazos para estimar coste; un
+  histórico multiplica filas y no hay caso de uso todavía.
+- **Alternativas descartadas:** tabla `card_price_history` (volumen sin consumidor).
+- **Consecuencias:** Cada importación sobrescribe el precio anterior; el histórico se
+  añade cuando exista una pantalla que lo use.
+- **Revisar si:** se quieren gráficas de precio o alertas.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §6.
+
+### D-030 - Rulings por `oracle_id`, desde un bulk aparte
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** `card_rulings` se llena desde el bulk de rulings con
+  `--import.rulings`. Se conserva la PK `(oracle_id, published_at, comment, source)` y
+  `source` guarda el valor de Scryfall en minúsculas (`wotc`/`scryfall`).
+- **Contexto:** La tabla existe desde `V1` y está vacía; las rulings son por carta, no por
+  impresión, y se comparten entre reprints.
+- **Por qué:** La PK actual deduplica sin clave artificial y ya está indexada por
+  `oracle_id`. Las rulings no son necesarias para validar, así que el fichero es opcional.
+- **Alternativas descartadas:** clave sustituta (`BIGSERIAL`): no aporta nada mientras los
+  comentarios sean cortos; cargar rulings desde el bulk de cartas (no viene ahí).
+- **Consecuencias:** Si un comentario superase el límite de índice de Postgres, se migra
+  a clave sustituta. No hay endpoint que las exponga todavía.
+- **Revisar si:** se añade una pantalla de rulings o el `comment` crece.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §4, §6.
+
+### D-031 - Operación: advisory lock, códigos de salida y resumen
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** La CLI toma un advisory lock de Postgres, imprime un resumen
+  (insertadas, actualizadas, obsoletas, fallidas, hijos, duración) y sale con
+  `0` correcto, `1` con filas fallidas y `2` configuración/IO/bloqueo.
+- **Contexto:** Dos importaciones simultáneas falsearían el anti-join de obsoletas y
+  duplicarían trabajo; un `exit 0` con filas perdidas oculta el problema a CI y a un cron.
+- **Por qué:** El código de salida es la única señal fiable para automatizar; el resumen
+  permite auditar sin abrir la BD.
+- **Alternativas descartadas:** `System.exit(0)` siempre (fallos silenciosos); lock por
+  tabla (bloquea escrituras de la API).
+- **Consecuencias:** El job programado de la fase 3 de `DATA_IMPORT.md` podrá alertar con
+  el código de salida. El importador no se ejecuta en el pipeline de despliegue.
+  `--import.limit` existe solo para desarrollo y el resumen lo marca como carga parcial.
+- **Revisar si:** se programa semanalmente o se quiere `--import.dry-run`.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §4, §8; relacionada con D-023.

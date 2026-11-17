@@ -1,10 +1,10 @@
 # Plan del importador Java (fase 6)
 
-- **Estado:** propuesta, pendiente de aprobación
+- **Estado:** aprobada el 2026-11-17; D-023–D-031 aceptadas en `docs/DECISION_LOG.md`
 - **Alcance:** sustituir `import_cards.py` por una CLI Java idempotente que mantenga
   `cards`, `card_legality`, `card_keywords`, `sets`, `card_faces`, `card_rulings` y precios
 - **Relacionado:** `docs/DATA_IMPORT.md` (estado actual), `docs/DECK_VALIDATION_MODEL.md` §10,
-  `docs/DECISION_LOG.md` (D-018, D-019 y las decisiones propuestas D-023–D-031)
+  `docs/DECISION_LOG.md` (D-018, D-019 y las decisiones D-023–D-031)
 - **No es:** la fase de embeddings/recomendación ni un job programado
 
 ## 1. Objetivo
@@ -38,7 +38,7 @@ Al terminar la fase 6:
 
 Tamaño esperado: cientos de miles de líneas y ~1 GB. Nada se carga entero en memoria.
 
-## 3. Arquitectura propuesta
+## 3. Arquitectura
 
 Se añade un adaptador de entrada no HTTP, `importer`, junto a `contract`. Las capas
 existentes no cambian de responsabilidad.
@@ -263,15 +263,15 @@ java -jar mtgdeckbuilder.jar --spring.profiles.active=import \
 | Trinquete de cobertura | Reglas puras y runner con dobles; sin clases "de pega" sin test |
 | `DB_MIGRATION_STRATEGY.md` desactualizado | Actualizarlo: `V4` es comandante y la importación entra en `V5` |
 
-## 13. Decisiones propuestas (D-023 – D-031)
+## 13. Decisiones (D-023 – D-031)
 
-Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propuesto:
-**Aceptada** (hoy **Propuesta**).
+Aceptadas el 2026-11-17 y anexadas a `docs/DECISION_LOG.md`. Aquí queda el texto para
+consulta junto al plan.
 
 ### D-023 - Importador como CLI Java con perfil `import`
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** La importación es un `ApplicationRunner` con `@Profile("import")` que lee
   un JSONL, escribe y termina con código de salida. Se ejecuta con
   `--spring.profiles.active=import --import.file=…`; no hay endpoint HTTP, no corre en el
@@ -293,7 +293,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-024 - Escritura con JDBC y SQL explícito, sin Hibernate
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** El importador escribe con `JdbcTemplate`: `INSERT … ON CONFLICT …
   RETURNING id` y tablas hijas reemplazadas por carta.
 - **Contexto:** Son cientos de miles de filas y siete tablas hijas; la ruta de escritura
@@ -313,7 +313,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-025 - Streaming línea a línea y lotes con reintento fila a fila
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** Se lee el fichero línea a línea con un `BufferedReader` UTF-8 (tolerando
   BOM) y se escriben lotes de 500 cartas. Si un lote falla, se reintentan sus filas una a
   una para aislar la mala.
@@ -331,7 +331,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-026 - `is_obsolete` para lo que desaparece; nunca borrar cartas
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** `V5` añade `cards.is_obsolete BOOLEAN NOT NULL DEFAULT FALSE` y una tabla
   `import_seen (run_id, scryfall_id)` `UNLOGGED`. Cada ejecución registra los
   `scryfall_id` vistos con su `run_id` y, al final, marca obsoletas las no vistas y
@@ -356,7 +356,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-027 - Hijos y legalidades se reemplazan por carta
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** Para cada carta reimportada se borran y reinsertan sus filas de
   `card_colors`, `card_color_identity`, `card_types`, `card_supertypes`, `card_subtypes`,
   `card_keywords`, `card_legality` y `card_faces`, dentro de la misma transacción.
@@ -373,7 +373,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-028 - Caras reales en `card_faces`; sin limpieza automática de sintéticas
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** Las caras se escriben en `card_faces` (`card_id`, `face_index`) con
   columnas normalizadas y `face_data` con el objeto crudo. El importador deja de crear
   filas de `cards` con `scryfall_id NULL`.
@@ -392,7 +392,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-029 - Precios: último valor en `cards`, sin histórico
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** Se escriben `usd`, `usd_foil`, `usd_etched`, `eur`, `eur_foil`,
   `eur_etched` y `tix` en `cards`, con `price_observed_at = now()` cuando llega algún
   precio.
@@ -409,7 +409,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-030 - Rulings por `oracle_id`, desde un bulk aparte
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** `card_rulings` se llena desde el bulk de rulings con
   `--import.rulings`. Se conserva la PK `(oracle_id, published_at, comment, source)` y
   `source` guarda el valor de Scryfall en minúsculas (`wotc`/`scryfall`).
@@ -427,7 +427,7 @@ Texto listo para pegar en `docs/DECISION_LOG.md` una vez aprobado. Estado propue
 ### D-031 - Operación: advisory lock, códigos de salida y resumen
 
 - **Fecha:** 2026-11-17
-- **Estado:** Propuesta
+- **Estado:** Aceptada
 - **Decisión:** La CLI toma un advisory lock de Postgres, imprime un resumen
   (insertadas, actualizadas, obsoletas, fallidas, hijos, duración) y sale con
   `0` correcto, `1` con filas fallidas y `2` configuración/IO/bloqueo.

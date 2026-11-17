@@ -458,7 +458,7 @@ Integración (implementadas):
    `copies_limit`; regenerar. **Hecha.**
 5. `addCard` / `removeCard` por HTTP. **Hecha.**
 6. Importación de datos (ver `docs/DATA_IMPORT.md` y el plan en
-   `docs/IMPORTER_PLAN.md`, propuesta D-023–D-031).
+   `docs/IMPORTER_PLAN.md`, decisiones D-023–D-031).
 7. Comandante: campo en esquema y contrato, `MISSING_COMMANDER`, parejas e identidad de
    color. **Hecha** (`V4`, D-021).
 
