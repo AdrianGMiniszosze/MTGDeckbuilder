@@ -160,7 +160,7 @@ class SetControllerTest {
 	@DisplayName("Should use default pagination when parameters are null")
 	void shouldUseDefaultPagination_WhenParametersAreNull() {
 		// Given
-		when(this.setService.findAll(10, 0)).thenReturn(Collections.singletonList(this.testSet));
+		when(this.setService.findAll(20, 0)).thenReturn(Collections.singletonList(this.testSet));
 		when(this.setMapper.toSetDTOs(anyList())).thenReturn(Collections.singletonList(this.testSetDTO));
 
 		// When
@@ -168,6 +168,6 @@ class SetControllerTest {
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		verify(this.setService).findAll(10, 0);
+		verify(this.setService).findAll(20, 0);
 	}
 }

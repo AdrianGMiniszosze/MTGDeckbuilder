@@ -10,7 +10,7 @@ import java.util.List;
 
 @Mapper(componentModel = "spring")
 public interface UserMapper {
-	@Mapping(source = "hashedPassword", target = "hashed_password")
+	@Mapping(target = "hashed_password", ignore = true)
 	@Mapping(source = "registrationDate", target = "registration_date")
 	UserDTO toUserDTO(User user);
 

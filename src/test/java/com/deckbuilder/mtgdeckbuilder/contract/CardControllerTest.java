@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -105,19 +106,19 @@ class CardControllerTest {
 				.card_text("Counter target spell.").image_url("https://example.com/counterspell.jpg").language("en")
 				.build();
 
-		when(this.cardService.getAllCards(10, 0)).thenReturn(Arrays.asList(this.testCard, card2));
+		when(this.cardService.getAllCards(10, 0, false)).thenReturn(Arrays.asList(this.testCard, card2));
 		when(this.cardMapper.toDto(this.testCard)).thenReturn(this.testCardDTO);
 		when(this.cardMapper.toDto(card2)).thenReturn(cardDTO2);
 
 		// When
-		final ResponseEntity<List<CardDTO>> response = this.cardController.listCards(10, 0);
+		final ResponseEntity<List<CardDTO>> response = this.cardController.listCards(10, 0, null);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(2);
 		assertThat(response.getBody().get(0).getCard_name()).isEqualTo("Lightning Bolt");
 		assertThat(response.getBody().get(1).getCard_name()).isEqualTo("Counterspell");
-		verify(this.cardService, times(1)).getAllCards(10, 0);
+		verify(this.cardService, times(1)).getAllCards(10, 0, false);
 		verify(this.cardMapper, times(2)).toDto(any(Card.class));
 	}
 
@@ -125,15 +126,30 @@ class CardControllerTest {
 	@DisplayName("Should list cards with default pagination")
 	void shouldListCardsWithDefaultPagination() {
 		// Given
-		when(this.cardService.getAllCards(10, 0)).thenReturn(List.of(this.testCard));
+		when(this.cardService.getAllCards(20, 0, false)).thenReturn(List.of(this.testCard));
 		when(this.cardMapper.toDto(this.testCard)).thenReturn(this.testCardDTO);
 
 		// When
-		final ResponseEntity<List<CardDTO>> response = this.cardController.listCards(null, null);
+		final ResponseEntity<List<CardDTO>> response = this.cardController.listCards(null, null, null);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		verify(this.cardService, times(1)).getAllCards(10, 0);
+		verify(this.cardService, times(1)).getAllCards(20, 0, false);
+	}
+
+	@Test
+	@DisplayName("Should include obsolete cards when requested")
+	void shouldListCardsIncludingObsolete() {
+		// Given
+		when(this.cardService.getAllCards(10, 0, true)).thenReturn(List.of(this.testCard));
+		when(this.cardMapper.toDto(this.testCard)).thenReturn(this.testCardDTO);
+
+		// When
+		final ResponseEntity<List<CardDTO>> response = this.cardController.listCards(10, 0, true);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		verify(this.cardService, times(1)).getAllCards(10, 0, true);
 	}
 
 	@Test
@@ -477,7 +493,8 @@ class CardControllerTest {
 			null, null, null, null,
 			null, null, null, null,
 			null, null, null, null,
-			null, null, null, null, null
+			null, null, null, null,
+			null, null
 		);
 
 		// Then
@@ -508,7 +525,7 @@ class CardControllerTest {
 			1, 3, null, null,
 			null, null, null, null,
 			"damage", null, null, null,
-			"en", 10, 0, "name", "asc"
+			"en", 10, 0, null, "name", "asc"
 		);
 
 		// Then
@@ -538,7 +555,7 @@ class CardControllerTest {
 			null, null, null, null,
 			null, null, null, null,
 			null, null, null, null,
-			null, 10, 1, null, null
+			null, 10, 1, null, null, null
 		);
 
 		// Then
@@ -613,7 +630,7 @@ class CardControllerTest {
 			null, null, null, null,
 			null, null, null, null,
 			null, null, null, null,
-			null, null, null, null, null
+			null, null, null, null, null, null
 		);
 
 		// Then
@@ -622,6 +639,46 @@ class CardControllerTest {
 		assertThat(response.getBody().getPage_info().getPage_size()).isEqualTo(20);
 
 		verify(cardService).searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0));
+	}
+
+	@Test
+	@DisplayName("Should map set and format filters into the criteria")
+	void shouldMapSetAndFormatFilters() {
+		// Given
+		when(cardService.searchCardsWithCriteria(any(CardSearchCriteria.class), eq(20), eq(0)))
+			.thenReturn(CardSearchResult.of(List.of(testCard), 1));
+		when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+
+		// When
+		cardController.searchCards(
+			"Lightning", null, null, null,
+			null, null, null, null,
+			null, null, 18, 2,
+			null, null, null, null,
+			null, null, null, null,
+			null, null
+		);
+
+		// Then
+		final ArgumentCaptor<CardSearchCriteria> criteriaCaptor = ArgumentCaptor.forClass(CardSearchCriteria.class);
+		verify(cardService).searchCardsWithCriteria(criteriaCaptor.capture(), eq(20), eq(0));
+		assertThat(criteriaCaptor.getValue().getSetId()).isEqualTo(18L);
+		assertThat(criteriaCaptor.getValue().getFormatId()).isEqualTo(2L);
+	}
+
+	@Test
+	@DisplayName("Should default the random card count to one")
+	void shouldDefaultRandomCardCount() {
+		// Given
+		when(cardService.getRandomCards(1, null, null, null)).thenReturn(List.of(testCard));
+		when(cardMapper.toDto(testCard)).thenReturn(testCardDTO);
+
+		// When
+		final ResponseEntity<List<CardDTO>> response = cardController.getRandomCards(null, null, null, null);
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		verify(cardService).getRandomCards(1, null, null, null);
 	}
 
 	@Test
@@ -639,7 +696,7 @@ class CardControllerTest {
 			null, null, null, null,
 			null, null, null, null,
 			null, null, null, null,
-			null, null, null, null, null
+			null, null, null, null, null, null
 		);
 
 		// Then

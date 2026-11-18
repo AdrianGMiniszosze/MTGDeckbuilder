@@ -28,6 +28,7 @@ public class CardSearchCriteria {
     private String language;
     private String sortBy;
     private String sortOrder;
+    private Boolean includeObsolete;
 
     /**
      * Check if the search has any filtering criteria

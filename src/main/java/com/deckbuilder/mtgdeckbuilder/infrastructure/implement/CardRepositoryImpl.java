@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.infrastructure.implement;
 
 import com.deckbuilder.mtgdeckbuilder.infrastructure.CardRepositoryCustom;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardLegalityEntity;
 import com.deckbuilder.mtgdeckbuilder.model.CardSearchCriteria;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -38,7 +39,7 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
         Root<CardEntity> cardRoot = query.from(CardEntity.class);
 
         // Build predicates dynamically
-        List<Predicate> predicates = buildPredicates(cb, cardRoot, criteria);
+        List<Predicate> predicates = buildPredicates(cb, query, cardRoot, criteria);
 
         if (!predicates.isEmpty()) {
             query.where(cb.and(predicates.toArray(new Predicate[0])));
@@ -70,7 +71,7 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
         if (formatId != null) {
             sql.append("JOIN card_legality cl ON c.id = cl.card_id ");
         }
-        sql.append("WHERE 1=1 ");
+        sql.append("WHERE c.is_obsolete = false ");
 
         if (hasText(type)) {
             sql.append("AND LOWER(c.card_type) LIKE ? ");
@@ -110,8 +111,14 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
         return value != null && !value.trim().isEmpty();
     }
 
-    private List<Predicate> buildPredicates(CriteriaBuilder cb, Root<CardEntity> cardRoot, CardSearchCriteria criteria) {
+    private List<Predicate> buildPredicates(CriteriaBuilder cb, CriteriaQuery<?> query, Root<CardEntity> cardRoot,
+            CardSearchCriteria criteria) {
         List<Predicate> predicates = new ArrayList<>();
+
+        // Obsolete cards are hidden unless the caller explicitly asks for them.
+        if (!Boolean.TRUE.equals(criteria.getIncludeObsolete())) {
+            predicates.add(cb.isFalse(cardRoot.get("isObsolete")));
+        }
 
         // Name filter (maps to card_name column)
         if (criteria.getName() != null && !criteria.getName().trim().isEmpty()) {
@@ -219,10 +226,15 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
             predicates.add(cb.equal(cardRoot.get("language"), criteria.getLanguage()));
         }
 
-        // Format filter (requires join with card_legality) - handled separately for complexity
+        // Format filter: the card must be legal (or restricted) in that format.
         if (criteria.getFormatId() != null) {
-            // This will be handled by a separate native query or subquery
-            log.debug("Format filtering will be handled separately");
+            final Subquery<Long> legality = query.subquery(Long.class);
+            final Root<CardLegalityEntity> legalityRoot = legality.from(CardLegalityEntity.class);
+            legality.select(legalityRoot.get("cardId"))
+                .where(cb.equal(legalityRoot.get("cardId"), cardRoot.get("id")),
+                    cb.equal(legalityRoot.get("formatId"), criteria.getFormatId()),
+                    cb.lower(legalityRoot.get("legalityStatus")).in("legal", "restricted"));
+            predicates.add(cb.exists(legality));
         }
 
         return predicates;
@@ -268,7 +280,7 @@ public class CardRepositoryImpl implements CardRepositoryCustom {
 
         countQuery.select(cb.countDistinct(cardRoot.get("id")));
 
-        List<Predicate> predicates = buildPredicates(cb, cardRoot, criteria);
+        List<Predicate> predicates = buildPredicates(cb, countQuery, cardRoot, criteria);
 
         if (!predicates.isEmpty()) {
             countQuery.where(cb.and(predicates.toArray(new Predicate[0])));

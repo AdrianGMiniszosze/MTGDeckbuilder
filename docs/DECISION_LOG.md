@@ -60,6 +60,10 @@ ni del historial de chat.
 | D-031 | 2026-11-17 | Advisory lock, códigos de salida y resumen | Aceptada |
 | D-032 | 2026-11-17 | Barrido seguro: guarda `seen = 0`, `updated_at` y limpieza por `run_id` | Aceptada |
 | D-033 | 2026-11-18 | Espejo de rulings con staging; pasos destructivos solo sin fallos | Aceptada |
+| D-034 | 2026-11-18 | Las obsoletas se ocultan por defecto; `include_obsolete` las muestra | Aceptada |
+| D-035 | 2026-11-18 | Los parámetros se enlazan por el nombre del contrato | Aceptada |
+| D-036 | 2026-11-18 | Usuario sin contraseña es `400`; el hash nunca se serializa | Aceptada |
+| D-037 | 2026-11-18 | `ddl-auto=validate` contra Flyway como test de deriva | Aceptada |
 
 ## 4. Entradas
 
@@ -852,3 +856,111 @@ ni del historial de chat.
 - **Revisar si:** Scryfall añade un id estable, la tabla crece hasta hacer caro el espejo o
   se quiere conservar histórico de rulings.
 - **Detalle:** `docs/IMPORTER_PLAN.md` §4, §5, §7; relacionada con D-030 y D-032.
+
+### D-034 - Las obsoletas se ocultan por defecto; `include_obsolete` las muestra
+
+- **Fecha:** 2026-11-18
+- **Estado:** Aceptada
+- **Decisión:** `GET /cards` y `GET /cards/search` excluyen las cartas con
+  `cards.is_obsolete = true` salvo que el cliente envíe `include_obsolete=true`.
+  `GET /cards/random` las excluye siempre. `include_obsolete` solo se acepta en esos dos
+  endpoints; en el resto no existe parámetro.
+- **Contexto:** D-026 decidió marcar lo retirado en vez de borrarlo, pero la API seguía
+  devolviéndolo mezclado con lo vigente. Componer un mazo desde `/cards/search` ofrecía
+  impresiones que el bulk actual ya no contiene.
+- **Por qué:** El caso normal es construir con cartas vigentes; ver obsoletas debe ser una
+  petición explícita. Un booleano mantiene el dato accesible sin una segunda API ni un
+  endpoint de administración.
+- **Alternativas descartadas:** Excluirlas sin escape (pierde trazabilidad de mazos
+  antiguos); devolverlas siempre y filtrar en el cliente (traslada la regla y multiplica
+  páginas inútiles); un `status` de carta con más valores (sobredimensiona el modelo).
+- **Consecuencias:** El repositorio añade un `EXISTS` de legalidad y un predicado
+  `is_obsolete = false` a la búsqueda dinámica; el listado simple usa
+  `findByIsObsoleteFalse`. Actualizar una carta por la API conserva `is_obsolete` e
+  `imported_at`, que son propiedad del importador. La cobertura incluye el caso oculto, el
+  incluido y el aleatorio.
+- **Revisar si:** se quiere un endpoint de auditoría de retiradas o incluir obsoletas por
+  defecto en mazos ya existentes.
+- **Detalle:** Relacionada con D-026 y D-018.
+
+### D-035 - Los parámetros se enlazan por el nombre del contrato
+
+- **Fecha:** 2026-11-18
+- **Estado:** Aceptada
+- **Decisión:** Cada override de controlador anota sus parámetros con
+  `@RequestParam(name = "<nombre del spec>")`. El generador sigue produciendo
+  `@RequestParam` sin nombre; no se toca el generado. Los defaults del spec se aplican en
+  el controlador: 20 elementos y página 0 en `/cards` y `/sets`, igual que
+  `PaginationConfig`.
+- **Contexto:** El generador nombra los argumentos con el identificador Java
+  (`cmcMin`, `formatId`), no con el del spec (`cmc_min`, `format_id`). Spring enlazaba por
+  el nombre del parámetro, así que filtros snake_case se ignoraban en silencio: `cmc_min=7`
+  devolvía 109.969 cartas en vez de 4.926, y `format_id` no filtraba. Los defaults 10 vs 20
+  también hacían que el runtime no cumpliera el contrato.
+- **Por qué:** El spec es la fuente de verdad y el silencio es el peor fallo posible en un
+  buscador: responde `200` con datos incorrectos. Anotar el nombre convierte el contrato en
+  algo verificable sin renombrar el spec ni mantener un fork del generador.
+- **Alternativas descartadas:** Renombrar parámetros del spec a camelCase (rompe el
+  contrato y la convención REST existente); configurar el generador para anotar nombres
+  (la versión 6.3.1 no lo soporta); validar a mano cada filtro (repite el trabajo y se
+  olvida).
+- **Consecuencias:** `CardController` y `SetController` tienen firmas explícitas; los tests
+  fijan el binding y los defaults. Cambiar el spec obliga a actualizar el `name` del
+  override, y el compilador no lo detecta: la prueba de integración con parámetros reales es
+  la red de seguridad.
+- **Revisar si:** se adopta otra versión del generador que respete `x-field-extra-annotation`
+  o anote los nombres, o si el contrato unifica la paginación.
+- **Detalle:** Afecta a `docs/ARCHITECTURE_DECISIONS.md` en cuanto a generación de contrato;
+  relacionada con D-016.
+
+### D-036 - Usuario sin contraseña es `400`; el hash nunca se serializa
+
+- **Fecha:** 2026-11-18
+- **Estado:** Aceptada
+- **Decisión:** Crear un usuario sin `hashed_password` (o en blanco) devuelve
+  `400 INVALID_USER_DATA`. Actualizar un usuario sin contraseña conserva la almacenada, y
+  también conserva rol, estado, último login y fecha de alta. `hashed_password` entra en las
+  peticiones pero nunca sale en las respuestas.
+- **Contexto:** `POST /users` aceptaba un usuario sin contraseña y lo guardaba con
+  `NULL`; el `PUT` sobrescribía el hash con `NULL` y reseteaba campos de sistema. El
+  generador ignora `writeOnly: true`, así que el hash se serializaba en cada respuesta.
+- **Por qué:** Un usuario sin credencial es un registro inútil que falla más tarde y en otro
+  sitio. La contraseña omitida en un `PUT` significa "no la cambies", no "bórrala". Un hash
+  expuesto es una fuga silenciosa en logs y clientes.
+- **Alternativas descartadas:** `400` también al actualizar sin contraseña (impide cambiar
+  el correo sin reenviar el secreto); `@JsonIgnore` en el DTO generado (se pierde en la
+  siguiente generación); `x-field-extra-annotation` en el spec (la versión 6.3.1 lo ignora).
+- **Consecuencias:** El mixin de Jackson (`JacksonConfig`) oculta el campo en lectura y lo
+  mantiene en escritura; `UserMapper` deja de mapear el hash al DTO. El valor sigue
+  guardándose tal cual: **el hashing real está pendiente** y hoy el campo acepta texto plano.
+  Cualquier autenticación futura debe hashear antes de persistir y migrar los valores
+  existentes.
+- **Revisar si:** se implementa registro/login real, con hashing y validación de fuerza.
+- **Detalle:** Relacionada con D-013 (diagnóstico explícito) por el uso de códigos de error
+  estables.
+
+### D-037 - `ddl-auto=validate` contra Flyway como test de deriva
+
+- **Fecha:** 2026-11-18
+- **Estado:** Aceptada
+- **Decisión:** `SchemaValidationIntegrationTest` levanta un PostgreSQL vacío, aplica las
+  migraciones con Flyway y arranca el contexto con `ddl-auto=validate`. La aplicación real
+  puede arrancar igual contra una base migrada. El perfil `testcontainers` sigue con
+  `create-drop` para el resto de tests.
+- **Contexto:** Las entidades se fueron alineando a mano con el esquema y el aviso de
+  `AGENTS.md` decía que no se arrancara contra una base recién migrada. Esa deuda ya está
+  pagada, pero nada impedía reintroducirla: el perfil de test crea el esquema desde las
+  entidades y nunca compara con las migraciones.
+- **Por qué:** `validate` convierte una clase de bug de runtime en un fallo de CI: una
+  columna renombrada, un `nullable` que no cuadra o un tipo distinto rompen el arranque del
+  test, no el primer `SELECT` en producción.
+- **Alternativas descartadas:** Confiar en revisión manual (no escala); `ddl-auto=update`
+  (oculta la deriva y escribe esquema desde el código); comparar metadatos con SQL propio
+  (mantenimiento alto para lo que ya hace Hibernate).
+- **Consecuencias:** Cualquier cambio de entidad exige su migración en el mismo commit. El
+  test tarda unos segundos y necesita Docker, así que entra en el grupo
+  `*IntegrationTest`. El perfil `testcontainers` no cambia para no ralentizar 99 tests.
+- **Revisar si:** el tiempo del test crece o se adopta Testcontainers 2.x con reutilización
+  más agresiva.
+- **Detalle:** Relacionada con D-011 (verificación en CI) y con
+  `FlywayMigrationSmokeIntegrationTest`, que sigue comprobando el contenido del esquema.

@@ -276,25 +276,53 @@ class CardRepositorySearchIntegrationTest extends PostgresDataJpaTest {
                     .isEqualTo("Mountain");
             assertThat(names(search(CardSearchCriteria.builder().sortBy("rarity").sortOrder("desc").build())).get(0))
                     .isEqualTo("Serra Angel");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("rarity").sortOrder("asc").build())).get(0))
+                    .isIn("Lightning Bolt", "Mountain", "Llanowar Elves");
             assertThat(names(search(CardSearchCriteria.builder().sortBy("type").sortOrder("desc").build())).get(0))
                     .isEqualTo("Mountain");
             assertThat(names(search(CardSearchCriteria.builder().sortBy("power").sortOrder("asc").build())).get(0))
                     .isEqualTo("Llanowar Elves");
             assertThat(names(search(CardSearchCriteria.builder().sortBy("toughness").sortOrder("asc").build())).get(0))
                     .isEqualTo("Llanowar Elves");
+            assertThat(names(search(CardSearchCriteria.builder().sortBy("toughness").sortOrder("desc").build())))
+                    .endsWith("Serra Angel", "Llanowar Elves");
             assertThat(names(search(CardSearchCriteria.builder().sortBy("set").sortOrder("asc").build())).subList(0, 3))
                     .containsExactlyInAnyOrder("Lightning Bolt", "Mountain", "Serra Angel");
         }
 
         @Test
-        @DisplayName("Should only log the format filter in the criteria path")
-        void shouldTreatFormatFilterAsPredicate() {
-            // When - format filtering by criteria is still a TODO in the class,
-            // so the flag alone does not narrow the result
+        @DisplayName("Should only return cards legal or restricted in the requested format")
+        void shouldFilterByFormat() {
+            // Given - Counterspell is restricted in the same format
+            final CardLegalityEntity restricted = new CardLegalityEntity();
+            restricted.setCardId(counterspell.getId());
+            restricted.setFormatId(modern.getId());
+            restricted.setLegalityStatus("restricted");
+            cardLegalityRepository.saveAndFlush(restricted);
+
+            // When
             final Page<CardEntity> result = search(CardSearchCriteria.builder().formatId(modern.getId()).build());
 
             // Then
-            assertThat(result.getTotalElements()).isEqualTo(5);
+            assertThat(names(result)).containsExactlyInAnyOrder("Lightning Bolt", "Counterspell");
+        }
+
+        @Test
+        @DisplayName("Should hide obsolete cards unless they are explicitly requested")
+        void shouldHideObsoleteCardsByDefault() {
+            // Given
+            final CardEntity obsolete = card("Retired Card", "Instant", "common", 1, "R",
+                    "Old template.", null, null, 1L, false, false, "en");
+            obsolete.setIsObsolete(true);
+            cardRepository.saveAndFlush(obsolete);
+
+            // When
+            final Page<CardEntity> hidden = search(CardSearchCriteria.builder().build());
+            final Page<CardEntity> included = search(CardSearchCriteria.builder().includeObsolete(true).build());
+
+            // Then
+            assertThat(names(hidden)).doesNotContain("Retired Card");
+            assertThat(names(included)).contains("Retired Card");
         }
     }
 
@@ -346,6 +374,22 @@ class CardRepositorySearchIntegrationTest extends PostgresDataJpaTest {
             // Then
             assertThat(match).extracting(CardEntity::getName).containsExactly("Lightning Bolt");
             assertThat(mismatch).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Should skip obsolete cards in the random query")
+        void shouldSkipObsoleteCards() {
+            // Given
+            final CardEntity obsolete = card("Retired Card", "Instant", "common", 1, "R",
+                    "Old template.", null, null, 1L, false, false, "en");
+            obsolete.setIsObsolete(true);
+            cardRepository.saveAndFlush(obsolete);
+
+            // When
+            final List<CardEntity> result = cardRepository.findRandomCards(10, null, null, null);
+
+            // Then
+            assertThat(result).hasSize(5).extracting(CardEntity::getName).doesNotContain("Retired Card");
         }
 
         @Test

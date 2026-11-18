@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.application;
 
 import com.deckbuilder.mtgdeckbuilder.application.implement.UserServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidUserDataException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
@@ -241,7 +242,7 @@ class UserServiceImplTest {
 	@DisplayName("Should update existing user")
 	void shouldUpdateUser_WhenExists() {
 		// Given
-		when(this.userRepository.existsById(1L)).thenReturn(true);
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
 		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(this.testUserEntity);
 		when(this.userRepository.save(any(UserEntity.class))).thenReturn(this.testUserEntity);
 		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
@@ -253,21 +254,70 @@ class UserServiceImplTest {
 		assertThat(result).isNotNull();
 		assertThat(result.getId()).isEqualTo(1L);
 		assertThat(result.getUsername()).isEqualTo("johndoe");
-		verify(this.userRepository).existsById(1L);
+		verify(this.userRepository).findById(1L);
 		verify(this.userRepository).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should keep the stored password when the update omits it")
+	void shouldKeepPassword_WhenUpdateOmitsIt() {
+		// Given
+		this.testUser.setRole("ADMIN");
+		final UserEntity incoming = new UserEntity();
+		incoming.setName("John Doe");
+		incoming.setUsername("johndoe");
+		incoming.setEmail("john@example.com");
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(incoming);
+		when(this.userRepository.save(any(UserEntity.class))).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		// When
+		this.userService.update(1L, this.testUser);
+
+		// Then
+		assertThat(incoming.getHashedPassword()).isEqualTo("hashedPassword123");
+		assertThat(incoming.getRole()).isEqualTo(this.testUserEntity.getRole());
+		assertThat(incoming.getIsActive()).isEqualTo(this.testUserEntity.getIsActive());
+		assertThat(incoming.getCreatedAt()).isEqualTo(this.testUserEntity.getCreatedAt());
+	}
+
+	@Test
+	@DisplayName("Should reject creating a user without password")
+	void shouldRejectCreate_WithoutPassword() {
+		// Given
+		this.testUser.setHashedPassword(null);
+
+		// When/Then
+		assertThatThrownBy(() -> this.userService.create(this.testUser))
+				.isInstanceOf(InvalidUserDataException.class)
+				.hasMessageContaining("hashed_password is required");
+		verify(this.userRepository, never()).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should reject creating a user with a blank password")
+	void shouldRejectCreate_WithBlankPassword() {
+		// Given
+		this.testUser.setHashedPassword("   ");
+
+		// When/Then
+		assertThatThrownBy(() -> this.userService.create(this.testUser))
+				.isInstanceOf(InvalidUserDataException.class);
+		verify(this.userRepository, never()).save(any(UserEntity.class));
 	}
 
 	@Test
 	@DisplayName("Should throw exception when updating non-existent user")
 	void shouldThrowException_WhenUpdatingNonExistentUser() {
 		// Given
-		when(this.userRepository.existsById(999L)).thenReturn(false);
+		when(this.userRepository.findById(999L)).thenReturn(Optional.empty());
 
 		// When/Then
 		assertThatThrownBy(() -> this.userService.update(999L, this.testUser)).isInstanceOf(UserNotFoundException.class)
 				.hasMessageContaining("User not found with id: 999");
 
-		verify(this.userRepository).existsById(999L);
+		verify(this.userRepository).findById(999L);
 		verify(this.userRepository, never()).save(any(UserEntity.class));
 	}
 

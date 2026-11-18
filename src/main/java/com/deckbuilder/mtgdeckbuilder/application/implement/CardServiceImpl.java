@@ -33,13 +33,16 @@ public class CardServiceImpl implements CardService {
 	}
 
 	@Override
-	public List<Card> getAllCards(int pageSize, int pageNumber) {
-		log.debug("Fetching all cards with pageSize={}, pageNumber={}", pageSize, pageNumber);
+	public List<Card> getAllCards(int pageSize, int pageNumber, boolean includeObsolete) {
+		log.debug("Fetching all cards with pageSize={}, pageNumber={}, includeObsolete={}", pageSize, pageNumber,
+				includeObsolete);
 
 		final PageRequest pageRequest = createPageRequest(pageSize, pageNumber);
 		log.debug("Validated pagination: pageSize={}, pageNumber={}", pageRequest.getPageSize(), pageRequest.getPageNumber());
 
-		final Page<CardEntity> page = this.cardRepository.findAll(pageRequest);
+		final Page<CardEntity> page = includeObsolete
+			? this.cardRepository.findAll(pageRequest)
+			: this.cardRepository.findByIsObsoleteFalse(pageRequest);
 		final List<Card> cards = page.getContent().stream()
 			.map(this::mapEntityToModel)
 			.toList();
@@ -138,6 +141,7 @@ public class CardServiceImpl implements CardService {
 			entity.setOracleId(existingEntity.get().getOracleId());
 		}
 		preserveImportFieldsWhenAbsent(entity, existingEntity.get());
+		entity.setIsObsolete(existingEntity.get().getIsObsolete());
 		entity.setImportedAt(existingEntity.get().getImportedAt());
 		entity.setUpdatedAt(existingEntity.get().getUpdatedAt());
 		entity = this.cardRepository.saveAndFlush(entity);

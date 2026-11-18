@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -20,8 +21,10 @@ public class SetController implements SetsApi {
 	private final SetMapper setMapper;
 
 	@Override
-	public ResponseEntity<List<SetDTO>> listSets(Integer pagesize, Integer pagenumber) {
-		final var sets = this.setService.findAll(pagesize != null ? pagesize : 10, pagenumber != null ? pagenumber : 0);
+	public ResponseEntity<List<SetDTO>> listSets(
+			@RequestParam(name = "pageSize", required = false) Integer pagesize,
+			@RequestParam(name = "pageNumber", required = false) Integer pagenumber) {
+		final var sets = this.setService.findAll(pagesize != null ? pagesize : 20, pagenumber != null ? pagenumber : 0);
 		return ResponseEntity.ok(this.setMapper.toSetDTOs(sets));
 	}
 

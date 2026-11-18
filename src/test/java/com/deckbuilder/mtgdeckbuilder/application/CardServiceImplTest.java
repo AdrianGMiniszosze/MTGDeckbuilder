@@ -113,18 +113,38 @@ class CardServiceImplTest {
 		when(this.paginationConfig.validatePageSize(10)).thenReturn(10);
 		when(this.paginationConfig.validatePageNumber(0)).thenReturn(0);
 
-		when(this.cardRepository.findAll(any(Pageable.class))).thenReturn(entityPage);
+		when(this.cardRepository.findByIsObsoleteFalse(any(Pageable.class))).thenReturn(entityPage);
 		when(this.cardEntityMapper.toModel(this.testCardEntity)).thenReturn(this.testCard);
 		when(this.cardEntityMapper.toModel(entity2)).thenReturn(card2);
 
 		// When
-		final List<Card> result = this.cardService.getAllCards(10, 0);
+		final List<Card> result = this.cardService.getAllCards(10, 0, false);
 
 		// Then
 		assertThat(result).hasSize(2);
 		assertThat(result.get(0).getName()).isEqualTo("Lightning Bolt");
 		assertThat(result.get(1).getName()).isEqualTo("Counterspell");
+		verify(this.cardRepository, times(1)).findByIsObsoleteFalse(any(Pageable.class));
+	}
+
+	@Test
+	@DisplayName("Should get all cards including obsolete ones when requested")
+	void shouldGetAllCardsIncludingObsolete() {
+		// Given
+		final Page<CardEntity> entityPage = new PageImpl<>(List.of(this.testCardEntity));
+
+		when(this.paginationConfig.validatePageSize(10)).thenReturn(10);
+		when(this.paginationConfig.validatePageNumber(0)).thenReturn(0);
+		when(this.cardRepository.findAll(any(Pageable.class))).thenReturn(entityPage);
+		when(this.cardEntityMapper.toModel(this.testCardEntity)).thenReturn(this.testCard);
+
+		// When
+		final List<Card> result = this.cardService.getAllCards(10, 0, true);
+
+		// Then
+		assertThat(result).hasSize(1);
 		verify(this.cardRepository, times(1)).findAll(any(Pageable.class));
+		verify(this.cardRepository, never()).findByIsObsoleteFalse(any(Pageable.class));
 	}
 
 	@Test
@@ -225,6 +245,7 @@ class CardServiceImplTest {
 		this.testCardEntity.setUsd(new BigDecimal("1.2500"));
 		this.testCardEntity.setUsdFoil(new BigDecimal("2.2500"));
 		this.testCardEntity.setPriceObservedAt(OffsetDateTime.parse("2026-09-29T10:00:00Z"));
+		this.testCardEntity.setIsObsolete(true);
 
 		when(this.cardRepository.findById(1L)).thenReturn(Optional.of(this.testCardEntity));
 		when(this.cardEntityMapper.toEntity(updatedCard)).thenReturn(updatedEntity);
@@ -249,6 +270,7 @@ class CardServiceImplTest {
 		assertThat(savedEntityCaptor.getValue().getUsdFoil()).isEqualByComparingTo("2.2500");
 		assertThat(savedEntityCaptor.getValue().getPriceObservedAt())
 				.isEqualTo(OffsetDateTime.parse("2026-09-29T10:00:00Z"));
+		assertThat(savedEntityCaptor.getValue().getIsObsolete()).isTrue();
 	}
 
 	@Test

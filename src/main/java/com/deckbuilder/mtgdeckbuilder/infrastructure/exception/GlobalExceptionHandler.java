@@ -113,6 +113,21 @@ public class GlobalExceptionHandler {
 	}
 
 	/**
+	 * Handle invalid user payloads, such as a missing password on creation
+	 */
+	@ExceptionHandler(InvalidUserDataException.class)
+	public ResponseEntity<ErrorResponse> handleInvalidUserData(InvalidUserDataException ex,
+			HttpServletRequest request) {
+		log.warn("Invalid user data: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("INVALID_USER_DATA").status(HttpStatus.BAD_REQUEST.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+	}
+
+	/**
 	 * Handle tag not found exceptions
 	 */
 	@ExceptionHandler(TagNotFoundException.class)
@@ -164,7 +179,7 @@ public class GlobalExceptionHandler {
 		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
 				.error("DECK_NOT_LEGAL").status(HttpStatus.CONFLICT.value()).path(request.getRequestURI())
 				.timestamp(LocalDateTime.now())
-				.issues(ex.getValidation() != null ? ex.getValidation().getIssues() : List.of()).build();
+				.issues(ex.getValidation().getIssues()).build();
 
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
 	}

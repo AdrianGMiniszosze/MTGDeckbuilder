@@ -71,6 +71,13 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("Should map invalid user data to 400")
+    void shouldMapInvalidUserData() {
+        assertMapped(handler.handleInvalidUserData(new InvalidUserDataException("hashed_password is required"),
+                request()), HttpStatus.BAD_REQUEST, "INVALID_USER_DATA");
+    }
+
+    @Test
     @DisplayName("Should map invalid deck composition to 400")
     void shouldMapInvalidDeckComposition() {
         assertMapped(handler.handleInvalidDeckComposition(new InvalidDeckCompositionException("bad section"), request()),

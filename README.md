@@ -211,6 +211,8 @@ mvnw.cmd test "-Dtest=*Test,!*IntegrationTest,!CardLegalityRepositoryTest,!CardI
 
 Testcontainers automatically spins up a temporary PostgreSQL instance — no manual setup needed as long as Docker is running.
 
+`SchemaValidationIntegrationTest` applies the Flyway migrations to an empty database and boots the context with `ddl-auto=validate`, so entity/schema drift fails the suite instead of production.
+
 **macOS / Linux**
 ```bash
 ./mvnw test \
@@ -261,7 +263,9 @@ The full API contract is defined in `src/main/resources/api/openapi.yml`.
 | `GET /tags` | List tags |
 | `POST /tags` | Create a tag |
 
-All list endpoints support pagination, but parameter names are not fully standardized in the current contract: some endpoints use `pageSize` / `pageNumber`, while others use `pagesize` / `pagenumber`. Check `src/main/resources/api/openapi.yml` per endpoint until the contract is unified.
+All list endpoints support pagination and default to 20 items on page 0. Parameter names are not fully standardized in the current contract: `/sets` uses `pageSize` / `pageNumber`, while the rest use `pagesize` / `pagenumber`. Follow `src/main/resources/api/openapi.yml` for each endpoint.
+
+`GET /cards` and `GET /cards/search` hide cards with `is_obsolete = true`; pass `include_obsolete=true` to include cards that are missing from the latest Scryfall bulk import. `GET /cards/random` always excludes them.
 
 ---
 

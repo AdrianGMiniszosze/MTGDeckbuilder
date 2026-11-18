@@ -60,6 +60,9 @@ public class CardEntity {
 	@Column(name = "copies_limit")
 	private Integer copiesLimit;
 
+	@Column(name = "is_obsolete", nullable = false)
+	private Boolean isObsolete = false;
+
 	@Column(name = "is_basic_land", nullable = false)
 	private Boolean isBasicLand = false;
 

@@ -149,6 +149,13 @@ paths:
             minimum: 0
             default: 0
           description: Page number to retrieve (0-indexed)
+        - name: include_obsolete
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include cards missing from the latest Scryfall bulk import
       responses:
         '200':
           description: List of cards
@@ -1220,6 +1227,13 @@ paths:
             minimum: 0
             default: 0
           description: Page number to retrieve (0-indexed)
+        - name: include_obsolete
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+          description: Include cards missing from the latest Scryfall bulk import
         - name: sort_by
           in: query
           required: false

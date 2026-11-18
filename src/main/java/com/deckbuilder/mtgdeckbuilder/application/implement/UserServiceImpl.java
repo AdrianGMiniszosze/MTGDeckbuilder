@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidUserDataException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
@@ -46,6 +47,9 @@ public class UserServiceImpl implements UserService {
 	@Override
 	@Transactional
 	public User create(User user) {
+		if (user.getHashedPassword() == null || user.getHashedPassword().isBlank()) {
+			throw new InvalidUserDataException("hashed_password is required to create a user");
+		}
 		UserEntity entity = this.userEntityMapper.toEntity(user);
 		entity = this.userRepository.save(entity);
 		return this.userEntityMapper.toModel(entity);
@@ -54,11 +58,17 @@ public class UserServiceImpl implements UserService {
 	@Override
 	@Transactional
 	public User update(Long id, User user) {
-		if (!this.userRepository.existsById(id)) {
-			throw new UserNotFoundException(id);
-		}
+		final UserEntity existing = this.userRepository.findById(id)
+				.orElseThrow(() -> new UserNotFoundException(id));
 		UserEntity entity = this.userEntityMapper.toEntity(user);
 		entity.setId(id);
+		if (entity.getHashedPassword() == null || entity.getHashedPassword().isBlank()) {
+			entity.setHashedPassword(existing.getHashedPassword());
+		}
+		entity.setRole(existing.getRole());
+		entity.setIsActive(existing.getIsActive());
+		entity.setLastLogin(existing.getLastLogin());
+		entity.setCreatedAt(existing.getCreatedAt());
 		entity = this.userRepository.save(entity);
 		return this.userEntityMapper.toModel(entity);
 	}

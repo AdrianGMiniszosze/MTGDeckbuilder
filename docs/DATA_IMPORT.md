@@ -18,7 +18,8 @@ La importación es una **CLI Java** dentro del JAR de la aplicación, activada c
 - Escribe con **JDBC plano**, sin Hibernate: lotes de 500 filas, sin unidad de trabajo ni
   colecciones gestionadas.
 - Es idempotente por `scryfall_id` y nunca borra cartas: las que dejan de venir se marcan
-  `is_obsolete = TRUE`.
+  `is_obsolete = TRUE`. La API las oculta por defecto; `include_obsolete=true` las devuelve
+  en `/cards` y `/cards/search` (D-034).
 - Toma un advisory lock de PostgreSQL, así que dos importaciones no pueden solaparse.
 
 ### Lo que hace

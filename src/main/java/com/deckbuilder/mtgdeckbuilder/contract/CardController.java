@@ -30,9 +30,12 @@ public class CardController implements CardsApi {
 	private final CardTagMapper cardTagMapper;
 
 	@Override
-	public ResponseEntity<List<CardDTO>> listCards(Integer pagesize, Integer pagenumber) {
-		final var cards = this.cardService.getAllCards(pagesize != null ? pagesize : 10,
-				pagenumber != null ? pagenumber : 0);
+	public ResponseEntity<List<CardDTO>> listCards(
+			@RequestParam(name = "pagesize", required = false) Integer pagesize,
+			@RequestParam(name = "pagenumber", required = false) Integer pagenumber,
+			@RequestParam(name = "include_obsolete", required = false) Boolean includeObsolete) {
+		final var cards = this.cardService.getAllCards(pagesize != null ? pagesize : 20,
+				pagenumber != null ? pagenumber : 0, Boolean.TRUE.equals(includeObsolete));
 		final var cardDtos = cards.stream().map(this.cardMapper::toDto).toList();
 		return ResponseEntity.ok(cardDtos);
 	}
@@ -88,12 +91,28 @@ public class CardController implements CardsApi {
 
 	@Override
 	public ResponseEntity<CardSearchResponseDTO> searchCards(
-			String name, String type, String rarity, String colors,
-			Integer cmcMin, Integer cmcMax, String powerMin, String powerMax,
-			String toughnessMin, String toughnessMax, Integer setId, Integer formatId,
-			String textContains, String keywords, Boolean isFoil, Boolean isPromo,
-			String language, Integer pagesize, Integer pagenumber,
-			String sortBy, String sortOrder) {
+			@RequestParam(name = "name", required = false) String name,
+			@RequestParam(name = "type", required = false) String type,
+			@RequestParam(name = "rarity", required = false) String rarity,
+			@RequestParam(name = "colors", required = false) String colors,
+			@RequestParam(name = "cmc_min", required = false) Integer cmcMin,
+			@RequestParam(name = "cmc_max", required = false) Integer cmcMax,
+			@RequestParam(name = "power_min", required = false) String powerMin,
+			@RequestParam(name = "power_max", required = false) String powerMax,
+			@RequestParam(name = "toughness_min", required = false) String toughnessMin,
+			@RequestParam(name = "toughness_max", required = false) String toughnessMax,
+			@RequestParam(name = "set_id", required = false) Integer setId,
+			@RequestParam(name = "format_id", required = false) Integer formatId,
+			@RequestParam(name = "text_contains", required = false) String textContains,
+			@RequestParam(name = "keywords", required = false) String keywords,
+			@RequestParam(name = "is_foil", required = false) Boolean isFoil,
+			@RequestParam(name = "is_promo", required = false) Boolean isPromo,
+			@RequestParam(name = "language", required = false) String language,
+			@RequestParam(name = "pagesize", required = false) Integer pagesize,
+			@RequestParam(name = "pagenumber", required = false) Integer pagenumber,
+			@RequestParam(name = "include_obsolete", required = false) Boolean includeObsolete,
+			@RequestParam(name = "sort_by", required = false) String sortBy,
+			@RequestParam(name = "sort_order", required = false) String sortOrder) {
 
 		// Set default values
 		pagesize = pagesize != null ? pagesize : 20;
@@ -123,6 +142,7 @@ public class CardController implements CardsApi {
 			.language(language)
 			.sortBy(sortBy)
 			.sortOrder(sortOrder)
+			.includeObsolete(Boolean.TRUE.equals(includeObsolete))
 			.build();
 
 		// Perform search
@@ -153,7 +173,12 @@ public class CardController implements CardsApi {
 	}
 
 	@Override
-    public ResponseEntity<List<CardDTO>> getRandomCards(Integer count, String type, String rarity, Integer formatId) {
+    public ResponseEntity<List<CardDTO>> getRandomCards(
+			@RequestParam(name = "count", required = false) Integer count,
+			@RequestParam(name = "type", required = false) String type,
+			@RequestParam(name = "rarity", required = false) String rarity,
+			@RequestParam(name = "format_id", required = false) Integer formatId) {
+
 		count = count != null ? count : 1;
 
 		final List<Card> randomCards = this.cardService.getRandomCards(count, type, rarity,

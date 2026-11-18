@@ -1,6 +1,8 @@
 package com.deckbuilder.mtgdeckbuilder.infrastructure;
 
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardEntity;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -12,6 +14,11 @@ import java.util.List;
  */
 @Repository
 public interface CardRepository extends JpaRepository<CardEntity, Long>, CardRepositoryCustom {
+
+	/**
+	 * Find cards the current Scryfall bulk still contains, newest import first.
+	 */
+	Page<CardEntity> findByIsObsoleteFalse(Pageable pageable);
 
 	/**
 	 * Find cards by collector number

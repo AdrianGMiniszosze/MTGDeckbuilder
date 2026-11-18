@@ -9,7 +9,7 @@ import java.util.Optional;
 
 public interface CardService {
 	// Basic CRUD operations
-	List<Card> getAllCards(int pageSize, int pageNumber);
+	List<Card> getAllCards(int pageSize, int pageNumber, boolean includeObsolete);
 	Optional<Card> getCardById(Long id);
 	Card createCard(Card card);
 	Optional<Card> updateCard(Long id, Card card);
