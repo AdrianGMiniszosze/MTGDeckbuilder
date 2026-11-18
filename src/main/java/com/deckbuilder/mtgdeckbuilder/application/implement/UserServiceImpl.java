@@ -24,6 +24,7 @@ public class UserServiceImpl implements UserService {
 	private final UserRepository userRepository;
 	private final UserEntityMapper userEntityMapper;
 	private final DeckService deckService;
+	private final PasswordHasher passwordHasher;
 
 	@Override
 	public List<User> findAll(int pageSize, int pageNumber) {
@@ -51,6 +52,7 @@ public class UserServiceImpl implements UserService {
 			throw new InvalidUserDataException("hashed_password is required to create a user");
 		}
 		UserEntity entity = this.userEntityMapper.toEntity(user);
+		entity.setHashedPassword(this.passwordHasher.hash(user.getHashedPassword()));
 		entity = this.userRepository.save(entity);
 		return this.userEntityMapper.toModel(entity);
 	}
@@ -64,6 +66,8 @@ public class UserServiceImpl implements UserService {
 		entity.setId(id);
 		if (entity.getHashedPassword() == null || entity.getHashedPassword().isBlank()) {
 			entity.setHashedPassword(existing.getHashedPassword());
+		} else {
+			entity.setHashedPassword(this.passwordHasher.hash(entity.getHashedPassword()));
 		}
 		entity.setRole(existing.getRole());
 		entity.setIsActive(existing.getIsActive());

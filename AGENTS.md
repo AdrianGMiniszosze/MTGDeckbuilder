@@ -73,6 +73,7 @@ Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`)
 - `DeckEntity.cards` uses `orphanRemoval`; update a deck through `DeckEntityMapper.updateEntity` on the managed entity. Merging a fresh `DeckEntity` whose `cards` list is empty deletes every `card_deck` row even when the payload omits `deck_contents` (D-022).
 - Valid deck sections/types: `main`, `sideboard`, `maybeboard`.
 - Runtime Hibernate is `ddl-auto=none`; entities must match Flyway-managed tables. The committed local-config template is `application.properties.example` — `src/main/resources/application.properties` is gitignored, so edit the example or profile files instead.
+- `users.hashed_password` stores a BCrypt hash, never the raw value. `PasswordHasher` hashes on create and on an update that provides a password; omit it to keep the stored one. BCrypt caps input at 72 bytes (UTF-8), so longer passwords are rejected with `400 INVALID_USER_DATA`.
 
 ## Testing quirks
 

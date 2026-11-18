@@ -1502,6 +1502,7 @@ components:
           writeOnly: true
           minLength: 8
           maxLength: 255
+          description: Raw password on input; stored and never returned as a BCrypt hash. At most 72 bytes (UTF-8).
         email:
           type: string
           format: email

@@ -1,5 +1,6 @@
 package com.deckbuilder.mtgdeckbuilder.application;
 
+import com.deckbuilder.mtgdeckbuilder.application.implement.PasswordHasher;
 import com.deckbuilder.mtgdeckbuilder.application.implement.UserServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidUserDataException;
@@ -43,6 +44,9 @@ class UserServiceImplTest {
 
 	@Mock
 	private DeckService deckService;
+
+	@Mock
+	private PasswordHasher passwordHasher;
 
 	@InjectMocks
 	private UserServiceImpl userService;
@@ -225,6 +229,7 @@ class UserServiceImplTest {
 	void shouldCreateUser() {
 		// Given
 		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(this.testUserEntity);
+		when(this.passwordHasher.hash("hashedPassword123")).thenReturn("$2a$10$stored-hash");
 		when(this.userRepository.save(this.testUserEntity)).thenReturn(this.testUserEntity);
 		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
 
@@ -235,6 +240,8 @@ class UserServiceImplTest {
 		assertThat(result).isNotNull();
 		assertThat(result.getId()).isEqualTo(1L);
 		assertThat(result.getUsername()).isEqualTo("johndoe");
+		assertThat(this.testUserEntity.getHashedPassword()).isEqualTo("$2a$10$stored-hash");
+		verify(this.passwordHasher).hash("hashedPassword123");
 		verify(this.userRepository).save(this.testUserEntity);
 	}
 
@@ -242,8 +249,14 @@ class UserServiceImplTest {
 	@DisplayName("Should update existing user")
 	void shouldUpdateUser_WhenExists() {
 		// Given
+		final UserEntity incoming = new UserEntity();
+		incoming.setName("John Doe");
+		incoming.setUsername("johndoe");
+		incoming.setEmail("john@example.com");
+		incoming.setHashedPassword("hashedPassword123");
 		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
-		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(incoming);
+		when(this.passwordHasher.hash("hashedPassword123")).thenReturn("$2a$10$stored-hash");
 		when(this.userRepository.save(any(UserEntity.class))).thenReturn(this.testUserEntity);
 		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
 
@@ -254,8 +267,32 @@ class UserServiceImplTest {
 		assertThat(result).isNotNull();
 		assertThat(result.getId()).isEqualTo(1L);
 		assertThat(result.getUsername()).isEqualTo("johndoe");
+		assertThat(incoming.getHashedPassword()).isEqualTo("$2a$10$stored-hash");
 		verify(this.userRepository).findById(1L);
 		verify(this.userRepository).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should hash the new password when the update provides one")
+	void shouldHashPassword_WhenUpdateProvidesIt() {
+		// Given
+		final UserEntity incoming = new UserEntity();
+		incoming.setName("John Doe");
+		incoming.setUsername("johndoe");
+		incoming.setEmail("john@example.com");
+		incoming.setHashedPassword("new-secret-123");
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(incoming);
+		when(this.passwordHasher.hash("new-secret-123")).thenReturn("$2a$10$new-hash");
+		when(this.userRepository.save(any(UserEntity.class))).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		// When
+		this.userService.update(1L, this.testUser);
+
+		// Then
+		assertThat(incoming.getHashedPassword()).isEqualTo("$2a$10$new-hash");
+		verify(this.passwordHasher).hash("new-secret-123");
 	}
 
 	@Test
@@ -280,6 +317,7 @@ class UserServiceImplTest {
 		assertThat(incoming.getRole()).isEqualTo(this.testUserEntity.getRole());
 		assertThat(incoming.getIsActive()).isEqualTo(this.testUserEntity.getIsActive());
 		assertThat(incoming.getCreatedAt()).isEqualTo(this.testUserEntity.getCreatedAt());
+		verify(this.passwordHasher, never()).hash(any());
 	}
 
 	@Test
@@ -293,6 +331,7 @@ class UserServiceImplTest {
 				.isInstanceOf(InvalidUserDataException.class)
 				.hasMessageContaining("hashed_password is required");
 		verify(this.userRepository, never()).save(any(UserEntity.class));
+		verify(this.passwordHasher, never()).hash(any());
 	}
 
 	@Test
@@ -305,6 +344,7 @@ class UserServiceImplTest {
 		assertThatThrownBy(() -> this.userService.create(this.testUser))
 				.isInstanceOf(InvalidUserDataException.class);
 		verify(this.userRepository, never()).save(any(UserEntity.class));
+		verify(this.passwordHasher, never()).hash(any());
 	}
 
 	@Test

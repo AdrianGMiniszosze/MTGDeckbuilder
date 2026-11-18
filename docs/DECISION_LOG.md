@@ -64,6 +64,7 @@ ni del historial de chat.
 | D-035 | 2026-11-18 | Los parámetros se enlazan por el nombre del contrato | Aceptada |
 | D-036 | 2026-11-18 | Usuario sin contraseña es `400`; el hash nunca se serializa | Aceptada |
 | D-037 | 2026-11-18 | `ddl-auto=validate` contra Flyway como test de deriva | Aceptada |
+| D-038 | 2026-11-18 | Contraseñas con BCrypt; 72 bytes máximo | Aceptada |
 
 ## 4. Entradas
 
@@ -916,7 +917,7 @@ ni del historial de chat.
 ### D-036 - Usuario sin contraseña es `400`; el hash nunca se serializa
 
 - **Fecha:** 2026-11-18
-- **Estado:** Aceptada
+- **Estado:** Aceptada (el hashing pendiente lo reemplaza D-038)
 - **Decisión:** Crear un usuario sin `hashed_password` (o en blanco) devuelve
   `400 INVALID_USER_DATA`. Actualizar un usuario sin contraseña conserva la almacenada, y
   también conserva rol, estado, último login y fecha de alta. `hashed_password` entra en las
@@ -964,3 +965,30 @@ ni del historial de chat.
   más agresiva.
 - **Detalle:** Relacionada con D-011 (verificación en CI) y con
   `FlywayMigrationSmokeIntegrationTest`, que sigue comprobando el contenido del esquema.
+
+### D-038 - Contraseñas con BCrypt; 72 bytes máximo
+
+- **Fecha:** 2026-11-18
+- **Estado:** Aceptada
+- **Decisión:** `hashed_password` se hashea con BCrypt (`PasswordEncoder` de Spring) al crear
+  el usuario y al actualizarlo con contraseña. Omitirla en el `PUT` conserva la almacenada.
+  El valor de entrada es siempre texto plano; el hash nunca sale por la API. Se rechazan con
+  `400 INVALID_USER_DATA` las contraseñas de más de 72 bytes UTF-8.
+- **Contexto:** D-036 dejó el campo con el nombre correcto pero guardando el valor tal cual.
+  No hay login todavía, así que no había ningún punto donde el fallo se notara; precisamente
+  por eso habría pasado inadvertido hasta la primera autenticación.
+- **Por qué:** BCrypt es el estándar razonable para contraseñas, trae sal por hash y un coste
+  ajustable, y `spring-security-crypto` evita arrastrar el starter de seguridad entero. El
+  límite de 72 bytes es del algoritmo: truncar en silencio haría que dos contraseñas largas
+  distintas fueran equivalentes, así que se rechaza explícitamente.
+- **Alternativas descartadas:** Argon2 (mejor en abstracto, pero exige BouncyCastle y no
+  aporta nada frente a BCrypt en este dominio); SHA-256 + BCrypt para eliminar el límite
+  (más piezas y una precondición que nadie recuerda); hashing en el cliente (el servidor no
+  puede verificar ni migrar).
+- **Consecuencias:** Dos usuarios locales de prueba siguen con texto plano hasta que se
+  actualicen por la API; no hay login que los use. `PasswordHasher` concentra el algoritmo y
+  los tests comprueban sal, longitud máxima y límite por bytes, no por caracteres. Si se
+  añade login, la verificación ya existe (`matches`) y no hay que tocar el flujo de guardado.
+- **Revisar si:** se define una política de contraseñas (longitud mínima real, bloqueo tras
+  intentos) o se migran usuarios existentes de otros orígenes.
+- **Detalle:** Reemplaza el "hashing pendiente" de D-036; relacionada con D-035.
