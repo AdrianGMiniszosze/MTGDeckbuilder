@@ -1,5 +1,9 @@
 package com.deckbuilder.mtgdeckbuilder.importer;
 
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -11,6 +15,9 @@ import java.nio.file.Path;
  * limit exists for development fixtures and never marks cards as obsolete,
  * because a partial load has not seen the whole catalogue.
  */
+@Component
+@Profile("import")
+@ConfigurationProperties(prefix = "import")
 public class ImportOptions {
 
 	public static final int DEFAULT_BATCH_SIZE = 500;

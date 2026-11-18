@@ -30,13 +30,24 @@ public class ScryfallBulkReader {
 	}
 
 	public Stream<JsonNode> read(Path file) throws IOException {
-		return Files.lines(file, StandardCharsets.UTF_8)
-			.map(ScryfallBulkReader::normalize)
-			.filter(line -> !line.isEmpty())
-			.map(this::parse);
+		return lines(file).map(this::parse);
 	}
 
-	private JsonNode parse(String line) {
+	/**
+	 * Returns the normalised, non-empty lines of the file without parsing them.
+	 * The caller owns the stream and must close it.
+	 */
+	public Stream<String> lines(Path file) throws IOException {
+		return Files.lines(file, StandardCharsets.UTF_8)
+			.map(ScryfallBulkReader::normalize)
+			.filter(line -> !line.isEmpty());
+	}
+
+	/**
+	 * Parses one normalised line. Public so a caller can count a malformed line
+	 * as a failed row and keep reading the rest of the file.
+	 */
+	public JsonNode parse(String line) {
 		try {
 			return objectMapper.readTree(line);
 		} catch (JsonProcessingException ex) {

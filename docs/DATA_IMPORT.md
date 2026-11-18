@@ -183,11 +183,11 @@ boot, exige el fichero en el servidor y falla a medias sin dejar estado claro.
    `card_keywords`, `card_legality` ni relaciones. ✅ (ya en el script)
 4. **Registro del resultado**: filas insertadas, actualizadas, marcadas obsoletas y
    errores por carta, en un resumen final y con código de salida distinto de cero si
-   hay fallos. Insertadas/actualizadas/saltadas/fallidas ya se cuentan; faltan
-   obsoletas y el código de salida.
+   hay fallos. ✅ (fase 6.5: `ImportSummary` y códigos `0`/`1`/`2`)
 
-`V5__import_support.sql` ya crea `is_obsolete` y la tabla `import_seen`; el importador
-Java que las usa es la fase 6 de `docs/IMPORTER_PLAN.md`.
+`V5__import_support.sql` crea `is_obsolete` y `import_seen`, y
+`V6__ruling_import_staging.sql` crea el staging `import_ruling`; el importador Java que
+las usa es la fase 6 de `docs/IMPORTER_PLAN.md`.
 
 ## 7. Fases
 
@@ -195,6 +195,6 @@ Java que las usa es la fase 6 de `docs/IMPORTER_PLAN.md`.
    legalidades, upsert idempotente y caras sintéticas por tupla. Manual, sobre BD
    migrada. ✅
 2. **Tras la API de mazos**: escritura del importador Java con precios, `rulings` y
-   `is_obsolete`; las caras múltiples deberían pasar a `card_faces` en lugar de filas
-   sintéticas.
+   `is_obsolete`; las caras múltiples pasan a `card_faces` en lugar de filas
+   sintéticas. ✅ (fases 6.1–6.5; queda la carga real de 6.6)
 3. **Con usuarios**: job programado semanal y alerta si el import falla.

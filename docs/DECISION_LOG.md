@@ -58,6 +58,8 @@ ni del historial de chat.
 | D-029 | 2026-11-17 | Precios: último valor en `cards`, sin histórico | Aceptada |
 | D-030 | 2026-11-17 | Rulings por `oracle_id` desde un bulk aparte | Aceptada |
 | D-031 | 2026-11-17 | Advisory lock, códigos de salida y resumen | Aceptada |
+| D-032 | 2026-11-17 | Barrido seguro: guarda `seen = 0`, `updated_at` y limpieza por `run_id` | Aceptada |
+| D-033 | 2026-11-18 | Espejo de rulings con staging; pasos destructivos solo sin fallos | Aceptada |
 
 ## 4. Entradas
 
@@ -387,6 +389,9 @@ ni del historial de chat.
   99,87 % de líneas y 95,21 % de ramas, y el suelo subió a **99,8 / 95**.
 - **Actualización (2026-11-16, tras el `PUT` parcial):** 99,88 % de líneas y 95,31 % de
   ramas; el suelo de ramas sube a **95,3**.
+- **Actualización (2026-11-18, tras el importador 6.5):** 99,91 % de líneas y 95,96 % de
+  ramas; el suelo sube a **99,9 / 95,8**. Solo quedan sin cubrir las dos líneas de
+  `main()`; el resto del hueco son ramas defensivas de la API.
 
 ### D-017 - Las consultas nativas parametrizan todos los filtros
 
@@ -808,3 +813,38 @@ ni del historial de chat.
 - **Revisar si:** se añade un modo `--import.resume` o se quiere conservar el `run_id` para
   auditoría.
 - **Detalle:** `docs/IMPORTER_PLAN.md` §4; relacionada con D-026 y D-031.
+
+### D-033 - Espejo de rulings con staging; pasos destructivos solo sin fallos
+
+- **Fecha:** 2026-11-18
+- **Estado:** Aceptada
+- **Decisión:** `V6__ruling_import_staging.sql` añade `import_ruling`
+  (`run_id, oracle_id, published_at, comment, source`; `UNLOGGED`, PK con la tupla
+  completa). Cada pasada hace staging de todas las rulings del fichero y, solo si no hubo
+  filas fallidas y el staging no está vacío, espeja `card_rulings`: borra lo que no está en
+  staging e inserta lo nuevo con `ON CONFLICT DO NOTHING`. El barrido de obsoletas se omite
+  si fallaron filas de carta; el espejo, si fallaron rulings. En carga parcial
+  (`--import.limit`) no se ejecuta ninguno de los dos. Un fichero vacío o truncado no vacía
+  la tabla real: se aborta con `2`.
+- **Contexto:** Scryfall no publica un id de ruling. La identidad natural es
+  `(oracle_id, published_at, comment, source)`, pero 14.580 ternas
+  `(oracle_id, source, published_at)` del bulk real agrupan más de una ruling (hasta 32), así
+  que ninguna clave parcial identifica una fila concreta. El upsert con
+  `ON CONFLICT DO NOTHING` que había en el plan deja para siempre los comentarios corregidos
+  o retirados.
+- **Por qué:** El espejo hace que `card_rulings` sea exactamente el bulk actual: entran las
+  nuevas, desaparecen las corregidas y las retiradas, y una carta que se queda sin rulings
+  se limpia. No necesita id ni comparar contenido, y es idempotente: repetir la misma
+  pasada no inserta ni borra nada. Omitir lo destructivo cuando hay fallos evita interpretar
+  «no se pudo leer» como «ya no existe».
+- **Alternativas descartadas:** hash del comentario como clave (cambia con cada corrección y
+  no distingue fuentes); `DELETE` global + recarga (ventana sin datos y transacción enorme);
+  `ON CONFLICT DO NOTHING` sin espejo (deriva).
+- **Consecuencias:** Con fichero de rulings, `card_rulings` se reescribe entera cada pasada
+  (anti-join + insert-select sobre ~79 k filas). El staging se limpia siempre en `finally` y
+  al empezar se borran `run_id` ajenos, igual que `import_seen`. Sin fichero de rulings no se
+  toca la tabla. El resumen expone `staged`, `inserted`, `deleted`, `failed` y los flags
+  `sweepSkipped`/`rulingMirrorSkipped`.
+- **Revisar si:** Scryfall añade un id estable, la tabla crece hasta hacer caro el espejo o
+  se quiere conservar histórico de rulings.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §4, §5, §7; relacionada con D-030 y D-032.

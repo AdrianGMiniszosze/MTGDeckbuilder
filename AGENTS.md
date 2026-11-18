@@ -41,9 +41,14 @@ Use the wrapper; a global Maven install is not required.
 
 On macOS/Linux substitute `./mvnw`. There is no lint, formatter, or typecheck plugin; verification is codegen + compile + the relevant tests.
 
+On Windows the OpenAPI plugin (6.3.1) can fail right after `clean` with
+`File System error trying to create necessary folder api` because `target/` does not exist
+yet. Create it (`New-Item -ItemType Directory target`) or run `clean` and the codegen/test
+invocation separately.
+
 Coverage is JaCoCo (`pom.xml`): agent on every `test` run, HTML report at
-`target/site/jacoco/index.html`, and `jacoco:check` enforcing a bundle floor (99.8 % lines,
-95.3 % branches) on `verify` or when invoked explicitly. The floors are a ratchet: raise
+`target/site/jacoco/index.html`, and `jacoco:check` enforcing a bundle floor (99.9 % lines,
+95.8 % branches) on `verify` or when invoked explicitly. The floors are a ratchet: raise
 them when coverage improves. Generated OpenAPI classes, MapStruct `*Impl` and
 Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`).
 
@@ -60,7 +65,7 @@ Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`)
 - Flyway is the only schema source. `V1__baseline_schema.sql` creates the full schema and `V2__seed_formats.sql` seeds Standard, Commander, Modern, Legacy, Vintage and Pauper. Docker no longer mounts bootstrap scripts.
 - New schema changes: add a focused `V*__*.sql` in `src/main/resources/db/migration/`. Migrations are immutable once applied; fix forward with a new migration. The V1 consolidation is the one-time exception that replaced the old bootstrap plus `V2`–`V5`.
 - Use `scryfall_id` as the unique printing identity; `oracle_id` is non-unique and indexed. Never use card name for dedupe/upsert. Prices live on `cards`.
-- `CREATE EXTENSION vector` runs in `V1`, but `cards.embedding`, the similarity index and `find_similar_cards` are deliberately deferred to a later migration (`V3` is the deck validation model, `V4` the commander role, `V5` importer support) until the embedding model and dimension are chosen. No Java semantic-search endpoint exists yet.
+- `CREATE EXTENSION vector` runs in `V1`, but `cards.embedding`, the similarity index and `find_similar_cards` are deliberately deferred to a later migration (`V3` is the deck validation model, `V4` the commander role, `V5` importer support, `V6` ruling staging) until the embedding model and dimension are chosen. No Java semantic-search endpoint exists yet.
 - Deck format rules live in Java (`DeckValidationService`, `CompanionRules`, `CommanderRules`); the database only enforces data shape (FKs, `UNIQUE`, `CHECK` on quantity/section). The old `check_card_quantity` trigger was removed in `V3` (ADR-007, D-002): keep policy out of SQL. Draft decks may be incomplete or illegal; `decks.status` is `draft` until a Java publish check passes. Copy limits come from `cards.copies_limit` (`NULL` = format, `0` = no limit, `N` = exact cap) and are counted by `oracle_id`, across main + sideboard, ignoring `maybeboard`. A commander is a `card_deck` row in `main` marked in `deck_commander` (`commander_card_ids`, max 2); it counts inside the deck. Change both the validator and `docs/DECK_VALIDATION_MODEL.md`, and add coverage for every rule.
 - Entities are still being aligned to the V1 schema (`format_id`, `is_private`, `set_id`, `related_card_id`, `created_at`/`updated_at`). Until that lands, do not run the app against a freshly migrated database.
 - `DeckEntity.cards` uses `orphanRemoval`; update a deck through `DeckEntityMapper.updateEntity` on the managed entity. Merging a fresh `DeckEntity` whose `cards` list is empty deletes every `card_deck` row even when the payload omits `deck_contents` (D-022).
@@ -70,7 +75,7 @@ Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`)
 ## Testing quirks
 
 - Repositories/integration tests use Testcontainers image `pgvector/pgvector:pg16`, initialized by `src/test/resources/testcontainers-init.sql`. Extend `PostgresIntegrationTest` for `@SpringBootTest` or `PostgresDataJpaTest` for `@DataJpaTest`; do not add H2.
-- The `testcontainers` profile sets Hibernate `ddl-auto=create-drop` and disables Flyway, so entity/schema drift is only caught by `FlywayMigrationSmokeIntegrationTest`, which starts an empty database, applies `V1` + `V2` + `V3` + `V4` + `V5` with Flyway and asserts the canonical schema, seed rules, import support and that `card_deck` still enforces shape while the format-rule trigger is gone. It no longer uses the removed bootstrap scripts.
+- The `testcontainers` profile sets Hibernate `ddl-auto=create-drop` and disables Flyway, so entity/schema drift is only caught by `FlywayMigrationSmokeIntegrationTest`, which starts an empty database, applies `V1` + `V2` + `V3` + `V4` + `V5` + `V6` with Flyway and asserts the canonical schema, seed rules, import support, ruling staging and that `card_deck` still enforces shape while the format-rule trigger is gone. It no longer uses the removed bootstrap scripts.
 - Naming drives CI suites: plain `*Test` runs in the no-Docker job; `*IntegrationTest` plus `CardLegalityRepositoryTest` and `CardInDeckRepositoryExtendedTest` need Docker. If you add another Testcontainers test not ending in `IntegrationTest`, update the filter lists in `README.md` and `.github/workflows/ci.yml`.
 - `DeckServiceH2IntegrationTest` is a legacy name — it runs on PostgreSQL/Testcontainers. Ignore the H2 references in `application-test.properties`; H2 is not a dependency and no test uses the `test` profile.
 - **Known issue — Docker Desktop 29.x + Testcontainers 1.21.x (mitigated):** `docker-java` 3.4.2 defaults to Docker API `1.32`, but Docker 29 rejects API versions below `1.40` with `400 Bad Request`, so Testcontainers fails with `Could not find a valid Docker environment` even though `docker info` works. CI detects the daemon version (`docker version --format '{{.Server.APIVersion}}'`) and passes `-Dapi.version=$DOCKER_API_VERSION` to Maven, so no version is hardcoded. Locally, pass the same property explicitly (for example `-Dapi.version=1.56`). Permanent fix: upgrade Testcontainers/docker-java to a version that negotiates the daemon API (latest on Maven Central at time of writing is Testcontainers `2.0.5`; verify before adopting).

@@ -17,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Verifies that a completely empty database can be provisioned by Flyway alone
  * (V1 baseline + V2 format seed + V3 deck validation model + V4 commander +
- * V5 import support) and that the resulting schema keeps data shape while
+ * V5 import support + V6 ruling staging) and that the resulting schema keeps data shape while
  * format policy lives in Java.
  */
 class FlywayMigrationSmokeIntegrationTest {
@@ -37,10 +37,10 @@ class FlywayMigrationSmokeIntegrationTest {
 
             var result = flyway.migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(5);
+            assertThat(result.migrationsExecuted).isEqualTo(6);
             assertThat(flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .containsExactly("1", "2", "3", "4", "5");
+                    .containsExactly("1", "2", "3", "4", "5", "6");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
@@ -68,7 +68,7 @@ class FlywayMigrationSmokeIntegrationTest {
                 "card_types", "card_supertypes", "card_subtypes", "card_keywords",
                 "card_faces", "card_rulings", "formats", "card_legality", "decks",
                 "card_deck", "deck_commander", "tags", "card_tag", "card_relationships",
-                "import_seen"}) {
+                "import_seen", "import_ruling"}) {
             assertThat(hasTable(connection, table)).as("table %s", table).isTrue();
         }
     }
@@ -164,6 +164,13 @@ class FlywayMigrationSmokeIntegrationTest {
         insertImportSeen(connection, runId, scryfallId);
         assertThatThrownBy(() -> insertImportSeen(connection, runId, scryfallId))
                 .isInstanceOf(SQLException.class);
+
+        // import_ruling mirrors the same staging pattern for rulings.
+        assertThat(tablePersistence(connection, "import_ruling")).isEqualTo("u");
+        assertThat(hasColumn(connection, "import_ruling", "oracle_id")).isTrue();
+        assertThat(hasColumn(connection, "import_ruling", "published_at")).isTrue();
+        assertThat(hasColumn(connection, "import_ruling", "comment")).isTrue();
+        assertThat(hasColumn(connection, "import_ruling", "source")).isTrue();
     }
 
     private static void assertDeckStateConstraints(Connection connection, long formatId, long userId)

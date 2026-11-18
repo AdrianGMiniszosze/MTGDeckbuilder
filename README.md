@@ -234,8 +234,8 @@ implementations and Lombok-generated methods are excluded.
 mvnw.cmd jacoco:report
 ```
 
-The report answers "what is still untested"; the gate (`jacoco:check`, 99.8 % lines and
-95.3 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
+The report answers "what is still untested"; the gate (`jacoco:check`, 99.9 % lines and
+95.8 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
 unit, smoke and integration suites have all contributed to `target/jacoco.exec`. The
 floors are a ratchet: raise them when coverage improves, never lower them to make a
 build pass.

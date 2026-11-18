@@ -9,18 +9,19 @@ This document defines the migration policy for schema changes in `MTGDeckbuilder
 - **Current bootstrap constraint**: until `V1__baseline_schema.sql` is introduced, clean databases must be provisioned with the schema bootstrap script before applying later Flyway migrations.
 - **Transition rule**: from this point, schema evolution must be done with new Flyway migrations, not by editing historical migration files.
 
-## Scryfall import schema (V4-V5)
+## Scryfall import schema (V4-V6)
 
-> **Nota (2026-11-17):** esta sección describe el plan antiguo. En el esquema vigente
+> **Nota (2026-11-18):** esta sección describe el plan antiguo. En el esquema vigente
 > `V1` ya crea `card_faces`, `card_rulings` y los precios en `cards`, `V3` añade
 > `copies_limit` y `V4` es el rol de comandante. La importación Java entra en `V5`
-> (`cards.is_obsolete`); ver `docs/IMPORTER_PLAN.md`.
+> (`cards.is_obsolete` + `import_seen`) y `V6` añade el staging `import_ruling`; ver
+> `docs/IMPORTER_PLAN.md`.
 
 - `card_legality` stores one status per card printing and format; the status values support Scryfall's `legal`, `not_legal`, `restricted`, and `banned` values.
 - The latest nullable USD, EUR, and MTGO TIX price values live directly on `cards` with `price_observed_at` since `V1`; the old plan's temporary `card_prices` table was never applied.
 - `card_faces` stores ordered face records per printing. Frequently queried face fields are columns; `face_data` retains the complete Scryfall face object for forward-compatible fields.
 - `card_rulings` stores rulings by `oracle_id`, publication date, comment, and source, so identical rulings are deduplicated while multiple rulings and reprints remain supported.
-- `V1` already contains the legality, price, face, and ruling schema. `V4` is the commander role and `V5` is importer support (`cards.is_obsolete` + `import_seen`); migrations are immutable after merge.
+- `V1` already contains the legality, price, face, and ruling schema. `V4` is the commander role, `V5` is importer support (`cards.is_obsolete` + `import_seen`) and `V6` is the ruling staging table (`import_ruling`); migrations are immutable after merge.
 
 ## Goals
 

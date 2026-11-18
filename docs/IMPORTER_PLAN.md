@@ -1,10 +1,10 @@
 # Plan del importador Java (fase 6)
 
-- **Estado:** aprobada el 2026-11-17; D-023–D-031 aceptadas en `docs/DECISION_LOG.md`
+- **Estado:** aprobada el 2026-11-17; D-023–D-033 aceptadas en `docs/DECISION_LOG.md`
 - **Alcance:** sustituir `import_cards.py` por una CLI Java idempotente que mantenga
   `cards`, `card_legality`, `card_keywords`, `sets`, `card_faces`, `card_rulings` y precios
 - **Relacionado:** `docs/DATA_IMPORT.md` (estado actual), `docs/DECK_VALIDATION_MODEL.md` §10,
-  `docs/DECISION_LOG.md` (D-018, D-019 y las decisiones D-023–D-031)
+  `docs/DECISION_LOG.md` (D-018, D-019 y las decisiones D-023–D-033)
 - **No es:** la fase de embeddings/recomendación ni un job programado
 
 ## 1. Objetivo
@@ -45,13 +45,16 @@ existentes no cambian de responsabilidad.
 
 | Paquete | Clase | Responsabilidad |
 |---|---|---|
-| `com.deckbuilder.mtgdeckbuilder.importer` | `ScryfallImportRunner` | `@Profile("import")`, `ApplicationRunner` + `ExitCodeGenerator`; lee flags, arranca, resume y sale |
+| `com.deckbuilder.mtgdeckbuilder.importer` | `ScryfallImportRunner` | `@Profile("import")`, `ApplicationRunner`; lee flags, arranca, resume y sale con `System::exit` |
 | `com.deckbuilder.mtgdeckbuilder.importer` | `ImportOptions` | `--import.file`, `--import.rulings`, `--import.batch-size`, `--import.limit`; valida rutas |
-| `…application.importing` | `CardImportService` | Orquesta lectura → mapeo → escritura → obsoletas; devuelve `ImportSummary` |
+| `…application.importing` | `CardImportService` | Orquesta lock → lectura → mapeo → escritura → obsoletas → rulings; devuelve `ImportSummary` |
+| `…application.importing` | `ImportSummary` | Contadores, flags de pasos omitidos y duración; decide el código `0`/`1` |
 | `…application.importing` | `CopyLimitRules`, `LegalityRules`, `CardShapeRules` | Reglas puras, sin BD, testeables con JUnit |
 | `…application.importing` | `ScryfallCardMapper` | `JsonNode` → `ImportCard` (record), incluido `copies_limit`, caras y precios |
-| `…infrastructure.importer` | `ScryfallBulkReader` | `Files.lines` UTF-8 en streaming, tolerancia a BOM, una línea → `JsonNode`; el `Stream` debe cerrarse |
+| `…application.importing` | `ScryfallRulingMapper`, `ImportRuling` | `JsonNode` → `ImportRuling`; identidad `(oracle_id, published_at, comment, source)` |
+| `…infrastructure.importer` | `ScryfallBulkReader` | `Files.lines` UTF-8 en streaming, tolerancia a BOM; `lines()` + `parse()` para contar líneas malas |
 | `…infrastructure.importer` | `CardImportDao` | `JdbcTemplate`: upserts, reemplazo de hijos, caras, precios, obsoletas |
+| `…infrastructure.importer` | `RulingImportDao` | Staging en `import_ruling` y espejo de `card_rulings` |
 | `…infrastructure.importer` | `ImportLock` | `pg_try_advisory_lock` por sesión |
 | `src/main/resources/application-import.properties` | — | `spring.main.web-application-type=none`, banner off, logging |
 
@@ -73,7 +76,8 @@ En Docker, el fichero se monta en el contenedor; no se copia a la imagen.
    está presente, es una carga parcial de desarrollo: se leen solo esas líneas y **no**
    se ejecuta el barrido de obsoletas (si no, se marcaría todo el catálogo como retirado).
 2. Tomar `pg_try_advisory_lock(<clave fija>)`; si ya hay otra importación, `2`.
-3. Generar un `run_id` (UUID) y limpiar restos de ejecuciones anteriores.
+3. Generar un `run_id` (UUID) y limpiar restos de ejecuciones anteriores en `import_seen`
+   y en `import_ruling`.
 4. Leer el JSONL línea a línea:
    - descartar `token`, `emblem` y `art_series` **antes** de mirar `card_faces`;
    - mapear a `ImportCard` (record inmutable) y acumular en un lote de 500;
@@ -90,16 +94,19 @@ En Docker, el fichero se monta en el contenedor; no se copia a la imagen.
    fallida y seguir. Sin `savepoint` por carta: el lote ya es atómico.
 7. Al terminar el fichero: `import_seen` de este `run_id` es la lista de vivos. Marcar
    obsoletas (con `updated_at = now()`) y desmarcar las que han vuelto. Se omite cuando la
-   carga es parcial (`--import.limit`), con un `WARN` que lo deja claro en el resumen. Si la
-   ejecución no vio ninguna carta (`seen = 0`, por fichero vacío o truncado), **no** se barre:
-   se avisa y se sale con `2`.
-8. Si hay fichero de rulings, segunda pasada con el mismo patrón (lote + upsert).
-9. Borrar las filas de `import_seen` de este `run_id`, liberar el lock, imprimir resumen
-   y salir con `0`/`1`.
+   carga es parcial (`--import.limit`) o cuando hubo filas de carta fallidas, con un `WARN`
+   que lo deja claro en el resumen. Si la ejecución no vio ninguna carta (`seen = 0`, por
+   fichero vacío o truncado), **no** se barre: se avisa y se sale con `2`.
+8. Si hay fichero de rulings: leerlo con el mismo patrón de lote + reintento fila a fila y
+   hacer staging en `import_ruling`. Después, si no hubo fallos y el staging no está vacío,
+   espejar `card_rulings`: borrar lo que no esté en staging e insertar lo nuevo
+   (`ON CONFLICT DO NOTHING`). Con fallos o carga parcial se omite el espejo.
+9. Borrar las filas de este `run_id` en `import_seen` e `import_ruling`, liberar el lock,
+   imprimir el resumen y salir con `0`, o `1` si alguna fila falló.
 
 ## 5. Esquema
 
-### 5.1 Migración nueva
+### 5.1 Migraciones nuevas
 
 `V5__import_support.sql`:
 
@@ -116,16 +123,29 @@ CREATE UNLOGGED TABLE import_seen (
 );
 ```
 
-- Dos preocupaciones en una migración porque ambas son soporte del importador y hoy no
-  hay datos desplegados que migrar. Si se prefiere una por cambio, se separan en `V5` y
-  `V6` sin más coste.
-- La tabla es real (no `TEMP`) a propósito: el importador escribe por lotes con
+`V6__ruling_import_staging.sql`:
+
+```sql
+CREATE UNLOGGED TABLE import_ruling (
+    run_id       UUID NOT NULL,
+    oracle_id    UUID NOT NULL,
+    published_at DATE NOT NULL,
+    comment      TEXT NOT NULL,
+    source       TEXT NOT NULL,
+    PRIMARY KEY (run_id, oracle_id, published_at, comment, source)
+);
+```
+
+- Las dos tablas son reales (no `TEMP`) a propósito: el importador escribe por lotes con
   conexiones del pool y una tabla temporal desaparecería entre lotes. `run_id` aísla
-  ejecuciones y el `PRIMARY KEY` hace de índice para el anti-join.
+  ejecuciones y el `PRIMARY KEY` hace de índice para el anti-join y el espejo.
+- `UNLOGGED`: si el proceso muere, PostgreSQL vacía la tabla y la importación se repite.
+  Nunca guardan datos de usuario.
 - `card_faces`, `card_rulings`, precios y `copies_limit` **ya existen** desde `V1`/`V3`;
   no hace falta migrar nada más.
-- El `FlywayMigrationSmokeIntegrationTest` pasa a aplicar `V1`–`V5` y comprueba la
-  columna, su `DEFAULT`, el índice y la tabla `import_seen`.
+- El `FlywayMigrationSmokeIntegrationTest` pasa a aplicar `V1`–`V6` y comprueba la
+  columna `is_obsolete`, su `DEFAULT`, el índice, `import_seen` y las columnas y
+  persistencia `UNLOGGED` de `import_ruling`.
 
 ### 5.2 Caras sintéticas
 
@@ -172,6 +192,12 @@ Nota: `card_legality` solo se escribe para formatos sembrados; lo demás es
 - **`import_seen` en tabla real `UNLOGGED`** en lugar de una lista en memoria (D-026): no
   crece con el fichero y el `UPDATE` de obsoletas es un anti-join. No puede ser `TEMP`
   porque cada lote usa una conexión del pool.
+- **Rulings: staging + espejo, no upsert** (D-030, D-033): Scryfall no da id de ruling y
+  una misma terna `(oracle_id, source, published_at)` puede tener hasta 32 comentarios, así
+  que no hay clave parcial fiable. Cada pasada hace staging en `import_ruling` y después
+  borra de `card_rulings` lo que no está en staging e inserta lo nuevo. Corregidas y
+  retiradas desaparecen; repetir la misma pasada no cambia nada. Con `failed > 0` o carga
+  parcial el espejo no se ejecuta.
 - **`RETURNING (xmax = 0)`** distingue insertadas de actualizadas sin comparar contenido
   (truco de PostgreSQL: `xmax = 0` solo en la fila recién insertada).
 - Los upserts actualizan `updated_at = now()`; `imported_at` conserva el `DEFAULT` de la
@@ -193,10 +219,7 @@ Nota: `card_legality` solo se escribe para formatos sembrados; lo demás es
 Resumen final (ejemplo):
 
 ```
-cards: 512340 inserted, 0 updated, 512340 seen, 12 obsolete, 3 failed
-faces: 48120, legality: 3074040, keywords: 1210044, prices: 498221
-rulings: 30221 upserted
-duration: 4m12s
+cards inserted=512340 updated=0 skipped=9 failed=0 obsolete=12; rulings staged=78948 inserted=78948 deleted=0 skipped=0 failed=0; partial=false sweepSkipped=false rulingMirrorSkipped=false; duration=4m12s
 ```
 
 Prueba rápida en desarrollo, sin bulk y sin marcar obsoletas:
@@ -214,9 +237,12 @@ java -jar mtgdeckbuilder.jar --spring.profiles.active=import \
 | Unitario | `LegalityRulesTest` | Mapeo, claves desconocidas, valores inválidos |
 | Unitario | `CardShapeRulesTest` | Básicas, `type_line`, `cmc`, `image_url` |
 | Unitario | `ScryfallCardMapperTest` | Caras, precios, tokens/emblem descartados |
-| Unitario | `ImportOptionsTest` / `ScryfallImportRunnerTest` | Flags, rutas, códigos de salida |
+| Unitario | `ScryfallRulingMapperTest` | Identidad de ruling, `source` en minúsculas, filas incompletas |
+| Unitario | `ImportOptionsTest` / `ScryfallImportRunnerTest` | Flags, rutas, códigos `0`/`1`/`2` y formato del resumen |
 | Integración | `CardImportIntegrationTest` | Fixture JSONL: dos impresiones del mismo `oracle_id`, una multiforma, un token, una legalidad desconocida, `any number`, `up to 7`, precios y rulings. Dos pasadas: idempotencia, obsoletas, hijos reemplazados, caras, precios, y `card_deck` intacto |
-| Flyway | `FlywayMigrationSmokeIntegrationTest` | `V1`–`V5`, `is_obsolete`, default e índice |
+| Integración | `RulingImportIntegrationTest` | Staging y espejo: correcciones y retiradas, guarda de staging vacío, limpieza |
+| Integración | `CardImportServiceIntegrationTest` | Import completo, segunda pasada, obsoletas con v2, carga parcial, fila de carta fallida, fila de ruling fallida, línea JSON corrupta, ficheros vacíos y lock ocupado |
+| Flyway | `FlywayMigrationSmokeIntegrationTest` | `V1`–`V6`: `is_obsolete`, default, índice, `import_seen` e `import_ruling` |
 
 - Fixture compartido: `src/test/resources/importer/default-cards-sample.jsonl`, unas 10
   líneas con los casos del párrafo anterior. Lo usa el IT y sirve para probar a mano
@@ -224,9 +250,12 @@ java -jar mtgdeckbuilder.jar --spring.profiles.active=import \
 - `src/test/resources/importer/default-cards-sample-v2.jsonl` solo trae las cartas que
   cambian; el IT lo usa para comprobar el reemplazo de hijos, legalidades, caras y precios
   sin duplicar filas.
+- `rulings-sample.jsonl` y `rulings-sample-v2.jsonl` reproducen la corrección y la retirada
+  de una ruling; el IT del espejo y el del servicio los usan para verificar que
+  `card_rulings` queda exactamente con el bulk actual.
 - Los nombres mantienen los filtros de CI: `*Test` sin Docker, `*IntegrationTest` con
   Docker. No hace falta tocar `.github/workflows/ci.yml` ni `README.md` en ese punto.
-- El trinquete de JaCoCo (**99,8 % líneas / 95,3 % ramas**) obliga a que cada rama nueva
+- El trinquete de JaCoCo (**99,9 % líneas / 95,8 % ramas**) obliga a que cada rama nueva
   tenga test. El runner se prueba con un servicio falso, no con Spring completo.
 
 ## 10. Fases internas
@@ -237,23 +266,29 @@ java -jar mtgdeckbuilder.jar --spring.profiles.active=import \
 | 6.2 | Reader streaming + DAO de `cards` + IT mínimo | Fixture compartido, dos pasadas, mismos contadores |
 | 6.3 | Hijos, legalidades, caras y precios | IT comprueba reemplazo de keywords y caras reales |
 | 6.4 | `is_obsolete` + `import_seen` + lock | IT: carta retirada → `TRUE`; vuelve → `FALSE`; dos importaciones → `2` |
-| 6.5 | Rulings, resumen y códigos de salida | Fallo de una fila → `1` y el resto cargado |
+| 6.5 | Rulings, resumen y códigos de salida | Fallo de una fila → `1` y el resto cargado; corrección de ruling → fila vieja fuera |
 | 6.6 | Retirada del script y docs | Importación real completa en local + `DATA_IMPORT.md` actualizado |
+
+6.1–6.5 están cerradas (código, IT y smoke de Flyway verdes); queda 6.6, que depende de una
+descarga real del bulk y de borrar `import_cards.py`.
 
 ## 11. Criterios de aceptación
 
-- [ ] Segunda pasada: `inserted = 0`, mismas filas en todas las tablas hijas, `failed = 0`.
-- [ ] Una línea corrupta se cuenta como fallida y no aborta la importación.
-- [ ] Las cartas que dejan de venir se marcan `is_obsolete = TRUE`; ninguna se borra.
-- [ ] Un `DELETE` de `cards` no aparece en el código del importador.
-- [ ] Caras en `card_faces`, no en filas sintéticas.
-- [ ] Precios y `price_observed_at` poblados cuando Scryfall los envía.
-- [ ] `card_rulings` se llena solo si se pasa el segundo fichero.
-- [ ] Memoria estable con el fichero completo (streaming, sin `readAllBytes`).
-- [ ] `--import.limit N` carga N cartas, no marca obsoletas y lo avisa en el resumen.
-- [ ] El fixture de `src/test/resources/importer/` carga sin descargar el bulk.
-- [ ] `mvnw.cmd clean test …` + `jacoco:report jacoco:check` verdes.
-- [ ] `import_cards.py` retirado y `docs/DATA_IMPORT.md` sin instrucciones de Python.
+- [x] Segunda pasada: `inserted = 0`, mismas filas en todas las tablas hijas, `failed = 0`.
+- [x] Una línea corrupta se cuenta como fallida y no aborta la importación.
+- [x] Las cartas que dejan de venir se marcan `is_obsolete = TRUE`; ninguna se borra.
+- [x] Un `DELETE` de `cards` no aparece en el código del importador.
+- [x] Caras en `card_faces`, no en filas sintéticas.
+- [x] Precios y `price_observed_at` poblados cuando Scryfall los envía.
+- [x] `card_rulings` se llena solo si se pasa el segundo fichero, y refleja correcciones y
+  retiradas.
+- [x] Memoria estable con el fichero completo (streaming, sin `readAllBytes`).
+- [x] `--import.limit N` carga N cartas, no marca obsoletas y lo avisa en el resumen.
+- [x] El fixture de `src/test/resources/importer/` carga sin descargar el bulk.
+- [x] `clean` + `test` + `jacoco:report jacoco:check` verdes (702 tests, 99,91 % líneas y
+  95,96 % ramas).
+- [ ] `import_cards.py` retirado y `docs/DATA_IMPORT.md` sin instrucciones de Python
+  (fase 6.6, tras la primera carga real).
 
 ## 12. Riesgos
 
@@ -266,9 +301,9 @@ java -jar mtgdeckbuilder.jar --spring.profiles.active=import \
 | `card_rulings` con `comment` en la PK | Comentarios cortos; si algún día supera el límite de índice, migrar a clave sustituta |
 | `orphanRemoval` u otro detalle de Hibernate | La escritura no usa Hibernate (D-024) |
 | Trinquete de cobertura | Reglas puras y runner con dobles; sin clases "de pega" sin test |
-| `DB_MIGRATION_STRATEGY.md` desactualizado | Actualizarlo: `V4` es comandante y la importación entra en `V5` |
+| `DB_MIGRATION_STRATEGY.md` desactualizado | Actualizarlo: `V4` es comandante, `V5` soporte del importador y `V6` el staging de rulings |
 
-## 13. Decisiones (D-023 – D-031)
+## 13. Decisiones (D-023 – D-033)
 
 Aceptadas el 2026-11-17 y anexadas a `docs/DECISION_LOG.md`. Aquí queda el texto para
 consulta junto al plan.
@@ -448,12 +483,63 @@ consulta junto al plan.
 - **Revisar si:** se programa semanalmente o se quiere `--import.dry-run`.
 - **Detalle:** `docs/IMPORTER_PLAN.md` §4, §8; relacionada con D-023.
 
+### D-032 - Barrido seguro: guarda `seen = 0`, `updated_at` y limpieza por `run_id`
+
+- **Fecha:** 2026-11-17
+- **Estado:** Aceptada
+- **Decisión:** Si una importación completa no vio ninguna carta, no se ejecuta el barrido
+  de obsoletas: se avisa y se sale con `2`. El barrido actualiza `cards.updated_at`. Al
+  empezar se borran las filas de `import_seen` de otros `run_id`; al terminar se borran las
+  del propio, también si hubo filas fallidas.
+- **Contexto:** Un fichero vacío o mal descargado marcaría todo el catálogo como obsoleto, y
+  `import_seen` es una tabla real compartida por el pool: si un proceso muere, sus filas
+  quedan ahí.
+- **Por qué:** La guarda convierte un error de datos en un fallo visible; `updated_at`
+  mantiene la coherencia; la limpieza evita crecimiento y contaminación entre ejecuciones.
+- **Alternativas descartadas:** barrer con `seen = 0` (peligroso); no tocar `updated_at`;
+  limpiar solo al final.
+- **Consecuencias:** El servicio comprueba `countSeen(runId) == 0` antes del barrido y limpia
+  en `finally`. `--import.limit` sigue sin barrer aunque `seen > 0`.
+- **Revisar si:** se añade `--import.resume` o se quiere conservar el `run_id` para auditoría.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §4; relacionada con D-026 y D-031.
+
+### D-033 - Espejo de rulings con staging; pasos destructivos solo sin fallos
+
+- **Fecha:** 2026-11-18
+- **Estado:** Aceptada
+- **Decisión:** `V6` añade `import_ruling` (`UNLOGGED`, PK con `run_id` y la tupla completa
+  de la ruling). Cada pasada hace staging de todas las rulings del fichero y, solo si no
+  hubo filas fallidas y el staging no está vacío, espeja `card_rulings`: borra lo que no
+  está en staging e inserta lo nuevo con `ON CONFLICT DO NOTHING`. El barrido de obsoletas
+  se omite si fallaron filas de carta; el espejo, si fallaron rulings. En carga parcial
+  (`--import.limit`) no se ejecuta ninguno de los dos. La tabla real nunca se vacía por un
+  fichero vacío o truncado: se aborta con `2`.
+- **Contexto:** Scryfall no publica un id de ruling. La identidad natural es
+  `(oracle_id, published_at, comment, source)`, pero 14.580 ternas
+  `(oracle_id, source, published_at)` del bulk real tienen más de una ruling (hasta 32), así
+  que ninguna clave parcial sirve para actualizar una fila concreta. Un
+  `ON CONFLICT DO NOTHING` deja para siempre los comentarios corregidos o retirados.
+- **Por qué:** El espejo hace que `card_rulings` sea exactamente el bulk actual: entran las
+  nuevas, desaparecen las corregidas y las retiradas, y una carta que se queda sin rulings
+  se limpia. No necesita id ni comparar contenido. Omitir lo destructivo cuando hay fallos
+  evita interpretar «no se pudo leer» como «ya no existe».
+- **Alternativas descartadas:** hash del comentario como clave (cambia con cada corrección y
+  no distingue fuentes); `DELETE` global + recarga (ventana sin datos y transacción enorme);
+  upsert con `DO NOTHING` (deriva, que es justo lo que se quiere evitar).
+- **Consecuencias:** Con fichero de rulings, `card_rulings` se reescribe entera cada pasada
+  (anti-join + insert-select sobre ~79 k filas). El staging se limpia siempre en `finally` y
+  al empezar se borran `run_id` ajenos, igual que `import_seen`. Sin fichero de rulings no se
+  toca la tabla.
+- **Revisar si:** Scryfall añade un id estable, la tabla crece hasta hacer caro el espejo o
+  se quiere conservar histórico de rulings.
+- **Detalle:** `docs/IMPORTER_PLAN.md` §4, §5, §7; relacionada con D-030 y D-032.
+
 ## 14. Preguntas abiertas y valor por defecto
 
 | Pregunta | Defecto propuesto |
 |---|---|
 | ¿`default-cards` u `oracle-cards`? | `default-cards` (una fila por impresión, igual que hoy) |
-| ¿Una migración o dos? | Una: `V5__import_support.sql` (`is_obsolete` + `import_seen`) |
+| ¿Una migración o dos? | Dos: `V5__import_support.sql` (`is_obsolete` + `import_seen`) y `V6__ruling_import_staging.sql` (`import_ruling`) |
 | ¿Se migran las caras sintéticas? | No; recrear la BD local y avisar si aparecen |
 | ¿`source` de rulings tal cual? | Minúsculas; `scryfall` si falta |
 | ¿Qué pasa con `tags`/`card_tag`? | El importador no las toca (D-019) |
