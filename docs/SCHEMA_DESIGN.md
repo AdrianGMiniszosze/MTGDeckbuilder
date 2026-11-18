@@ -4,6 +4,10 @@
 > mazos (trigger `check_card_quantity`, `cards.unlimited_copies`) quedó reemplazada por
 > ADR-007 y `V3__deck_validation_model.sql`. Para el modelo vigente ver
 > `docs/DECK_VALIDATION_MODEL.md`.
+>
+> **Actualización (2026-11-18):** los scripts `01-create-schema*.sql` ya no existen en el
+> repositorio; la única fuente de esquema es Flyway (`V1`–`V6`) y la importación es la CLI
+> Java descrita en `docs/DATA_IMPORT.md`.
 
 - **Estado:** propuesta para validación (Fase 0)
 - **Alcance:** esquema PostgreSQL, reglas de validación y estrategia de migración

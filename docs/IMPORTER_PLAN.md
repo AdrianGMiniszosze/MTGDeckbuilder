@@ -1,8 +1,9 @@
 # Plan del importador Java (fase 6)
 
-- **Estado:** aprobada el 2026-11-17; D-023–D-033 aceptadas en `docs/DECISION_LOG.md`
-- **Alcance:** sustituir `import_cards.py` por una CLI Java idempotente que mantenga
-  `cards`, `card_legality`, `card_keywords`, `sets`, `card_faces`, `card_rulings` y precios
+- **Estado:** cerrada el 2026-11-18 (fases 6.1–6.6); D-023–D-033 aceptadas en `docs/DECISION_LOG.md`
+- **Alcance:** CLI Java idempotente que mantiene `cards`, `card_legality`,
+  `card_keywords`, `sets`, `card_faces`, `card_rulings` y precios, en lugar del antiguo
+  `import_cards.py`
 - **Relacionado:** `docs/DATA_IMPORT.md` (estado actual), `docs/DECK_VALIDATION_MODEL.md` §10,
   `docs/DECISION_LOG.md` (D-018, D-019 y las decisiones D-023–D-033)
 - **No es:** la fase de embeddings/recomendación ni un job programado
@@ -15,7 +16,7 @@ riesgo de vaciar mazos.
 
 Al terminar la fase 6:
 
-- `import_cards.py` deja de ser necesario y se retira del repositorio.
+- `import_cards.py` deja de ser necesario y se retira del repositorio. ✅ (fase 6.6)
 - La importación es una CLI que termina con código de salida y un resumen auditable.
 - Los datos que hoy quedan `NULL` o vacíos (precios, rulings, `card_faces`) se pueblan.
 - Las cartas que desaparecen de Scryfall se marcan, no se borran.
@@ -269,8 +270,8 @@ java -jar mtgdeckbuilder.jar --spring.profiles.active=import \
 | 6.5 | Rulings, resumen y códigos de salida | Fallo de una fila → `1` y el resto cargado; corrección de ruling → fila vieja fuera |
 | 6.6 | Retirada del script y docs | Importación real completa en local + `DATA_IMPORT.md` actualizado |
 
-6.1–6.5 están cerradas (código, IT y smoke de Flyway verdes); queda 6.6, que depende de una
-descarga real del bulk y de borrar `import_cards.py`.
+6.1–6.6 están cerradas. La 6.6 se validó con el bulk real del 2026-09-27 en una BD
+recreada desde cero; los números están en §11.1.
 
 ## 11. Criterios de aceptación
 
@@ -287,8 +288,23 @@ descarga real del bulk y de borrar `import_cards.py`.
 - [x] El fixture de `src/test/resources/importer/` carga sin descargar el bulk.
 - [x] `clean` + `test` + `jacoco:report jacoco:check` verdes (702 tests, 99,91 % líneas y
   95,96 % ramas).
-- [ ] `import_cards.py` retirado y `docs/DATA_IMPORT.md` sin instrucciones de Python
-  (fase 6.6, tras la primera carga real).
+- [x] `import_cards.py` retirado y `docs/DATA_IMPORT.md` sin instrucciones de Python
+  (fase 6.6, validada con la carga real).
+
+### 11.1 Carga real (2026-11-18)
+
+BD recreada desde cero (Flyway `V1`–`V6`, 0,5 s) y bulk
+`default-cards-20260927090541.jsonl` (118.404 líneas) + `rulings-20260927090032.jsonl`.
+
+| Ejecución | Resultado | Duración |
+|---|---|---|
+| Parcial `--import.limit=1000` | 937 insertadas, 63 saltadas, 0 fallidas; barrido y rulings omitidos | 9,2 s |
+| Completa | 111.642 insertadas + 937 actualizadas, 5.825 saltadas, 0 fallidas, 0 obsoletas; 78.911 rulings (19.938 oráculos) | 16 min 47 s |
+| Segunda completa | 0 insertadas, 112.579 actualizadas, 5.825 saltadas, 0 fallidas; rulings `inserted=0` y `deleted=0` | 16 min 59 s |
+
+Totales tras las dos pasadas: 112.579 cartas, 5.119 caras, 675.474 legalidades,
+68.158 keywords, 845 sets, 78.911 rulings; 84.859 cartas con precio USD y
+`price_observed_at`; `import_seen` e `import_ruling` vacías. Salida `0` en las tres.
 
 ## 12. Riesgos
 

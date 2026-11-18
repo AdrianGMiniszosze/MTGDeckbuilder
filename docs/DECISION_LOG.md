@@ -34,7 +34,7 @@ ni del historial de chat.
 | D-005 | 2026-11-14 | Recuento de copias por `oracle_id` | Aceptada |
 | D-006 | 2026-11-14 | Publicación fallida devuelve `409 Conflict` | Aceptada |
 | D-007 | 2026-11-14 | Publicar con `LEGALITY_UNKNOWN` está permitido | Aceptada |
-| D-008 | 2026-11-14 | Importación: script manual ahora, CLI Java después | Aceptada |
+| D-008 | 2026-11-14 | Importación: script manual ahora, CLI Java después | Implementada (D-023–D-033) |
 | D-009 | 2026-11-14 | Colecciones y wishlist no viven en `decks` | Aceptada (sin fecha de inicio) |
 | D-010 | 2026-11-14 | Este registro de decisiones existe | Aceptada |
 | D-011 | 2026-11-14 | Directorios en minúsculas, verificados en CI | Aceptada |
@@ -204,6 +204,10 @@ ni del historial de chat.
 - **Actualización (D-018):** El upsert por `scryfall_id` y la idempotencia de las tablas
   hijas ya están implementados en el script; sigue pendiente `is_obsolete`, que va con
   el importador Java.
+- **Actualización (2026-11-18, fase 6.6):** El script se retiró. La CLI Java cubre
+  upsert, `is_obsolete`, caras, precios, rulings y códigos de salida; validada con el
+  bulk real (118.404 líneas) y una segunda pasada con `inserted=0`. Ver
+  `docs/IMPORTER_PLAN.md` §11.1.
 - **Revisar si:** aparece la necesidad de refrescar precios o sets con frecuencia.
 - **Detalle:** `docs/DATA_IMPORT.md`.
 

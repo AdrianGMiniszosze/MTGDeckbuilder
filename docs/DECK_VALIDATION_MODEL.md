@@ -489,9 +489,9 @@ Integración (implementadas):
 
 - **Sin datos de legalidad**, todo mazo sale `unknown` salvo en formatos con
   `tracks_legality = FALSE`. Depende del importador.
-- **El script `src/main/resources/scripts/import_cards.py`** ya escribe el esquema
-  post-`V3` (`copies_limit`, `scryfall_id`, upsert idempotente); ver D-018 y
-  `docs/DATA_IMPORT.md`. Sigue pendiente el rediseño de caras con `card_faces`.
+- **El importador Java** (`--spring.profiles.active=import`) escribe el esquema completo:
+  `copies_limit`, `scryfall_id`, caras en `card_faces`, precios y rulings; ver D-018,
+  D-023–D-033 y `docs/DATA_IMPORT.md`. El script Python se retiró en la fase 6.6.
 - **`DELETE` de cartas desde un import** borraría filas de `card_deck` por el
   `ON DELETE CASCADE`. Un import debe marcar obsoletas, nunca borrar.
 - **Las parejas de comandante dependen de `card_keywords` y `card_text`.** Si un import

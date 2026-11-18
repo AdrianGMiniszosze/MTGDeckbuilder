@@ -287,20 +287,16 @@ MTGDeckbuilder/
 ├── infra/                          # Docker Compose, Dockerfile, .env.example
 ├── src/
 │   ├── main/
-│   │   ├── java/com/deckbuilder/
-│   │   │   ├── Mtgdeckbuilder/     # Primary package tree currently used by most code
-│   │   │   └── mtgdeckbuilder/     # Additional package tree also present in this repo
+│   │   ├── java/com/deckbuilder/mtgdeckbuilder/  # contract, application, infrastructure, model
 │   │   └── resources/
 │   │       ├── api/openapi.yml     # API contract (source of truth)
-│   │       ├── scripts/            # SQL schema
+│   │       ├── db/migration/       # Flyway V1-V6
 │   │       └── application*.properties
 │   └── test/
-│       └── java/com/deckbuilder/Mtgdeckbuilder/  # Test packages
-├── docs/                           # Architecture decisions & technical context
+│       └── java/com/deckbuilder/mtgdeckbuilder/  # *Test (no Docker) and *IntegrationTest
+├── docs/                           # Decisions, data import, validation model
 └── .github/workflows/              # CI/CD with GitHub Actions
 ```
-
-> **Note:** This repository currently contains mixed-case package paths (`Mtgdeckbuilder` and `mtgdeckbuilder`). On case-insensitive filesystems this can be confusing and make renames/error diagnosis harder, so use the exact on-disk casing when navigating or creating files.
 
 > **Important:** Never manually edit files inside `target/generated-sources/` — they are auto-generated from `openapi.yml` on every build.
 
