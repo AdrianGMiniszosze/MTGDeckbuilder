@@ -66,7 +66,7 @@ There are two ways to run the application:
 | Path | Best for |
 |---|---|
 | **[Option A]** DB in Docker + app locally | Day-to-day development (faster, IDE debugging, hot reload) |
-| **[Option B]** Everything in Docker | Quick demo, smoke-testing a production-like setup |
+| **[Option B]** Everything in Docker | Quick local demo with database, app and Mailpit |
 
 ---
 
@@ -237,7 +237,7 @@ mvnw.cmd jacoco:report
 ```
 
 The report answers "what is still untested"; the gate (`jacoco:check`, 100 % lines and
-97.1 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
+97.2 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
 unit, smoke and integration suites have all contributed to `target/jacoco.exec`. The
 floors are a ratchet: raise them when coverage improves, never lower them to make a
 build pass.
@@ -318,8 +318,10 @@ The application resolves configuration from environment variables, with sensible
 | `app.security.rate-limit.*` | See config examples | Shared endpoint limits, windows and bucket retention |
 | `MAIL_HOST`, `MAIL_PORT` | `localhost`, `1025` in dev | Generic SMTP server |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | empty in dev | SMTP credentials |
+| `MAIL_AUTH`, `MAIL_STARTTLS`, `MAIL_SSL` | disabled in dev | SMTP auth and transport security; enable for production |
 | `MAIL_FROM` | local no-reply address | Authentication message sender |
 | `APP_PUBLIC_URL` | `http://localhost:3000` in dev | Frontend base for verification/reset links |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` in dev | Exact browser origins; HTTPS and required in `prod` |
 
 See `src/main/resources/application.properties.example` and the profile-specific `src/main/resources/application-*.properties` files for the full property list, and `infra/.env.example` for the Docker Compose variables.
 
@@ -412,6 +414,7 @@ Testcontainers requires Docker Desktop to be running. Prefer Docker Desktop's de
 ## Further Documentation
 
 - Architecture & design decisions: [`docs/ARCHITECTURE_DECISIONS.md`](docs/ARCHITECTURE_DECISIONS.md)
+- Production deployment checklist: [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md)
 - Database migration strategy: [`docs/DB_MIGRATION_STRATEGY.md`](docs/DB_MIGRATION_STRATEGY.md)
 - Detailed technical context: [`docs/TECHNICAL_AGENT_CONTEXT.md`](docs/TECHNICAL_AGENT_CONTEXT.md)
 - Agent onboarding guide: [`docs/AGENT_QUICKSTART.md`](docs/AGENT_QUICKSTART.md)

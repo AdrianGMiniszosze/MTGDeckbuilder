@@ -49,7 +49,7 @@ invocation separately.
 
 Coverage is JaCoCo (`pom.xml`): agent on every `test` run, HTML report at
 `target/site/jacoco/index.html`, and `jacoco:check` enforcing a bundle floor (100 % lines,
-97.1 % branches) on `verify` or when invoked explicitly. The floors are a ratchet: raise
+97.2 % branches) on `verify` or when invoked explicitly. The floors are a ratchet: raise
 them when coverage improves. Generated OpenAPI classes, MapStruct `*Impl` and
 Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`).
 
@@ -65,6 +65,7 @@ Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`)
 - First admin bootstrap is opt-in via `BOOTSTRAP_ADMIN_ENABLED=true` and `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`; disabled by default and only creates an admin if none exists (D-049). Disable it after provisioning.
 - Auth abuse limits (D-050) are PostgreSQL-backed, shared across replicas, keyed by HMAC of endpoint + socket peer IP; do not trust `X-Forwarded-For` without a trusted-proxy allowlist. Defaults: login 20/5m, register 10/h, refresh/logout 60/5m; verification/reset endpoints have separate hourly limits. `429` includes `Retry-After`; unavailable limiter storage fails closed with `503`. Actuator `metrics` requires `ADMIN`; metric tags must stay low-cardinality.
 - New registrations remain unverified until a single-use email token is consumed; login and refresh reject unverified accounts. Existing users are grandfathered as verified by `V9`; admin-created users and bootstrap admin are verified. Email changes clear verification and invalidate outstanding action tokens. Password reset tokens are single-use, BCrypt the replacement password and revoke every refresh session (D-051). Resend/reset requests are generic `202`, including unknown addresses. Raw action tokens appear only in SMTP email, never API responses, logs or database. Use generic SMTP via `spring.mail.*`; delivery failures are swallowed to avoid account enumeration and counted with purpose-only metrics.
+- `application-prod.properties` activates fail-fast production checks: remote PostgreSQL, JWT secret, HTTPS frontend/CORS, TLS SMTP, enabled rate limits and Flyway fresh install (`baseline-on-migrate=false`). Docker image defaults to `prod` and runs non-root; Compose overrides to `dev` with Mailpit. Compose is not a production deployment. Read `docs/PRODUCTION_READINESS.md` before release; proxy, secrets, SMTP, backups and CI/CodeQL still need environment-specific sign-off.
 - `Format` exposes the real rules (`min_deck_size`, `max_deck_size`, `max_sideboard_size`, `max_copies`, `singleton`, `requires_commander`, `tracks_legality`, `description`); `deck_size` is a read-only derived summary (D-041). On `POST`, omitted rules take the entity defaults; on `PUT`, omitted rules keep the stored value.
 - `ContractConformanceTest` scans the generated `*Api` interfaces and the `@RestController`s and fails when an operation has no explicit override (otherwise the generated `default` answers 501) or an API has no controller (D-040).
 - `include_obsolete=true` is the escape hatch on `/cards` and `/cards/search`; obsolete cards (`cards.is_obsolete`) stay hidden otherwise. `/cards/random` excludes them with no override.

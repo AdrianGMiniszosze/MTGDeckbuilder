@@ -1,3 +1,4 @@
+# Local development stack only. Production uses the hardened image with profile `prod`.
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -12,6 +13,12 @@ services:
     volumes:
       # Schema is owned by Flyway (classpath:db/migration); no bootstrap scripts.
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   mailpit:
     image: axllent/mailpit:v1.34.0
@@ -30,9 +37,12 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - db
-      - mailpit
+      db:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
+      SPRING_PROFILES_ACTIVE: dev
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
@@ -44,6 +54,7 @@ services:
       SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_STARTTLS:-false}
       APP_SECURITY_EMAIL_FROM: ${MAIL_FROM:-no-reply@mtgdeckbuilder.local}
       APP_SECURITY_EMAIL_FRONTEND_BASE_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
+      APP_SECURITY_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
 
 volumes:
   postgres_data:

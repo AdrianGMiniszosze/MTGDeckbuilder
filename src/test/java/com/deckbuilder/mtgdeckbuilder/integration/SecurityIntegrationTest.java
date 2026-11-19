@@ -30,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 @DisplayName("Authorization and Visibility Integration Tests")
 @Transactional
@@ -238,6 +239,18 @@ class SecurityIntegrationTest extends PostgresIntegrationTest {
 				.header("Authorization", bearer("root")))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.name").value("auth.rate_limit.allowed"));
+	}
+
+	@Test
+	@DisplayName("Should allow only configured browser origins")
+	void shouldApplyCorsAllowlist() throws Exception {
+		this.mockMvc.perform(get("/cards").header("Origin", "http://localhost:3000"))
+			.andExpect(status().isOk())
+			.andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"));
+
+		this.mockMvc.perform(get("/cards").header("Origin", "https://evil.example"))
+			.andExpect(status().isForbidden())
+			.andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
 	}
 
 	private UserEntity saveUser(String username, String email, String role) {

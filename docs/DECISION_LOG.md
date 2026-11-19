@@ -78,6 +78,7 @@ ni del historial de chat.
 | D-049 | 2026-11-19 | Bootstrap de primer administrador opt-in | Aceptada |
 | D-050 | 2026-11-19 | Rate limit de auth compartido por PostgreSQL | Aceptada |
 | D-051 | 2026-11-19 | Verificación de email y recuperación con tokens de acción | Aceptada |
+| D-052 | 2026-11-19 | Perfil prod estricto y Compose solo para desarrollo | Aceptada |
 
 ## 4. Entradas
 
@@ -421,6 +422,8 @@ ni del historial de chat.
   completa quedó en **100 % de líneas / 96,92 % de ramas**. El suelo sube a **100 / 96,9**.
 - **Actualización (2026-11-19, fase 12):** la suite completa con verificación y recuperación
   de cuentas quedó en **100 % de líneas / 97,11 % de ramas**. El suelo sube a **100 / 97,1**.
+- **Actualización (2026-11-19, fase 13):** la suite completa con validación de despliegue y
+  CORS quedó en **100 % de líneas / 97,21 % de ramas**. El suelo sube a **100 / 97,2**.
 
 ### D-017 - Las consultas nativas parametrizan todos los filtros
 
@@ -1330,3 +1333,30 @@ ni del historial de chat.
   cuenta en métrica sin datos personales y se puede reenviar.
 - **Revisar si:** se elige proveedor, se implementa el frontend de los enlaces o se requieren
   límites de intentos por cuenta además del límite por peer IP.
+
+### D-052 - Perfil prod estricto y Compose solo para desarrollo
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** La imagen ejecuta el perfil `prod` por defecto, con JRE y usuario no root.
+  El `docker-compose.yml` del repositorio fuerza el perfil `dev` y Mailpit, por lo que no
+  es artefacto de producción. El perfil `prod` exige DB remota, secreto JWT, SMTP cifrado,
+  URL pública HTTPS, CORS por allowlist, límites activos y Flyway sin auto-baseline.
+- **Contexto:** El Compose local incluía Mailpit y parámetros de desarrollo; la imagen
+  corría como root y `application-prod.properties` referenciaba un logback inexistente.
+  Además, la configuración prometía Prometheus sin un registry en el classpath.
+- **Por qué:** Fallar al arrancar por una configuración insegura es mejor que lanzar una
+  API accesible con secreto, CORS, SMTP o base de datos de desarrollo. JRE/no-root reduce
+  superficie de imagen. El runbook hace explícitos los bloqueos operativos que el código
+  no puede resolver sin conocer el proveedor cloud y el dominio.
+- **Alternativas descartadas:** reutilizar Compose local en producción (publica Mailpit y
+  usa límites de desarrollo); defaults permisivos de producción (arranque “exitoso” pero
+  no seguro); confiar globalmente en headers reenviados (rate limit falsificable detrás
+  de proxy).
+- **Consecuencias:** `ProductionConfigurationValidator` verifica perfil prod; CORS solo
+  admite orígenes HTTPS exactos; health no devuelve detalles y Actuator queda admin-only.
+  El gateway debe terminar TLS, limpiar `X-Forwarded-*` y aplicar rate limit por IP cuando
+  la app solo ve el peer proxy. Backups/restore, SMTP real, DNS, ingress y CodeQL siguen
+  siendo gates externos. Ver `docs/PRODUCTION_READINESS.md`.
+- **Revisar si:** se selecciona plataforma de despliegue; entonces crear manifiestos,
+  secretos, probes y políticas de red específicos para esa plataforma.

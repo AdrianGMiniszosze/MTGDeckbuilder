@@ -64,4 +64,35 @@ class AuthEmailPropertiesTest {
 		assertThatThrownBy(properties::validate)
 				.isInstanceOf(IllegalArgumentException.class);
 	}
+
+	@Test
+	@DisplayName("Should reject malformed or non-HTTP frontend URLs")
+	void shouldRequireAbsoluteFrontendUrl() {
+		final AuthEmailProperties properties = new AuthEmailProperties();
+		properties.setFrontendBaseUrl("mailto:help@example.com");
+		assertThatThrownBy(properties::validate)
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Auth email frontend base URL must be absolute HTTP(S)");
+
+		properties.setFrontendBaseUrl("https://user@app.example.com");
+		assertThatThrownBy(properties::validate)
+				.isInstanceOf(IllegalArgumentException.class);
+
+		properties.setFrontendBaseUrl("https://app.example.com?next=/");
+		assertThatThrownBy(properties::validate)
+				.isInstanceOf(IllegalArgumentException.class);
+
+		properties.setFrontendBaseUrl("https://app.example.com#fragment");
+		assertThatThrownBy(properties::validate)
+				.isInstanceOf(IllegalArgumentException.class);
+
+		properties.setFrontendBaseUrl("https:///");
+		assertThatThrownBy(properties::validate)
+				.isInstanceOf(IllegalArgumentException.class);
+
+		properties.setFrontendBaseUrl("https://[");
+		assertThatThrownBy(properties::validate)
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Auth email frontend base URL must be absolute HTTP(S)");
+	}
 }

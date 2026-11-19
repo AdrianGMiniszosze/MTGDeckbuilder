@@ -1,14 +1,14 @@
-# Use Eclipse Temurin instead of deprecated OpenJDK
-FROM eclipse-temurin:21-jdk-alpine
+# Runtime image only; build the JAR with the Maven wrapper before docker build.
+FROM eclipse-temurin:21-jre-alpine
 
-# Set working directory
 WORKDIR /app
 
-# Copy the JAR file from the parent directory
-COPY target/mtgdeckbuilder-*.jar app.jar
+RUN addgroup -S app && adduser -S app -G app
+COPY --chown=app:app target/mtgdeckbuilder-*.jar /app/app.jar
 
-# Expose port
 EXPOSE 8080
 
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# A production container must explicitly override this for local development.
+ENV SPRING_PROFILES_ACTIVE=prod
+USER app
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "/app/app.jar"]
