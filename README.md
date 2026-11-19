@@ -237,7 +237,7 @@ mvnw.cmd jacoco:report
 ```
 
 The report answers "what is still untested"; the gate (`jacoco:check`, 100 % lines and
-96.7 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
+96.9 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
 unit, smoke and integration suites have all contributed to `target/jacoco.exec`. The
 floors are a ratchet: raise them when coverage improves, never lower them to make a
 build pass.
@@ -289,6 +289,8 @@ Public reads: cards, sets, formats, tags, and published non-private decks. Draft
 
 To provision the first administrator on an empty database, temporarily set `BOOTSTRAP_ADMIN_ENABLED=true` and provide `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL`, and `BOOTSTRAP_ADMIN_PASSWORD`. Disable bootstrap after startup. It is disabled by default; no default password exists.
 
+Auth endpoints use PostgreSQL-backed fixed windows shared across app instances: login 20/5 min, registration 10/hour, refresh/logout 60/5 min per socket peer. Limits are configurable under `app.security.rate-limit.*`. Exceeded limits return `429` with `Retry-After`; an unavailable limiter store fails closed with `503`. The peer address is the TCP socket address: do not trust forwarded-IP headers unless a trusted proxy strips client-supplied values. `/actuator/metrics` requires `ADMIN`; metrics never tag usernames, IPs or tokens.
+
 `GET /cards` and `GET /cards/search` hide cards with `is_obsolete = true`; pass `include_obsolete=true` to include cards that are missing from the latest Scryfall bulk import. `GET /cards/random` always excludes them.
 
 ---
@@ -305,6 +307,7 @@ The application resolves configuration from environment variables, with sensible
 | `PORT` | `8080` | HTTP server port |
 | `JWT_SECRET` | required outside dev | HS256 signing secret, at least 32 bytes |
 | `BOOTSTRAP_ADMIN_ENABLED` | `false` | Opt-in creation of the first admin only |
+| `app.security.rate-limit.*` | See config examples | Shared endpoint limits, windows and bucket retention |
 
 See `src/main/resources/application.properties.example` and the profile-specific `src/main/resources/application-*.properties` files for the full property list, and `infra/.env.example` for the Docker Compose variables.
 
@@ -320,7 +323,7 @@ MTGDeckbuilder/
 │   │   ├── java/com/deckbuilder/mtgdeckbuilder/  # contract, application, infrastructure, model
 │   │   └── resources/
 │   │       ├── api/openapi.yml     # API contract (source of truth)
-│   │       ├── db/migration/       # Flyway V1-V7
+│   │       ├── db/migration/       # Flyway V1-V8
 │   │       └── application*.properties
 │   └── test/
 │       └── java/com/deckbuilder/mtgdeckbuilder/  # *Test (no Docker) and *IntegrationTest

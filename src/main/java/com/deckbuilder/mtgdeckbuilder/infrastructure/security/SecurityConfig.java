@@ -53,6 +53,8 @@ public class SecurityConfig {
 						.requestMatchers(HttpMethod.GET, "/cards/**", "/sets/**", "/formats/**", "/tags/**")
 						.permitAll().requestMatchers(HttpMethod.GET, "/decks", "/decks/*", "/decks/*/validation")
 						.permitAll()
+						.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+						.requestMatchers("/actuator/**").hasRole("ADMIN")
 						.anyRequest().authenticated())
 				.oauth2ResourceServer(oauth2 -> oauth2
 						.authenticationEntryPoint(this.authenticationEntryPoint)

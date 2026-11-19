@@ -1,6 +1,8 @@
 package com.deckbuilder.mtgdeckbuilder.integration;
 
 import com.deckbuilder.mtgdeckbuilder.application.implement.PasswordHasher;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.security.AuthRateLimitEndpoint;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.security.AuthRateLimitMetrics;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.DeckRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.FormatRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
@@ -50,6 +52,9 @@ class SecurityIntegrationTest extends PostgresIntegrationTest {
 
 	@Autowired
 	private PasswordHasher passwordHasher;
+
+	@Autowired
+	private AuthRateLimitMetrics authRateLimitMetrics;
 
 	@Autowired
 	private ObjectMapper objectMapper;
@@ -219,6 +224,20 @@ class SecurityIntegrationTest extends PostgresIntegrationTest {
 	@DisplayName("Should keep card reads public")
 	void shouldKeepCardReadsPublic() throws Exception {
 		this.mockMvc.perform(get("/cards")).andExpect(status().isOk());
+	}
+
+	@Test
+	@DisplayName("Should expose health publicly and restrict metrics to administrators")
+	void shouldProtectActuatorMetrics() throws Exception {
+		this.authRateLimitMetrics.record(AuthRateLimitEndpoint.LOGIN, true);
+
+		this.mockMvc.perform(get("/actuator/health")).andExpect(status().isOk());
+		this.mockMvc.perform(get("/actuator/metrics/auth.rate_limit.allowed"))
+			.andExpect(status().isUnauthorized());
+		this.mockMvc.perform(get("/actuator/metrics/auth.rate_limit.allowed")
+				.header("Authorization", bearer("root")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.name").value("auth.rate_limit.allowed"));
 	}
 
 	private UserEntity saveUser(String username, String email, String role) {

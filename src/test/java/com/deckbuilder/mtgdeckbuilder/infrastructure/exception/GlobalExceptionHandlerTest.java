@@ -352,6 +352,36 @@ class GlobalExceptionHandlerTest {
                 request()), HttpStatus.FORBIDDEN, "FORBIDDEN");
     }
 
+    @Test
+    @DisplayName("Should map throttling to 429 with Retry-After")
+    void shouldMapRateLimitExceeded() {
+        final ResponseEntity<ErrorResponse> response = handler.handleRateLimitExceeded(
+                new RateLimitExceededException(37), request());
+
+        assertMapped(response, HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMIT_EXCEEDED");
+        assertThat(response.getHeaders().getFirst(org.springframework.http.HttpHeaders.RETRY_AFTER)).isEqualTo("37");
+        assertThat(body(response).getMessage()).doesNotContain("username", "192.0.2.");
+    }
+
+    @Test
+    @DisplayName("Should keep Retry-After at least one second")
+    void shouldClampRetryAfter() {
+        final ResponseEntity<ErrorResponse> response = handler.handleRateLimitExceeded(
+                new RateLimitExceededException(0), request());
+
+        assertThat(response.getHeaders().getFirst(org.springframework.http.HttpHeaders.RETRY_AFTER)).isEqualTo("1");
+    }
+
+    @Test
+    @DisplayName("Should fail closed with 503 when rate-limit storage is down")
+    void shouldMapRateLimitStoreUnavailable() {
+        final ResponseEntity<ErrorResponse> response = handler.handleRateLimitStoreUnavailable(
+                new RateLimitStoreUnavailableException(), request());
+
+        assertMapped(response, HttpStatus.SERVICE_UNAVAILABLE, "RATE_LIMIT_UNAVAILABLE");
+        assertThat(body(response).getMessage()).doesNotContain("password", "token");
+    }
+
     private record Sample(@NotNull String name) {
     }
 }

@@ -26,6 +26,23 @@ app.security.bootstrap-admin.password=${BOOTSTRAP_ADMIN_PASSWORD:}
 app.security.bootstrap-admin.name=${BOOTSTRAP_ADMIN_NAME:Administrator}
 app.security.bootstrap-admin.country=${BOOTSTRAP_ADMIN_COUNTRY:US}
 
+# Public authentication endpoint throttles, stored in PostgreSQL for shared limits.
+app.security.rate-limit.enabled=true
+app.security.rate-limit.login-limit=20
+app.security.rate-limit.login-window=PT5M
+app.security.rate-limit.register-limit=10
+app.security.rate-limit.register-window=PT1H
+app.security.rate-limit.refresh-limit=60
+app.security.rate-limit.refresh-window=PT5M
+app.security.rate-limit.logout-limit=60
+app.security.rate-limit.logout-window=PT5M
+app.security.rate-limit.bucket-retention=PT24H
+app.security.rate-limit.cleanup-delay=PT1H
+
+# Metrics contain endpoint-only counters; actuator access is admin-only.
+management.endpoints.web.exposure.include=health,metrics
+management.endpoint.health.show-details=never
+
 # JPA Configuration
 # Dialect is auto-detected from JDBC metadata; pinning it makes Hibernate 6 log HHH90000025.
 spring.jpa.hibernate.ddl-auto=none

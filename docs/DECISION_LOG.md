@@ -76,6 +76,7 @@ ni del historial de chat.
 | D-047 | 2026-11-19 | Registro público y alta administrativa separada | Aceptada |
 | D-048 | 2026-11-19 | Visibilidad pública y propiedad de mazos | Aceptada |
 | D-049 | 2026-11-19 | Bootstrap de primer administrador opt-in | Aceptada |
+| D-050 | 2026-11-19 | Rate limit de auth compartido por PostgreSQL | Aceptada |
 
 ## 4. Entradas
 
@@ -415,6 +416,8 @@ ni del historial de chat.
 - **Actualización (2026-11-19, fase 10):** la suite completa quedó en **100 % de líneas /
   96,73 % de ramas**. El suelo sube a **100 / 96,7**; el manejo defensivo de ramas no
   cubiertas sigue siendo el único margen restante.
+- **Actualización (2026-11-19, fase 11):** con los límites de abuso y sus pruebas, la suite
+  completa quedó en **100 % de líneas / 96,92 % de ramas**. El suelo sube a **100 / 96,9**.
 
 ### D-017 - Las consultas nativas parametrizan todos los filtros
 
@@ -1262,3 +1265,31 @@ ni del historial de chat.
   deshabilitarlo. Solo corre en aplicación web servlet.
 - **Revisar si:** se añade aprovisionamiento de administradores mediante infraestructura
   segura o consola administrativa.
+
+### D-050 - Rate limit de auth compartido por PostgreSQL
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** Aplicar ventanas fijas por peer IP a `POST /auth/login`,
+  `/auth/register`, `/auth/refresh` y `/auth/logout`. Persistir contadores atómicos en
+  `auth_rate_limit_buckets`, compartida entre réplicas. La clave es HMAC-SHA256 del endpoint
+  y `remoteAddr`; nunca guardar IP, username ni token en claro. Superar el límite devuelve
+  `429` con `Retry-After`; si PostgreSQL no está disponible, auth falla cerrado con `503`.
+- **Contexto:** Los endpoints públicos permitían intentos automatizados sin límite. Un mapa
+  en memoria no comparte estado entre réplicas y un `X-Forwarded-For` no validado se puede
+  falsificar.
+- **Por qué:** PostgreSQL ya es infraestructura obligatoria y el `INSERT ... ON CONFLICT`
+  serializa consumo entre instancias sin introducir Redis. HMAC reduce la exposición de las
+  direcciones almacenadas. No se bloquea por username: un atacante no puede bloquear la
+  cuenta de otra persona con intentos dirigidos.
+- **Alternativas descartadas:** contador local (se evade al balancear entre instancias);
+  confiar siempre en `X-Forwarded-For` (spoofing); bloquear por cuenta (lockout dirigido);
+  fail-open cuando cae el store (desactiva protección justo durante una degradación).
+- **Consecuencias:** Límites configurables bajo `app.security.rate-limit.*`; valores iniciales:
+  login 20/5 min, registro 10/h, refresh y logout 60/5 min por peer. El peer es el socket
+  remoto: un proxy debe aplicar su propio límite y no se deben confiar cabeceras reenviadas
+  sin una lista explícita de proxies confiables. Las métricas solo etiquetan endpoint y el
+  endpoint Actuator `metrics` requiere `ADMIN`. `V8` crea buckets; limpieza horaria conserva
+  solo 24 horas.
+- **Revisar si:** cambia el proxy/balanceador, el NAT compartido causa falsos positivos o el
+  despliegue adopta un gateway de rate limit dedicado.

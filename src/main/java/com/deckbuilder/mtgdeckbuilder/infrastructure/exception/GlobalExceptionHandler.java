@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -169,6 +170,32 @@ public class GlobalExceptionHandler {
 				.timestamp(LocalDateTime.now()).build();
 
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+	}
+
+	/**
+	 * Handle authentication throttling without logging client identifiers.
+	 */
+	@ExceptionHandler(RateLimitExceededException.class)
+	public ResponseEntity<ErrorResponse> handleRateLimitExceeded(RateLimitExceededException ex,
+			HttpServletRequest request) {
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("RATE_LIMIT_EXCEEDED").status(HttpStatus.TOO_MANY_REQUESTS.value())
+				.path(request.getRequestURI()).timestamp(LocalDateTime.now()).build();
+		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+				.header(HttpHeaders.RETRY_AFTER, Long.toString(ex.getRetryAfterSeconds())).body(error);
+	}
+
+	/**
+	 * Fail closed if the shared throttle store cannot be consulted.
+	 */
+	@ExceptionHandler(RateLimitStoreUnavailableException.class)
+	public ResponseEntity<ErrorResponse> handleRateLimitStoreUnavailable(RateLimitStoreUnavailableException ex,
+			HttpServletRequest request) {
+		log.error("Authentication rate-limit store unavailable");
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("RATE_LIMIT_UNAVAILABLE").status(HttpStatus.SERVICE_UNAVAILABLE.value())
+				.path(request.getRequestURI()).timestamp(LocalDateTime.now()).build();
+		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
 	}
 
 	/**
