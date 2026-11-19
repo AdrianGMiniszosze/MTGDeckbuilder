@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.infrastructure;
 
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -24,7 +25,14 @@ public interface CardInDeckRepository extends JpaRepository<CardInDeckEntity, Lo
 
 	void deleteByDeckIdAndCardIdAndSection(Long deckId, Long cardId, String section);
 
-	void deleteByDeckId(Long deckId);
+	/**
+	 * Bulk delete. A JPQL statement is used instead of a derived delete because
+	 * the derived variant loads every row and relies on the persistence context
+	 * flush, which is fragile inside a larger update.
+	 */
+	@Modifying
+	@Query("DELETE FROM CardInDeckEntity c WHERE c.deckId = :deckId")
+	void deleteByDeckId(@Param("deckId") Long deckId);
 
 	boolean existsByDeckIdAndCardIdAndSection(Long deckId, Long cardId, String section);
 

@@ -17,10 +17,14 @@ import java.nio.charset.StandardCharsets;
 public class PasswordHasher {
 
 	static final int MAX_PASSWORD_BYTES = 72;
+	static final int MIN_PASSWORD_LENGTH = 8;
 
 	private final PasswordEncoder passwordEncoder;
 
 	public String hash(String rawPassword) {
+		if (rawPassword == null || rawPassword.length() < MIN_PASSWORD_LENGTH) {
+			throw new InvalidUserDataException("password must be at least " + MIN_PASSWORD_LENGTH + " characters");
+		}
 		if (rawPassword.getBytes(StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
 			throw new InvalidUserDataException(
 					"hashed_password must be at most " + MAX_PASSWORD_BYTES + " bytes (UTF-8)");

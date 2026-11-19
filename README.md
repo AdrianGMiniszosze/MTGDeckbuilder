@@ -131,7 +131,7 @@ set DB_PASSWORD=yourpassword
 mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-The API is now available at **http://localhost:8080/api/v1**.
+The API is now available at **http://localhost:8080** (routes are root-level, for example `/cards`).
 
 ---
 
@@ -175,7 +175,7 @@ cd infra
 docker compose up -d
 ```
 
-Both the database and the app will start. The API is available at **http://localhost:8080/api/v1**.
+Both the database and the app will start. The API is available at **http://localhost:8080** (routes are root-level, for example `/cards`).
 
 To stop everything:
 
@@ -236,8 +236,8 @@ implementations and Lombok-generated methods are excluded.
 mvnw.cmd jacoco:report
 ```
 
-The report answers "what is still untested"; the gate (`jacoco:check`, 99.9 % lines and
-96.4 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
+The report answers "what is still untested"; the gate (`jacoco:check`, 100 % lines and
+96.7 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
 unit, smoke and integration suites have all contributed to `target/jacoco.exec`. The
 floors are a ratchet: raise them when coverage improves, never lower them to make a
 build pass.
@@ -271,12 +271,23 @@ The full API contract is defined in `src/main/resources/api/openapi.yml`.
 | `GET /sets` | List card sets |
 | `GET /tags` | List tags |
 | `POST /tags` | Create a tag |
+| `POST /auth/register` | Register a regular user |
+| `POST /auth/login` | Obtain access and refresh tokens |
+| `POST /auth/refresh` | Rotate a refresh token |
+| `POST /auth/logout` | Revoke a refresh token |
+| `GET /auth/me` | Get the authenticated profile |
 
 Cards and sets are read-only over HTTP: their data comes from the Scryfall importer, and there is no create/update/delete route for them.
 
 All list endpoints support pagination and default to 20 items on page 0. Parameter names are not fully standardized in the current contract: `/sets` uses `pageSize` / `pageNumber`, while the rest use `pagesize` / `pagenumber`. Follow `src/main/resources/api/openapi.yml` for each endpoint.
 
-`GET /decks` filters are a query, not authorization: there is no authentication yet, so `user_id` does not hide private decks from other callers.
+Authentication uses a 15-minute HS256 access JWT and a 7-day opaque refresh token. Refresh tokens rotate on every use; replaying a revoked token revokes the user's sessions. Supply `JWT_SECRET` with at least 32 bytes in web profiles.
+
+Passwords must contain at least 8 characters and at most 72 UTF-8 bytes (BCrypt limit).
+
+Public reads: cards, sets, formats, tags, and published non-private decks. Draft/private decks are visible only to their owner or an administrator. Deck writes require owner or administrator; `user_id` filters are not authorization. Reference-data writes and `GET /users` require `ADMIN`; users can read/update their own profile.
+
+To provision the first administrator on an empty database, temporarily set `BOOTSTRAP_ADMIN_ENABLED=true` and provide `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL`, and `BOOTSTRAP_ADMIN_PASSWORD`. Disable bootstrap after startup. It is disabled by default; no default password exists.
 
 `GET /cards` and `GET /cards/search` hide cards with `is_obsolete = true`; pass `include_obsolete=true` to include cards that are missing from the latest Scryfall bulk import. `GET /cards/random` always excludes them.
 
@@ -292,6 +303,8 @@ The application resolves configuration from environment variables, with sensible
 | `DB_USERNAME` | `user` | Database username |
 | `DB_PASSWORD` | `changeme` (dev profile default) | Required outside the `dev` profile, or whenever your local DB password differs from the dev default |
 | `PORT` | `8080` | HTTP server port |
+| `JWT_SECRET` | required outside dev | HS256 signing secret, at least 32 bytes |
+| `BOOTSTRAP_ADMIN_ENABLED` | `false` | Opt-in creation of the first admin only |
 
 See `src/main/resources/application.properties.example` and the profile-specific `src/main/resources/application-*.properties` files for the full property list, and `infra/.env.example` for the Docker Compose variables.
 
@@ -307,7 +320,7 @@ MTGDeckbuilder/
 │   │   ├── java/com/deckbuilder/mtgdeckbuilder/  # contract, application, infrastructure, model
 │   │   └── resources/
 │   │       ├── api/openapi.yml     # API contract (source of truth)
-│   │       ├── db/migration/       # Flyway V1-V6
+│   │       ├── db/migration/       # Flyway V1-V7
 │   │       └── application*.properties
 │   └── test/
 │       └── java/com/deckbuilder/mtgdeckbuilder/  # *Test (no Docker) and *IntegrationTest
@@ -321,9 +334,9 @@ MTGDeckbuilder/
 
 ## Database Notes
 
-- The `cards.embedding` column is of type `VECTOR(1536)` and requires the `pgvector` extension, which is pre-installed in the Docker image used by this project.
-- Deck construction rules (4-copy limit, Commander restrictions, format legality) are enforced by a SQL trigger (`check_card_quantity`) in the database itself.
-- The `decks.last_modification` timestamp is updated automatically on any deck change.
+- The `vector` extension is enabled, but `cards.embedding`, its index and semantic-search function are deferred until the embedding model and dimension are chosen.
+- Deck construction rules (copy limits, Commander restrictions, format legality) are enforced in Java; PostgreSQL enforces relational and data-shape constraints only.
+- `decks.updated_at` is maintained by the application when a deck changes.
 - Valid card sections in a deck: `main`, `sideboard`, `maybeboard`.
 - Database migration strategy and change policy: [`docs/DB_MIGRATION_STRATEGY.md`](docs/DB_MIGRATION_STRATEGY.md).
 

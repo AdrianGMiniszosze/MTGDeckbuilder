@@ -70,6 +70,21 @@ class PasswordHasherTest {
 	}
 
 	@Test
+	@DisplayName("Should reject passwords shorter than 8 characters")
+	void shouldRejectTooShortPassword() {
+		assertThatThrownBy(() -> this.passwordHasher.hash("short"))
+			.isInstanceOf(InvalidUserDataException.class)
+			.hasMessageContaining("at least 8 characters");
+	}
+
+	@Test
+	@DisplayName("Should reject a null password")
+	void shouldRejectNullPassword() {
+		assertThatThrownBy(() -> this.passwordHasher.hash(null))
+			.isInstanceOf(InvalidUserDataException.class);
+	}
+
+	@Test
 	@DisplayName("Should count UTF-8 bytes, not characters")
 	void shouldCountBytesForMultibyteCharacters() {
 		// Given - 37 two-byte characters are 74 bytes

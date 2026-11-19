@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DuplicateUserException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidUserDataException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
@@ -15,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -37,8 +39,15 @@ public class UserServiceImpl implements UserService {
 		return this.userRepository.findById(id).map(this.userEntityMapper::toModel);
 	}
 
+	@Override
 	public Optional<User> findByUsername(String username) {
 		return this.userRepository.findByUsername(username).map(this.userEntityMapper::toModel);
+	}
+
+	@Override
+	public Optional<User> findByUsernameOrEmail(String identifier) {
+		return this.userRepository.findByUsername(identifier).or(() -> this.userRepository.findByEmail(identifier))
+				.map(this.userEntityMapper::toModel);
 	}
 
 	public Optional<User> findByEmail(String email) {
@@ -51,8 +60,16 @@ public class UserServiceImpl implements UserService {
 		if (user.getHashedPassword() == null || user.getHashedPassword().isBlank()) {
 			throw new InvalidUserDataException("hashed_password is required to create a user");
 		}
+		if (this.userRepository.existsByUsername(user.getUsername())) {
+			throw new DuplicateUserException("username", user.getUsername());
+		}
+		if (this.userRepository.existsByEmail(user.getEmail())) {
+			throw new DuplicateUserException("email", user.getEmail());
+		}
 		UserEntity entity = this.userEntityMapper.toEntity(user);
 		entity.setHashedPassword(this.passwordHasher.hash(user.getHashedPassword()));
+		entity.setRole("USER");
+		entity.setIsActive(true);
 		entity = this.userRepository.save(entity);
 		return this.userEntityMapper.toModel(entity);
 	}
@@ -62,6 +79,12 @@ public class UserServiceImpl implements UserService {
 	public User update(Long id, User user) {
 		final UserEntity existing = this.userRepository.findById(id)
 				.orElseThrow(() -> new UserNotFoundException(id));
+		if (this.userRepository.existsByUsernameAndIdNot(user.getUsername(), id)) {
+			throw new DuplicateUserException("username", user.getUsername());
+		}
+		if (this.userRepository.existsByEmailAndIdNot(user.getEmail(), id)) {
+			throw new DuplicateUserException("email", user.getEmail());
+		}
 		UserEntity entity = this.userEntityMapper.toEntity(user);
 		entity.setId(id);
 		if (entity.getHashedPassword() == null || entity.getHashedPassword().isBlank()) {
@@ -75,6 +98,15 @@ public class UserServiceImpl implements UserService {
 		entity.setCreatedAt(existing.getCreatedAt());
 		entity = this.userRepository.save(entity);
 		return this.userEntityMapper.toModel(entity);
+	}
+
+	@Override
+	@Transactional
+	public User recordLogin(Long id) {
+		final UserEntity entity = this.userRepository.findById(id)
+				.orElseThrow(() -> new UserNotFoundException(id));
+		entity.setLastLogin(LocalDateTime.now());
+		return this.userEntityMapper.toModel(this.userRepository.save(entity));
 	}
 
 	@Override

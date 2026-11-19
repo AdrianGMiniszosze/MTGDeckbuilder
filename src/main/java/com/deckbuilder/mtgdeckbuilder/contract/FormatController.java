@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -37,6 +38,7 @@ public class FormatController implements FormatsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<FormatDTO> createFormat(@Valid FormatDTO formatDTO) {
 		final var format = this.formatMapper.toModel(formatDTO);
 		final var created = this.formatService.create(format);
@@ -44,6 +46,7 @@ public class FormatController implements FormatsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<FormatDTO> updateFormat(Integer id, @Valid FormatDTO formatDTO) {
 		final var format = this.formatMapper.toModel(formatDTO);
 		final var updated = this.formatService.update(id.longValue(), format);
@@ -51,6 +54,7 @@ public class FormatController implements FormatsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Void> deleteFormat(Integer id) {
 		final boolean deleted = this.formatService.deleteById(id.longValue());
 		if (!deleted) {

@@ -72,6 +72,10 @@ ni del historial de chat.
 | D-043 | 2026-11-19 | Tags de carta con payload propio y borrado idempotente | Aceptada |
 | D-044 | 2026-11-19 | `card_text` sin límite artificial en el contrato | Aceptada |
 | D-045 | 2026-11-19 | Diagnóstico calculado nullable en el contrato | Aceptada |
+| D-046 | 2026-11-19 | Access JWT corto y refresh opaco rotatorio | Aceptada |
+| D-047 | 2026-11-19 | Registro público y alta administrativa separada | Aceptada |
+| D-048 | 2026-11-19 | Visibilidad pública y propiedad de mazos | Aceptada |
+| D-049 | 2026-11-19 | Bootstrap de primer administrador opt-in | Aceptada |
 
 ## 4. Entradas
 
@@ -408,6 +412,9 @@ ni del historial de chat.
 - **Actualización (2026-11-18, tras el importador 6.5):** 99,91 % de líneas y 95,96 % de
   ramas; el suelo sube a **99,9 / 95,8**. Solo quedan sin cubrir las dos líneas de
   `main()`; el resto del hueco son ramas defensivas de la API.
+- **Actualización (2026-11-19, fase 10):** la suite completa quedó en **100 % de líneas /
+  96,73 % de ramas**. El suelo sube a **100 / 96,7**; el manejo defensivo de ramas no
+  cubiertas sigue siendo el único margen restante.
 
 ### D-017 - Las consultas nativas parametrizan todos los filtros
 
@@ -1175,3 +1182,83 @@ ni del historial de chat.
   serializa.
 - **Revisar si:** se decide calcular el diagnóstico en la lista (ver D-014).
 - **Detalle:** Reafirma D-014 y D-013; relacionada con D-022 (semántica del `PUT`).
+
+### D-046 - Access JWT corto y refresh opaco rotatorio
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** Emitir access JWT HS256 con vida de 15 minutos y refresh token opaco aleatorio
+  con vida de 7 días. Guardar solo SHA-256 del refresh en `refresh_tokens`; cada refresh lo
+  revoca y entrega uno nuevo. Reutilizar uno revocado revoca todas las sesiones del usuario.
+- **Contexto:** La API necesita identidad entre peticiones y una forma de cerrar sesiones sin
+  mantener estado para cada access token. Persistir el JWT o el refresh en claro aumentaría
+  el impacto de una filtración de base de datos.
+- **Por qué:** Access corto limita la ventana de un JWT robado; el refresh opaco permite
+  rotación, logout y detección de replay. El secreto JWT se exige por configuración y debe
+  tener al menos 32 bytes.
+- **Alternativas descartadas:** access token de larga vida (revocación tardía); refresh JWT
+  autocontenido (no permite detectar reutilización sin persistirlo); guardar tokens en claro
+  (credenciales reutilizables tras filtrar la BD).
+- **Consecuencias:** `V7` añade almacenamiento de refresh; clientes deben reemplazar el
+  refresh token tras cada uso y volver a iniciar sesión si se detecta replay.
+- **Revisar si:** el despliegue requiere revocación inmediata de access tokens o varios
+  servicios validadores con rotación de claves.
+
+### D-047 - Registro público y alta administrativa separada
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** `POST /auth/register` permite registro sin sesión y siempre crea usuario
+  activo con rol `USER`. `POST /users` queda reservado a administradores.
+- **Contexto:** El autoservicio requiere alta pública, pero permitir enviar `role` en una
+  ruta pública o de usuario permitiría escalar privilegios.
+- **Por qué:** El rol lo determina el servidor; registro y administración tienen propósitos
+  y permisos distintos.
+- **Alternativas descartadas:** mantener solo `POST /users` público (exposición de rol);
+  añadir un campo `role` al registro (escalada de privilegios); cerrar todo registro
+  (impide el alta de usuarios normales).
+- **Consecuencias:** `users.hashed_password` siempre se genera con BCrypt; contraseña de
+  al menos 8 caracteres y máximo 72 bytes UTF-8. `DeckDTO.user_id` es de solo lectura y la
+  API lo deriva de la sesión.
+- **Revisar si:** se incorpora invitación, verificación de email o aprobación manual.
+
+### D-048 - Visibilidad pública y propiedad de mazos
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** Mazos publicados y no privados son visibles sin sesión. Borradores y mazos
+  privados solo los leen su dueño o un administrador. Solo dueño o administrador puede
+  escribir; un mazo oculto ajeno responde `404`, uno público ajeno al escribir responde `403`.
+- **Contexto:** Sin esta separación, añadir autenticación protegería perfiles pero expondría
+  borradores o permitiría modificar mazos de otros usuarios.
+- **Por qué:** `404` evita revelar la existencia de un recurso privado; `403` comunica que
+  existe un recurso público pero la operación no está autorizada. Los filtros `user_id`,
+  `format` y `status` no sustituyen las reglas de acceso.
+- **Alternativas descartadas:** exigir sesión para toda lectura (quita el descubrimiento
+  público); responder siempre `403` (filtra la existencia de borradores); confiar en
+  `user_id` enviado por el cliente (suplantación de dueño).
+- **Consecuencias:** `GET /decks` aplica visibilidad según actor; las escrituras derivan o
+  conservan el dueño en servidor. `/cards`, `/sets`, `/formats` y `/tags` mantienen lecturas
+  públicas; escrituras administrativas requieren rol `ADMIN`.
+- **Revisar si:** aparecen mazos compartidos, colaboradores o permisos distintos de dueño.
+
+### D-049 - Bootstrap de primer administrador opt-in
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** Provisionar el primer `ADMIN` solo cuando
+  `app.security.bootstrap-admin.enabled=true`, existan username/email/password y aún no
+  haya administrador. La opción está desactivada por defecto y nunca promueve ni modifica
+  usuarios existentes.
+- **Contexto:** En una base vacía, todas las operaciones administrativas estarían cerradas;
+  hacer pública una ruta para crear el primer admin sería una escalada permanente.
+- **Por qué:** La operación requiere configuración local controlada y no añade una ruta
+  remota. La guarda por existencia evita sobreescritura accidental.
+- **Alternativas descartadas:** promover al primer usuario registrado (carrera y elevación
+  de privilegios); dejar credenciales por defecto (acceso predecible); añadir endpoint de
+  bootstrap público (difícil de cerrar de forma segura).
+- **Consecuencias:** Habilitar temporalmente `BOOTSTRAP_ADMIN_ENABLED` y suministrar
+  `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD`; luego
+  deshabilitarlo. Solo corre en aplicación web servlet.
+- **Revisar si:** se añade aprovisionamiento de administradores mediante infraestructura
+  segura o consola administrativa.

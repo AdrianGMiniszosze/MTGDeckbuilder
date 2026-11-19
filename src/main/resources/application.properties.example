@@ -10,6 +10,22 @@ spring.datasource.username=${DB_USERNAME:user}
 spring.datasource.password=${DB_PASSWORD}
 spring.datasource.driver-class-name=org.postgresql.Driver
 
+# Authentication
+# Required in web profiles: a random value of at least 32 bytes.
+# Generate one with: openssl rand -base64 48
+app.security.jwt.secret=${JWT_SECRET}
+app.security.jwt.access-token-ttl=PT15M
+app.security.jwt.refresh-token-ttl=P7D
+
+# Optional one-time first-admin provisioning; disabled by default.
+# Enable temporarily and supply credentials, then disable after startup.
+app.security.bootstrap-admin.enabled=${BOOTSTRAP_ADMIN_ENABLED:false}
+app.security.bootstrap-admin.username=${BOOTSTRAP_ADMIN_USERNAME:admin}
+app.security.bootstrap-admin.email=${BOOTSTRAP_ADMIN_EMAIL:}
+app.security.bootstrap-admin.password=${BOOTSTRAP_ADMIN_PASSWORD:}
+app.security.bootstrap-admin.name=${BOOTSTRAP_ADMIN_NAME:Administrator}
+app.security.bootstrap-admin.country=${BOOTSTRAP_ADMIN_COUNTRY:US}
+
 # JPA Configuration
 # Dialect is auto-detected from JDBC metadata; pinning it makes Hibernate 6 log HHH90000025.
 spring.jpa.hibernate.ddl-auto=none

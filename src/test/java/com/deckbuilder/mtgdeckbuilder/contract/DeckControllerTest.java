@@ -5,10 +5,13 @@ import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckCardRequestDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckValidationDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
+import com.deckbuilder.mtgdeckbuilder.application.implement.DeckAccessPolicy;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.security.CurrentActorProvider;
+import com.deckbuilder.mtgdeckbuilder.model.Actor;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
@@ -49,16 +52,27 @@ class DeckControllerTest {
 	@Mock
 	private DeckValidationMapper deckValidationMapper;
 
+	@Mock
+	private CurrentActorProvider currentActorProvider;
+
+	@Mock
+	private DeckAccessPolicy deckAccessPolicy;
+
 	@InjectMocks
 	private DeckController deckController;
+
+	private static final Actor ACTOR = new Actor(1L, "testuser", false);
 
 	private Deck testDeck;
     private CompleteDeckDTO testCompleteDeckDTO;
 
 	@BeforeEach
 	void setUp() {
+		lenient().when(this.currentActorProvider.currentActorOrNull()).thenReturn(ACTOR);
+		lenient().when(this.currentActorProvider.requireActor()).thenReturn(ACTOR);
 		this.testDeck = Deck.builder().id(1L).name("Test Deck").description("A test deck").userId(1L).formatId(1L)
 				.isPrivate(false).created(LocalDateTime.now()).modified(LocalDateTime.now()).build();
+		lenient().when(this.deckService.findById(1L)).thenReturn(Optional.of(this.testDeck));
 
 
         this.testCompleteDeckDTO = CompleteDeckDTO.builder().id(1).deck_name("Test Deck").description("A test deck").user_id(1)
@@ -74,7 +88,7 @@ class DeckControllerTest {
 		final CompleteDeckDTO deckDTO2 = CompleteDeckDTO.builder().id(2).deck_name("Deck 2").user_id(1).format(1)
 				.build();
 
-		when(this.deckService.getAll(20, 0, null, null, null)).thenReturn(Arrays.asList(this.testDeck, deck2));
+		when(this.deckService.getAll(20, 0, null, null, null, ACTOR)).thenReturn(Arrays.asList(this.testDeck, deck2));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Arrays.asList(this.testCompleteDeckDTO, deckDTO2));
 
 		// When
@@ -85,14 +99,14 @@ class DeckControllerTest {
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(2);
 		assertThat(response.getBody().getFirst().getDeck_name()).isEqualTo("Test Deck");
-		verify(this.deckService).getAll(20, 0, null, null, null);
+		verify(this.deckService).getAll(20, 0, null, null, null, ACTOR);
 	}
 
 	@Test
 	@DisplayName("Should list decks with custom pagination")
 	void shouldListDecks_WithCustomPagination() {
 		// Given
-		when(this.deckService.getAll(20, 1, null, null, null)).thenReturn(Collections.singletonList(this.testDeck));
+		when(this.deckService.getAll(20, 1, null, null, null, ACTOR)).thenReturn(Collections.singletonList(this.testDeck));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testCompleteDeckDTO));
 
 		// When
@@ -101,14 +115,14 @@ class DeckControllerTest {
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(1);
-		verify(this.deckService).getAll(20, 1, null, null, null);
+		verify(this.deckService).getAll(20, 1, null, null, null, ACTOR);
 	}
 
 	@Test
 	@DisplayName("Should filter decks by owner, format and status")
 	void shouldFilterDecks() {
 		// Given
-		when(this.deckService.getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED))
+		when(this.deckService.getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED, ACTOR))
 			.thenReturn(Collections.singletonList(this.testDeck));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testCompleteDeckDTO));
 
@@ -118,14 +132,14 @@ class DeckControllerTest {
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		verify(this.deckService).getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED);
+		verify(this.deckService).getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED, ACTOR);
 	}
 
 	@Test
 	@DisplayName("Should accept the draft status filter case-insensitively")
 	void shouldAcceptDraftStatusFilter() {
 		// Given
-		when(this.deckService.getAll(20, 0, null, null, DeckStatus.DRAFT))
+		when(this.deckService.getAll(20, 0, null, null, DeckStatus.DRAFT, ACTOR))
 			.thenReturn(Collections.singletonList(this.testDeck));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testCompleteDeckDTO));
 
@@ -135,7 +149,7 @@ class DeckControllerTest {
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		verify(this.deckService).getAll(20, 0, null, null, DeckStatus.DRAFT);
+		verify(this.deckService).getAll(20, 0, null, null, DeckStatus.DRAFT, ACTOR);
 	}
 
 	@Test
@@ -145,7 +159,7 @@ class DeckControllerTest {
 			.isInstanceOf(InvalidDeckCompositionException.class)
 			.hasMessageContaining("Invalid status");
 
-		verify(this.deckService, never()).getAll(anyInt(), anyInt(), any(), any(), any());
+		verify(this.deckService, never()).getAll(anyInt(), anyInt(), any(), any(), any(), any());
 	}
 
 	@Test
@@ -413,7 +427,7 @@ class DeckControllerTest {
 		assertThatThrownBy(() -> this.deckController.deleteDeck(999)).isInstanceOf(DeckNotFoundException.class)
 				.hasMessageContaining("Deck not found with id: 999");
 
-		verify(this.deckService).deleteById(999L);
+		verify(this.deckService, never()).deleteById(999L);
 	}
 
 	private static DeckValidationResult validation() {

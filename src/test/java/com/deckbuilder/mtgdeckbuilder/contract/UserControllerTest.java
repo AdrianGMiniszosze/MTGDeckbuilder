@@ -3,9 +3,12 @@ package com.deckbuilder.mtgdeckbuilder.contract;
 import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.UserDTO;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
+import com.deckbuilder.mtgdeckbuilder.application.implement.DeckAccessPolicy;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.UserMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.security.CurrentActorProvider;
+import com.deckbuilder.mtgdeckbuilder.model.Actor;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +29,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -42,14 +46,23 @@ class UserControllerTest {
 	@Mock
 	private DeckMapper deckMapper;
 
+	@Mock
+	private CurrentActorProvider currentActorProvider;
+
+	@Mock
+	private DeckAccessPolicy deckAccessPolicy;
+
 	@InjectMocks
 	private UserController userController;
+
+	private static final Actor ACTOR = new Actor(1L, "johndoe", false);
 
 	private User testUser;
 	private UserDTO testUserDTO;
 
 	@BeforeEach
 	void setUp() {
+		lenient().when(this.currentActorProvider.requireActor()).thenReturn(ACTOR);
 		this.testUser = new User();
 		this.testUser.setId(1L);
 		this.testUser.setName("John Doe");
@@ -74,17 +87,17 @@ class UserControllerTest {
 		final List<User> users = Arrays.asList(this.testUser, user2);
 		final List<UserDTO> userDTOs = Arrays.asList(this.testUserDTO, userDTO2);
 
-		when(this.userService.findAll(10, 0)).thenReturn(users);
+		when(this.userService.findAll(20, 0)).thenReturn(users);
 		when(this.userMapper.toUserDTOs(users)).thenReturn(userDTOs);
 
 		// When
-		final ResponseEntity<List<UserDTO>> response = this.userController.listUsers(10, 0);
+		final ResponseEntity<List<UserDTO>> response = this.userController.listUsers(20, 0);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(2);
 		assertThat(response.getBody().getFirst().getUsername()).isEqualTo("johndoe");
-		verify(this.userService).findAll(10, 0);
+		verify(this.userService).findAll(20, 0);
 	}
 
 	@Test
@@ -179,25 +192,25 @@ class UserControllerTest {
 
 		final CompleteDeckDTO deckDTO2 = CompleteDeckDTO.builder().id(2).deck_name("Red Aggro").user_id(1).build();
 
-		when(this.userService.getUserDecks(1L, 10, 0)).thenReturn(Arrays.asList(deck1, deck2));
+		when(this.userService.getUserDecks(1L, 20, 0)).thenReturn(Arrays.asList(deck1, deck2));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Arrays.asList(deckDTO1, deckDTO2));
 
 		// When
-		final ResponseEntity<List<CompleteDeckDTO>> response = this.userController.getUserDecks(1, 10, 0);
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.userController.getUserDecks(1, 20, 0);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(2);
 		assertThat(response.getBody().get(0).getDeck_name()).isEqualTo("Blue Control");
 		assertThat(response.getBody().get(1).getDeck_name()).isEqualTo("Red Aggro");
-		verify(this.userService).getUserDecks(1L, 10, 0);
+		verify(this.userService).getUserDecks(1L, 20, 0);
 	}
 
 	@Test
 	@DisplayName("Should use default pagination when parameters are null")
 	void shouldUseDefaultPagination_WhenParametersAreNull() {
 		// Given
-		when(this.userService.findAll(10, 0)).thenReturn(Collections.singletonList(this.testUser));
+		when(this.userService.findAll(20, 0)).thenReturn(Collections.singletonList(this.testUser));
 		when(this.userMapper.toUserDTOs(anyList())).thenReturn(Collections.singletonList(this.testUserDTO));
 
 		// When
@@ -205,7 +218,7 @@ class UserControllerTest {
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		verify(this.userService).findAll(10, 0);
+		verify(this.userService).findAll(20, 0);
 	}
 
 	@Test
@@ -217,7 +230,7 @@ class UserControllerTest {
 
 		final CompleteDeckDTO deckDTO = CompleteDeckDTO.builder().id(1).deck_name("Test Deck").user_id(1).build();
 
-		when(this.userService.getUserDecks(1L, 10, 0)).thenReturn(List.of(deck));
+		when(this.userService.getUserDecks(1L, 20, 0)).thenReturn(List.of(deck));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(deckDTO));
 
 		// When
@@ -225,6 +238,6 @@ class UserControllerTest {
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		verify(this.userService).getUserDecks(1L, 10, 0);
+		verify(this.userService).getUserDecks(1L, 20, 0);
 	}
 }

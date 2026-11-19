@@ -17,10 +17,14 @@ public interface DeckRepository extends JpaRepository<DeckEntity, Long> {
 
 	@Query("""
 			SELECT d FROM DeckEntity d
-			WHERE (:userId IS NULL OR d.userId = :userId)
+			WHERE (:admin = TRUE
+			       OR d.userId = :viewerId
+			       OR (d.isPrivate = FALSE AND d.status = 'published'))
+			  AND (:userId IS NULL OR d.userId = :userId)
 			  AND (:formatId IS NULL OR d.formatId = :formatId)
 			  AND (:status IS NULL OR d.status = :status)
 			""")
-	Page<DeckEntity> search(@Param("userId") Long userId, @Param("formatId") Long formatId,
-			@Param("status") String status, Pageable pageable);
+	Page<DeckEntity> searchVisible(@Param("userId") Long userId, @Param("formatId") Long formatId,
+			@Param("status") String status, @Param("viewerId") Long viewerId, @Param("admin") boolean admin,
+			Pageable pageable);
 }

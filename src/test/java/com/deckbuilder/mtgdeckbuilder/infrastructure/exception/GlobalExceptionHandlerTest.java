@@ -303,6 +303,55 @@ class GlobalExceptionHandlerTest {
         assertThat(body(response).getMessage()).doesNotContain("database exploded");
     }
 
+    @Test
+    @DisplayName("Should map invalid credentials to a generic 401")
+    void shouldMapInvalidCredentials() {
+        assertMapped(handler.handleInvalidCredentials(new InvalidCredentialsException(), request()),
+                HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS");
+    }
+
+    @Test
+    @DisplayName("Should map an invalid refresh token to 401")
+    void shouldMapInvalidRefreshToken() {
+        assertMapped(handler.handleInvalidRefreshToken(new InvalidRefreshTokenException(), request()),
+                HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN");
+    }
+
+    @Test
+    @DisplayName("Should map a disabled account to 403")
+    void shouldMapAccountDisabled() {
+        assertMapped(handler.handleAccountDisabled(new AccountDisabledException(), request()), HttpStatus.FORBIDDEN,
+                "ACCOUNT_DISABLED");
+    }
+
+    @Test
+    @DisplayName("Should map a duplicate user to 409")
+    void shouldMapDuplicateUser() {
+        assertMapped(handler.handleDuplicateUser(new DuplicateUserException("username", "johndoe"), request()),
+                HttpStatus.CONFLICT, "USER_ALREADY_EXISTS");
+    }
+
+    @Test
+    @DisplayName("Should map missing authentication to 401")
+    void shouldMapUnauthenticated() {
+        assertMapped(handler.handleUnauthenticated(new UnauthenticatedException(), request()), HttpStatus.UNAUTHORIZED,
+                "UNAUTHORIZED");
+    }
+
+    @Test
+    @DisplayName("Should map ownership failures to 403")
+    void shouldMapForbiddenOperation() {
+        assertMapped(handler.handleForbidden(new ForbiddenOperationException("not yours"), request()),
+                HttpStatus.FORBIDDEN, "FORBIDDEN");
+    }
+
+    @Test
+    @DisplayName("Should map Spring security denials to 403")
+    void shouldMapSpringAccessDenied() {
+        assertMapped(handler.handleForbidden(new org.springframework.security.access.AccessDeniedException("nope"),
+                request()), HttpStatus.FORBIDDEN, "FORBIDDEN");
+    }
+
     private record Sample(@NotNull String name) {
     }
 }

@@ -49,4 +49,14 @@ class JacksonConfigTest {
 		// Then
 		assertThat(user.getHashed_password()).isEqualTo("super-secret-hash");
 	}
+
+	@Test
+	void shouldConstructThePasswordMixin() {
+		assertThat(new JacksonConfig.UserPasswordMixin() {
+			@Override
+			String getHashed_password() {
+				return "hidden";
+			}
+		}).isNotNull();
+	}
 }

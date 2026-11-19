@@ -13,6 +13,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
+import com.deckbuilder.mtgdeckbuilder.model.Actor;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckIssue;
 import com.deckbuilder.mtgdeckbuilder.model.DeckIssueCode;
@@ -71,6 +72,7 @@ class DeckServiceImplTest {
 	private Deck testDeck;
 	private DeckEntity testDeckEntity;
 	private CardInDeckEntity testCardInDeck;
+	private static final Actor ADMIN = new Actor(1L, "admin", true);
 
 	@BeforeEach
 	void setUp() {
@@ -101,53 +103,53 @@ class DeckServiceImplTest {
 		entity2.setName("Deck 2");
 
 		final Page<DeckEntity> page = new PageImpl<>(Arrays.asList(this.testDeckEntity, entity2));
-		when(this.deckRepository.findAll(any(Pageable.class))).thenReturn(page);
+		when(this.deckRepository.searchVisible(isNull(), isNull(), isNull(), eq(1L), eq(true), any(Pageable.class)))
+			.thenReturn(page);
 		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of(this.testCardInDeck));
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 		when(this.deckEntityMapper.toModel(entity2)).thenReturn(deck2);
 
 		// When
-		final List<Deck> result = this.deckService.getAll(10, 0);
+		final List<Deck> result = this.deckService.getAll(10, 0, null, null, null, ADMIN);
 
 		// Then
 		assertThat(result).hasSize(2);
 		assertThat(result.get(0).getName()).isEqualTo("Test Deck");
-		verify(this.deckRepository).findAll(any(Pageable.class));
+		verify(this.deckRepository).searchVisible(null, null, null, 1L, true, Pageable.ofSize(10));
 	}
 
 	@Test
 	@DisplayName("Should filter decks by owner, format and status")
 	void shouldFilterDecks() {
 		// Given
-		when(this.deckRepository.search(eq(5L), eq(2L), eq("published"), any(Pageable.class)))
-			.thenReturn(new PageImpl<>(List.of(this.testDeckEntity)));
+		when(this.deckRepository.searchVisible(eq(5L), eq(2L), eq("published"), eq(1L), eq(true),
+				any(Pageable.class))).thenReturn(new PageImpl<>(List.of(this.testDeckEntity)));
 		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of(this.testCardInDeck));
 		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
 
 		// When
-		final List<Deck> result = this.deckService.getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED);
+		final List<Deck> result = this.deckService.getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED, ADMIN);
 
 		// Then
 		assertThat(result).hasSize(1);
 		assertThat(result.getFirst().getName()).isEqualTo("Test Deck");
 		assertThat(result.getFirst().getCards()).extracting(Deck.CardInDeck::getCardId).containsExactly(100L);
-		verify(this.deckRepository).search(5L, 2L, "published", Pageable.ofSize(20));
-		verify(this.deckRepository, never()).findAll(any(Pageable.class));
+		verify(this.deckRepository).searchVisible(5L, 2L, "published", 1L, true, Pageable.ofSize(20));
 	}
 
 	@Test
 	@DisplayName("Should filter decks with a partial filter set")
 	void shouldFilterDecksWithPartialFilters() {
 		// Given
-		when(this.deckRepository.search(isNull(), isNull(), eq("draft"), any(Pageable.class)))
-			.thenReturn(Page.empty());
+		when(this.deckRepository.searchVisible(isNull(), isNull(), eq("draft"), eq(1L), eq(true),
+				any(Pageable.class))).thenReturn(Page.empty());
 
 		// When
-		final List<Deck> result = this.deckService.getAll(20, 0, null, null, DeckStatus.DRAFT);
+		final List<Deck> result = this.deckService.getAll(20, 0, null, null, DeckStatus.DRAFT, ADMIN);
 
 		// Then
 		assertThat(result).isEmpty();
-		verify(this.deckRepository).search(null, null, "draft", Pageable.ofSize(20));
+		verify(this.deckRepository).searchVisible(null, null, "draft", 1L, true, Pageable.ofSize(20));
 	}
 
 	@Test
@@ -161,7 +163,8 @@ class DeckServiceImplTest {
 				.section("main").build();
 		final Deck deck2 = this.testDeck.toBuilder().id(2L).name("Deck 2").build();
 
-		when(this.deckRepository.findAll(any(Pageable.class)))
+		when(this.deckRepository.searchVisible(isNull(), isNull(), isNull(), eq(1L), eq(true),
+				any(Pageable.class)))
 				.thenReturn(new PageImpl<>(Arrays.asList(this.testDeckEntity, entity2)));
 		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection()))
 				.thenReturn(Arrays.asList(this.testCardInDeck, cardOfDeck2));
@@ -169,7 +172,7 @@ class DeckServiceImplTest {
 		when(this.deckEntityMapper.toModel(entity2)).thenReturn(deck2);
 
 		// When
-		final List<Deck> result = this.deckService.getAll(10, 0);
+		final List<Deck> result = this.deckService.getAll(10, 0, null, null, null, ADMIN);
 
 		// Then
 		assertThat(result.get(0).getCards()).extracting(Deck.CardInDeck::getCardId).containsExactly(100L);
@@ -182,10 +185,11 @@ class DeckServiceImplTest {
 	@DisplayName("Should not query cards when there are no decks")
 	void shouldNotQueryCards_WhenNoDecks() {
 		// Given
-		when(this.deckRepository.findAll(any(Pageable.class))).thenReturn(Page.empty());
+		when(this.deckRepository.searchVisible(isNull(), isNull(), isNull(), eq(1L), eq(true),
+				any(Pageable.class))).thenReturn(Page.empty());
 
 		// When
-		final List<Deck> result = this.deckService.getAll(10, 0);
+		final List<Deck> result = this.deckService.getAll(10, 0, null, null, null, ADMIN);
 
 		// Then
 		assertThat(result).isEmpty();
@@ -405,7 +409,8 @@ class DeckServiceImplTest {
 		entity2.setName("Deck 2");
 		final Deck deck2 = this.testDeck.toBuilder().id(2L).name("Deck 2").build();
 
-		when(this.deckRepository.findAll(any(Pageable.class)))
+		when(this.deckRepository.searchVisible(isNull(), isNull(), isNull(), eq(1L), eq(true),
+				any(Pageable.class)))
 				.thenReturn(new PageImpl<>(Arrays.asList(this.testDeckEntity, entity2)));
 		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of());
 		when(this.deckCommanderRepository.findByDeckIdIn(anyCollection()))
@@ -414,7 +419,7 @@ class DeckServiceImplTest {
 		when(this.deckEntityMapper.toModel(entity2)).thenReturn(deck2);
 
 		// When
-		final List<Deck> result = this.deckService.getAll(10, 0);
+		final List<Deck> result = this.deckService.getAll(10, 0, null, null, null, ADMIN);
 
 		// Then
 		assertThat(result.get(0).getCommanderCardIds()).containsExactly(5L, 10L);
@@ -1165,5 +1170,36 @@ class DeckServiceImplTest {
 				.validationStatus(hasError ? ValidationStatus.ILLEGAL : ValidationStatus.LEGAL)
 				.issues(List.of(issues))
 				.build();
+	}
+
+	@Test
+	@DisplayName("Should pass an anonymous viewer to the visibility filter")
+	void shouldQueryVisibilityForAnonymous() {
+		// Given
+		when(this.deckRepository.searchVisible(isNull(), isNull(), isNull(), isNull(), eq(false),
+				any(Pageable.class))).thenReturn(Page.empty());
+
+		// When
+		final List<Deck> result = this.deckService.getAll(10, 0, null, null, null, null);
+
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.deckRepository).searchVisible(null, null, null, null, false, Pageable.ofSize(10));
+	}
+
+	@Test
+	@DisplayName("Should pass a signed-in viewer to the visibility filter")
+	void shouldQueryVisibilityForAuthenticatedViewer() {
+		// Given
+		final Actor viewer = new Actor(4L, "janedoe", false);
+		when(this.deckRepository.searchVisible(eq(4L), isNull(), eq("draft"), eq(4L), eq(false),
+				any(Pageable.class))).thenReturn(Page.empty());
+
+		// When
+		final List<Deck> result = this.deckService.getAll(10, 0, 4L, null, DeckStatus.DRAFT, viewer);
+
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.deckRepository).searchVisible(4L, null, "draft", 4L, false, Pageable.ofSize(10));
 	}
 }

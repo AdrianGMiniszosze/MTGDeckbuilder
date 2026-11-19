@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application;
 import com.deckbuilder.mtgdeckbuilder.application.implement.PasswordHasher;
 import com.deckbuilder.mtgdeckbuilder.application.implement.UserServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DuplicateUserException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidUserDataException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
@@ -396,5 +397,112 @@ class UserServiceImplTest {
 		assertThat(result.get(0).getName()).isEqualTo("Blue Control");
 		assertThat(result.get(1).getName()).isEqualTo("Red Aggro");
 		verify(this.deckService).findByUserId(1L, 10, 0);
+	}
+
+	@Test
+	@DisplayName("Should resolve an identifier as username first")
+	void shouldResolveIdentifierAsUsername() {
+		// Given
+		when(this.userRepository.findByUsername("johndoe")).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		// When
+		final Optional<User> result = this.userService.findByUsernameOrEmail("johndoe");
+
+		// Then
+		assertThat(result).contains(this.testUser);
+	}
+
+	@Test
+	@DisplayName("Should resolve an identifier as email when the username is unknown")
+	void shouldResolveIdentifierAsEmail() {
+		// Given
+		when(this.userRepository.findByUsername("john@example.com")).thenReturn(Optional.empty());
+		when(this.userRepository.findByEmail("john@example.com")).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		// When
+		final Optional<User> result = this.userService.findByUsernameOrEmail("john@example.com");
+
+		// Then
+		assertThat(result).contains(this.testUser);
+	}
+
+	@Test
+	@DisplayName("Should reject a duplicate username on creation")
+	void shouldRejectDuplicateUsernameOnCreate() {
+		// Given
+		when(this.userRepository.existsByUsername("johndoe")).thenReturn(true);
+
+		// When/Then
+		assertThatThrownBy(() -> this.userService.create(this.testUser))
+			.isInstanceOf(DuplicateUserException.class);
+		verify(this.userRepository, never()).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should reject a duplicate email on creation")
+	void shouldRejectDuplicateEmailOnCreate() {
+		// Given
+		when(this.userRepository.existsByUsername("johndoe")).thenReturn(false);
+		when(this.userRepository.existsByEmail("john@example.com")).thenReturn(true);
+
+		// When/Then
+		assertThatThrownBy(() -> this.userService.create(this.testUser))
+			.isInstanceOf(DuplicateUserException.class);
+		verify(this.userRepository, never()).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should reject a duplicate username on update")
+	void shouldRejectDuplicateUsernameOnUpdate() {
+		// Given
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userRepository.existsByUsernameAndIdNot("johndoe", 1L)).thenReturn(true);
+
+		// When/Then
+		assertThatThrownBy(() -> this.userService.update(1L, this.testUser))
+			.isInstanceOf(DuplicateUserException.class);
+		verify(this.userRepository, never()).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should reject a duplicate email on update")
+	void shouldRejectDuplicateEmailOnUpdate() {
+		// Given
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userRepository.existsByUsernameAndIdNot("johndoe", 1L)).thenReturn(false);
+		when(this.userRepository.existsByEmailAndIdNot("john@example.com", 1L)).thenReturn(true);
+
+		// When/Then
+		assertThatThrownBy(() -> this.userService.update(1L, this.testUser))
+			.isInstanceOf(DuplicateUserException.class);
+		verify(this.userRepository, never()).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should stamp the last login")
+	void shouldRecordLogin() {
+		// Given
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userRepository.save(this.testUserEntity)).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		// When
+		final User result = this.userService.recordLogin(1L);
+
+		// Then
+		assertThat(this.testUserEntity.getLastLogin()).isNotNull();
+		assertThat(result).isEqualTo(this.testUser);
+	}
+
+	@Test
+	@DisplayName("Should fail to stamp a login for an unknown user")
+	void shouldRejectRecordLoginForUnknownUser() {
+		// Given
+		when(this.userRepository.findById(99L)).thenReturn(Optional.empty());
+
+		// When/Then
+		assertThatThrownBy(() -> this.userService.recordLogin(99L)).isInstanceOf(UserNotFoundException.class);
 	}
 }

@@ -6,10 +6,13 @@ import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckValidationDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.DeckCardRequestDTO;
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
+import com.deckbuilder.mtgdeckbuilder.application.implement.DeckAccessPolicy;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.security.CurrentActorProvider;
+import com.deckbuilder.mtgdeckbuilder.model.Actor;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import jakarta.validation.Valid;
@@ -27,6 +30,8 @@ public class DeckController implements DecksApi {
 	private final DeckService deckService;
 	private final DeckMapper deckMapper;
 	private final DeckValidationMapper deckValidationMapper;
+	private final CurrentActorProvider currentActorProvider;
+	private final DeckAccessPolicy deckAccessPolicy;
 
 	@Override
 	public ResponseEntity<List<CompleteDeckDTO>> listDecks(Integer pagesize, Integer pagenumber, Integer userId,
@@ -35,7 +40,7 @@ public class DeckController implements DecksApi {
 				pagenumber != null ? pagenumber : 0,
 				userId != null ? userId.longValue() : null,
 				format != null ? format.longValue() : null,
-				parseStatus(status));
+				parseStatus(status), this.currentActorProvider.currentActorOrNull());
 		return ResponseEntity.ok(this.deckMapper.toCompleteDecksDTO(decks));
 	}
 
@@ -53,15 +58,18 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<CompleteDeckDTO> getDeckById(Integer id) {
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
 		final var deck = this.deckService.findById(id.longValue())
 				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireRead(deck, actor);
 		final var validation = this.deckService.validate(id.longValue());
 		return ResponseEntity.ok(this.deckMapper.toCompleteDeckDTO(deck, validation));
 	}
 
 	@Override
 	public ResponseEntity<DeckDTO> createDeck(@Valid DeckDTO deckDTO) {
-		final var deck = this.deckMapper.toDeck(deckDTO);
+		final Actor actor = this.currentActorProvider.requireActor();
+		final var deck = this.deckMapper.toDeck(deckDTO).toBuilder().userId(actor.userId()).build();
 		final var created = this.deckService.create(deck);
 		final var validation = this.deckService.validate(created.getId());
 		return ResponseEntity.status(HttpStatus.CREATED)
@@ -70,6 +78,11 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<DeckDTO> updateDeck(Integer id, @Valid DeckDTO deckDTO) {
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
+		final var existing = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireWrite(existing, actor);
+
 		Deck deck = this.deckMapper.toDeck(deckDTO);
 		// Omitted arrays preserve the stored rows; an explicit [] clears them.
 		if (!DeckPayloadFields.wasSent(DeckPayloadFields.DECK_CONTENTS)) {
@@ -85,12 +98,20 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<DeckValidationDTO> getDeckValidation(Integer id) {
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
+		final var deck = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireRead(deck, actor);
 		final var validation = this.deckService.validate(id.longValue());
 		return ResponseEntity.ok(this.deckValidationMapper.toDto(validation));
 	}
 
 	@Override
 	public ResponseEntity<DeckDTO> publishDeck(Integer id) {
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
+		final var existing = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireWrite(existing, actor);
 		final var published = this.deckService.publish(id.longValue());
 		final var validation = this.deckService.validate(id.longValue());
 		return ResponseEntity.ok(this.deckMapper.toDeckDTO(published, validation));
@@ -98,6 +119,10 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<DeckDTO> unpublishDeck(Integer id) {
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
+		final var existing = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireWrite(existing, actor);
 		final var draft = this.deckService.unpublish(id.longValue());
 		final var validation = this.deckService.validate(id.longValue());
 		return ResponseEntity.ok(this.deckMapper.toDeckDTO(draft, validation));
@@ -105,6 +130,10 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<DeckDTO> addCardToDeck(Integer id, @Valid DeckCardRequestDTO deckCardRequestDTO) {
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
+		final var existing = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireWrite(existing, actor);
 		final String section = deckCardRequestDTO.getSection() != null
 				? deckCardRequestDTO.getSection().getValue()
 				: "main";
@@ -116,6 +145,10 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<DeckDTO> removeCardFromDeck(Integer id, Integer card_id, Integer quantity, String section) {
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
+		final var existing = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireWrite(existing, actor);
 		final var updated = this.deckService.removeCard(id.longValue(), card_id.longValue(), quantity,
 				section != null ? section : "main");
 		final var validation = this.deckService.validate(id.longValue());
@@ -124,10 +157,11 @@ public class DeckController implements DecksApi {
 
 	@Override
 	public ResponseEntity<Void> deleteDeck(Integer id) {
-		final var deleted = this.deckService.deleteById(id.longValue());
-		if (!deleted) {
-			throw new DeckNotFoundException(id.longValue());
-		}
+		final Actor actor = this.currentActorProvider.currentActorOrNull();
+		final var existing = this.deckService.findById(id.longValue())
+				.orElseThrow(() -> new DeckNotFoundException(id.longValue()));
+		this.deckAccessPolicy.requireWrite(existing, actor);
+		this.deckService.deleteById(id.longValue());
 		return ResponseEntity.noContent().build();
 	}
 }

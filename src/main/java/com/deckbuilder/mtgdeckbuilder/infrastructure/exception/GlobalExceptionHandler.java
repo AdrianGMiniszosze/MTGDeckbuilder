@@ -113,6 +113,96 @@ public class GlobalExceptionHandler {
 	}
 
 	/**
+	 * Handle invalid credentials without revealing whether the user exists.
+	 */
+	@ExceptionHandler(InvalidCredentialsException.class)
+	public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex,
+			HttpServletRequest request) {
+		log.warn("Login rejected: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("INVALID_CREDENTIALS").status(HttpStatus.UNAUTHORIZED.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+	}
+
+	/**
+	 * Handle a missing or invalid refresh token.
+	 */
+	@ExceptionHandler(InvalidRefreshTokenException.class)
+	public ResponseEntity<ErrorResponse> handleInvalidRefreshToken(InvalidRefreshTokenException ex,
+			HttpServletRequest request) {
+		log.warn("Refresh token rejected: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("INVALID_REFRESH_TOKEN").status(HttpStatus.UNAUTHORIZED.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+	}
+
+	/**
+	 * Handle disabled accounts.
+	 */
+	@ExceptionHandler(AccountDisabledException.class)
+	public ResponseEntity<ErrorResponse> handleAccountDisabled(AccountDisabledException ex,
+			HttpServletRequest request) {
+		log.warn("Disabled account login attempt: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("ACCOUNT_DISABLED").status(HttpStatus.FORBIDDEN.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+	}
+
+	/**
+	 * Handle duplicate usernames or emails.
+	 */
+	@ExceptionHandler(DuplicateUserException.class)
+	public ResponseEntity<ErrorResponse> handleDuplicateUser(DuplicateUserException ex, HttpServletRequest request) {
+		log.warn("Duplicate user: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("USER_ALREADY_EXISTS").status(HttpStatus.CONFLICT.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+	}
+
+	/**
+	 * Handle missing authentication on a protected operation.
+	 */
+	@ExceptionHandler(UnauthenticatedException.class)
+	public ResponseEntity<ErrorResponse> handleUnauthenticated(UnauthenticatedException ex,
+			HttpServletRequest request) {
+		log.warn("Authentication required: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("UNAUTHORIZED").status(HttpStatus.UNAUTHORIZED.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+	}
+
+	/**
+	 * Handle ownership and role failures.
+	 */
+	@ExceptionHandler({ ForbiddenOperationException.class,
+			org.springframework.security.access.AccessDeniedException.class })
+	public ResponseEntity<ErrorResponse> handleForbidden(Exception ex, HttpServletRequest request) {
+		log.warn("Forbidden operation: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false)
+				.message("You are not allowed to perform this operation").error("FORBIDDEN")
+				.status(HttpStatus.FORBIDDEN.value()).path(request.getRequestURI()).timestamp(LocalDateTime.now())
+				.build();
+
+		return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+	}
+
+	/**
 	 * Handle invalid user payloads, such as a missing password on creation
 	 */
 	@ExceptionHandler(InvalidUserDataException.class)

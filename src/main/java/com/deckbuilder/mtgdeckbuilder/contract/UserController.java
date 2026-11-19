@@ -4,13 +4,17 @@ import com.deckbuilder.apigenerator.openapi.api.UsersApi;
 import com.deckbuilder.apigenerator.openapi.api.model.CompleteDeckDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.UserDTO;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
+import com.deckbuilder.mtgdeckbuilder.application.implement.DeckAccessPolicy;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.UserMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.security.CurrentActorProvider;
+import com.deckbuilder.mtgdeckbuilder.model.Actor;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -21,22 +25,28 @@ public class UserController implements UsersApi {
 	private final UserService userService;
 	private final UserMapper userMapper;
 	private final DeckMapper deckMapper;
+	private final CurrentActorProvider currentActorProvider;
+	private final DeckAccessPolicy deckAccessPolicy;
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<List<UserDTO>> listUsers(Integer pagesize, Integer pagenumber) {
-		final var users = this.userService.findAll(pagesize != null ? pagesize : 10,
+		final var users = this.userService.findAll(pagesize != null ? pagesize : 20,
 				pagenumber != null ? pagenumber : 0);
 		return ResponseEntity.ok(this.userMapper.toUserDTOs(users));
 	}
 
 	@Override
 	public ResponseEntity<UserDTO> getUserById(Integer id) {
+		final Actor actor = this.currentActorProvider.requireActor();
+		this.deckAccessPolicy.requireSelfOrAdmin(id.longValue(), actor);
 		final var user = this.userService.findById(id.longValue())
 				.orElseThrow(() -> new UserNotFoundException(id.longValue()));
 		return ResponseEntity.ok(this.userMapper.toUserDTO(user));
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<UserDTO> createUser(@Valid UserDTO userDTO) {
 		final var user = this.userMapper.toUser(userDTO);
 		final var created = this.userService.create(user);
@@ -45,12 +55,15 @@ public class UserController implements UsersApi {
 
 	@Override
 	public ResponseEntity<UserDTO> updateUser(Integer id, @Valid UserDTO userDTO) {
+		final Actor actor = this.currentActorProvider.requireActor();
+		this.deckAccessPolicy.requireSelfOrAdmin(id.longValue(), actor);
 		final var user = this.userMapper.toUser(userDTO);
 		final var updated = this.userService.update(id.longValue(), user);
 		return ResponseEntity.ok(this.userMapper.toUserDTO(updated));
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Void> deleteUser(Integer id) {
 		this.userService.deleteById(id.longValue());
 		return ResponseEntity.noContent().build();
@@ -58,7 +71,9 @@ public class UserController implements UsersApi {
 
 	@Override
 	public ResponseEntity<List<CompleteDeckDTO>> getUserDecks(Integer id, Integer pagesize, Integer pagenumber) {
-		final var decks = this.userService.getUserDecks(id.longValue(), pagesize != null ? pagesize : 10,
+		final Actor actor = this.currentActorProvider.requireActor();
+		this.deckAccessPolicy.requireSelfOrAdmin(id.longValue(), actor);
+		final var decks = this.userService.getUserDecks(id.longValue(), pagesize != null ? pagesize : 20,
 				pagenumber != null ? pagenumber : 0);
 		return ResponseEntity.ok(this.deckMapper.toCompleteDecksDTO(decks));
 	}

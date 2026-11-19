@@ -17,8 +17,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Verifies that a completely empty database can be provisioned by Flyway alone
  * (V1 baseline + V2 format seed + V3 deck validation model + V4 commander +
- * V5 import support + V6 ruling staging) and that the resulting schema keeps data shape while
- * format policy lives in Java.
+ * V5 import support + V6 ruling staging + V7 refresh tokens) and that the
+ * resulting schema keeps data shape while format policy lives in Java.
  */
 class FlywayMigrationSmokeIntegrationTest {
 
@@ -37,10 +37,10 @@ class FlywayMigrationSmokeIntegrationTest {
 
             var result = flyway.migrate();
 
-            assertThat(result.migrationsExecuted).isEqualTo(6);
+            assertThat(result.migrationsExecuted).isEqualTo(7);
             assertThat(flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .containsExactly("1", "2", "3", "4", "5", "6");
+                    .containsExactly("1", "2", "3", "4", "5", "6", "7");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
@@ -68,7 +68,7 @@ class FlywayMigrationSmokeIntegrationTest {
                 "card_types", "card_supertypes", "card_subtypes", "card_keywords",
                 "card_faces", "card_rulings", "formats", "card_legality", "decks",
                 "card_deck", "deck_commander", "tags", "card_tag", "card_relationships",
-                "import_seen", "import_ruling"}) {
+                "import_seen", "import_ruling", "refresh_tokens"}) {
             assertThat(hasTable(connection, table)).as("table %s", table).isTrue();
         }
     }
@@ -100,6 +100,11 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(hasColumn(connection, "deck_commander", "card_id")).isTrue();
         assertThat(hasColumn(connection, "users", "role")).isTrue();
         assertThat(hasColumn(connection, "users", "is_active")).isTrue();
+
+        assertThat(hasColumn(connection, "refresh_tokens", "user_id")).isTrue();
+        assertThat(hasColumn(connection, "refresh_tokens", "token_hash")).isTrue();
+        assertThat(hasColumn(connection, "refresh_tokens", "expires_at")).isTrue();
+        assertThat(hasColumn(connection, "refresh_tokens", "revoked_at")).isTrue();
     }
 
     private static void assertLegacyColumnsAreGone(Connection connection) throws Exception {

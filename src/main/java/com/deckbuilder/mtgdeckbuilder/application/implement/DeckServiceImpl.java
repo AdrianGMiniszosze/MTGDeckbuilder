@@ -14,6 +14,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.DeckEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.CardInDeckEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckCommanderEntity;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.DeckEntity;
+import com.deckbuilder.mtgdeckbuilder.model.Actor;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
@@ -45,13 +46,15 @@ public class DeckServiceImpl implements DeckService {
 	private final DeckCommanderRepository deckCommanderRepository;
 
 	@Override
-	public List<Deck> getAll(int pageSize, int pageNumber, Long userId, Long formatId, DeckStatus status) {
+	public List<Deck> getAll(int pageSize, int pageNumber, Long userId, Long formatId, DeckStatus status,
+			Actor viewer) {
 		final Pageable pageable = PageRequest.of(pageNumber, pageSize);
-		if (userId == null && formatId == null && status == null) {
-			return this.withCards(this.deckRepository.findAll(pageable).getContent());
-		}
 		final String statusValue = status != null ? status.getValue() : null;
-		return this.withCards(this.deckRepository.search(userId, formatId, statusValue, pageable).getContent());
+		final Long viewerId = viewer != null ? viewer.userId() : null;
+		final boolean admin = viewer != null && viewer.admin();
+		return this.withCards(
+				this.deckRepository.searchVisible(userId, formatId, statusValue, viewerId, admin, pageable)
+						.getContent());
 	}
 
 	@Override
@@ -95,7 +98,8 @@ public class DeckServiceImpl implements DeckService {
 				.orElseThrow(() -> new DeckNotFoundException(id));
 
 		final LocalDateTime now = LocalDateTime.now();
-		deck = deck.toBuilder().id(id).created(existing.getCreated()).modified(now).build();
+		deck = deck.toBuilder().id(id).userId(existing.getUserId()).created(existing.getCreated()).modified(now)
+				.build();
 		// is_private is optional in the contract; omitting it must not wipe the
 		// stored value or violate the NOT NULL column (PrePersist does not run
 		// on updates).

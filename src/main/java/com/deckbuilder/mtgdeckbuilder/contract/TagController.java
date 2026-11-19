@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,6 +34,7 @@ public class TagController implements TagsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<TagDTO> createTag(@Valid TagDTO tagDTO) {
 		final var tag = this.tagMapper.toTag(tagDTO);
 		final var created = this.tagService.create(tag);
@@ -40,6 +42,7 @@ public class TagController implements TagsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<TagDTO> updateTag(Integer id, @Valid TagDTO tagDTO) {
 		final var tag = this.tagMapper.toTag(tagDTO);
 		final var updated = this.tagService.update(id.longValue(), tag);
@@ -47,6 +50,7 @@ public class TagController implements TagsApi {
 	}
 
 	@Override
+	@PreAuthorize("hasRole('ADMIN')")
 	public ResponseEntity<Void> deleteTag(Integer id) {
 		this.tagService.deleteById(id.longValue());
 		return ResponseEntity.noContent().build();
