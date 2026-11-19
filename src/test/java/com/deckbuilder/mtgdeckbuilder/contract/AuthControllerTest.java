@@ -1,12 +1,16 @@
 package com.deckbuilder.mtgdeckbuilder.contract;
 
 import com.deckbuilder.apigenerator.openapi.api.model.LoginRequestDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.EmailRequestDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.PasswordResetConfirmRequestDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.RefreshRequestDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.RegisterRequestDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.TokenResponseDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.UserDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.VerifyEmailRequestDTO;
 import com.deckbuilder.mtgdeckbuilder.application.AuthService;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
+import com.deckbuilder.mtgdeckbuilder.application.implement.AccountLifecycleService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.UserMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.security.CurrentActorProvider;
@@ -42,6 +46,9 @@ class AuthControllerTest {
 	private UserService userService;
 
 	@Mock
+	private AccountLifecycleService accountLifecycleService;
+
+	@Mock
 	private UserMapper userMapper;
 
 	@Mock
@@ -60,7 +67,7 @@ class AuthControllerTest {
 		final User created = User.builder().id(3L).username("johndoe").build();
 		final UserDTO dto = UserDTO.builder().id(3).name("John Doe").username("johndoe").email("john@example.com")
 				.country("USA").build();
-		when(this.userService.create(any(User.class))).thenReturn(created);
+		when(this.accountLifecycleService.register(any(User.class))).thenReturn(created);
 		when(this.userMapper.toUserDTO(created)).thenReturn(dto);
 
 		final ResponseEntity<UserDTO> response = this.authController.registerUser(request);
@@ -68,7 +75,7 @@ class AuthControllerTest {
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
 		assertThat(response.getBody()).isSameAs(dto);
 		final ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
-		verify(this.userService).create(captor.capture());
+		verify(this.accountLifecycleService).register(captor.capture());
 		assertThat(captor.getValue().getUsername()).isEqualTo("johndoe");
 		assertThat(captor.getValue().getHashedPassword()).isEqualTo("raw-secret");
 	}
@@ -110,6 +117,47 @@ class AuthControllerTest {
 
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
 		verify(this.authService).logout("token");
+	}
+
+	@Test
+	@DisplayName("Should verify email and return 204")
+	void shouldVerifyEmail() {
+		final ResponseEntity<Void> response = this.authController.verifyEmail(
+				VerifyEmailRequestDTO.builder().verification_token("verify-token").build());
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+		verify(this.accountLifecycleService).verifyEmail("verify-token");
+	}
+
+	@Test
+	@DisplayName("Should accept verification resend without revealing account state")
+	void shouldResendVerification() {
+		final ResponseEntity<Void> response = this.authController.resendVerificationEmail(
+				EmailRequestDTO.builder().email("jane@example.com").build());
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+		verify(this.accountLifecycleService).resendVerification("jane@example.com");
+	}
+
+	@Test
+	@DisplayName("Should accept password reset request without revealing account state")
+	void shouldRequestPasswordReset() {
+		final ResponseEntity<Void> response = this.authController.requestPasswordReset(
+				EmailRequestDTO.builder().email("jane@example.com").build());
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+		verify(this.accountLifecycleService).requestPasswordReset("jane@example.com");
+	}
+
+	@Test
+	@DisplayName("Should reset password and return 204")
+	void shouldResetPassword() {
+		final ResponseEntity<Void> response = this.authController.resetPassword(
+				PasswordResetConfirmRequestDTO.builder().reset_token("reset-token")
+						.new_password("new-password-123").build());
+
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+		verify(this.accountLifecycleService).resetPassword("reset-token", "new-password-123");
 	}
 
 	@Test

@@ -77,6 +77,7 @@ ni del historial de chat.
 | D-048 | 2026-11-19 | Visibilidad pública y propiedad de mazos | Aceptada |
 | D-049 | 2026-11-19 | Bootstrap de primer administrador opt-in | Aceptada |
 | D-050 | 2026-11-19 | Rate limit de auth compartido por PostgreSQL | Aceptada |
+| D-051 | 2026-11-19 | Verificación de email y recuperación con tokens de acción | Aceptada |
 
 ## 4. Entradas
 
@@ -418,6 +419,8 @@ ni del historial de chat.
   cubiertas sigue siendo el único margen restante.
 - **Actualización (2026-11-19, fase 11):** con los límites de abuso y sus pruebas, la suite
   completa quedó en **100 % de líneas / 96,92 % de ramas**. El suelo sube a **100 / 96,9**.
+- **Actualización (2026-11-19, fase 12):** la suite completa con verificación y recuperación
+  de cuentas quedó en **100 % de líneas / 97,11 % de ramas**. El suelo sube a **100 / 97,1**.
 
 ### D-017 - Las consultas nativas parametrizan todos los filtros
 
@@ -1271,7 +1274,9 @@ ni del historial de chat.
 - **Fecha:** 2026-11-19
 - **Estado:** Aceptada
 - **Decisión:** Aplicar ventanas fijas por peer IP a `POST /auth/login`,
-  `/auth/register`, `/auth/refresh` y `/auth/logout`. Persistir contadores atómicos en
+  `/auth/register`, `/auth/refresh`, `/auth/logout`, `/auth/verify-email`,
+  `/auth/verify-email/resend`, `/auth/password-reset/request` y `/auth/password-reset`.
+  Persistir contadores atómicos en
   `auth_rate_limit_buckets`, compartida entre réplicas. La clave es HMAC-SHA256 del endpoint
   y `remoteAddr`; nunca guardar IP, username ni token en claro. Superar el límite devuelve
   `429` con `Retry-After`; si PostgreSQL no está disponible, auth falla cerrado con `503`.
@@ -1286,10 +1291,42 @@ ni del historial de chat.
   confiar siempre en `X-Forwarded-For` (spoofing); bloquear por cuenta (lockout dirigido);
   fail-open cuando cae el store (desactiva protección justo durante una degradación).
 - **Consecuencias:** Límites configurables bajo `app.security.rate-limit.*`; valores iniciales:
-  login 20/5 min, registro 10/h, refresh y logout 60/5 min por peer. El peer es el socket
+  login 20/5 min, registro 10/h, refresh y logout 60/5 min por peer; verify 20/h,
+  resend/reset request 5/h y reset confirm 10/h. El peer es el socket
   remoto: un proxy debe aplicar su propio límite y no se deben confiar cabeceras reenviadas
   sin una lista explícita de proxies confiables. Las métricas solo etiquetan endpoint y el
   endpoint Actuator `metrics` requiere `ADMIN`. `V8` crea buckets; limpieza horaria conserva
   solo 24 horas.
 - **Revisar si:** cambia el proxy/balanceador, el NAT compartido causa falsos positivos o el
   despliegue adopta un gateway de rate limit dedicado.
+
+### D-051 - Verificación de email y recuperación con tokens de acción
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** El registro crea cuentas activas pero sin verificar; login y refresh se
+  bloquean hasta verificar el email. El primer email de verificación dura 24 horas y el
+  reset de contraseña una hora. Tokens aleatorios de 32 bytes son single-use; solo se
+  almacena SHA-256. Reemitir un token consume el anterior. Reset requiere un token válido,
+  cambia la contraseña con BCrypt, marca el email verificado y revoca todos los refresh
+  existentes. Reenvío y solicitud de reset devuelven el mismo `202` para cuentas existentes
+  e inexistentes.
+- **Contexto:** El registro público sin prueba de control del email permite cuentas con
+  direcciones ajenas y no existe recuperación segura de contraseña.
+- **Por qué:** Un token aleatorio de alta entropía permite almacenamiento con hash y consumo
+  único. No responder distinto ante email desconocido evita enumeración. Bloquear login
+  obliga a verificar la dirección antes de emitir credenciales.
+- **Alternativas descartadas:** guardar token en claro (una filtración de BD permitiría
+  secuestrar cuentas); consumir el token con `GET` (escáneres de correo pueden abrir enlaces
+  automáticamente); invalidar cuentas antiguas (bloquea usuarios previos); SDK de un
+  proveedor concreto (acoplamiento antes de elegir proveedor).
+- **Consecuencias:** Se usa SMTP genérico vía `JavaMailSender`; proveedor, credenciales,
+  remitente y URL del frontend se configuran fuera del código. `V9` añade `email_verified_at`
+  y `account_action_tokens`; cuentas existentes se marcan verificadas en la migración.
+  Usuarios creados por administración/bootstrap quedan verificados; cambiar el email limpia
+  la verificación e invalida tokens de acción anteriores.
+  El token viaja solo en el correo, en el fragmento del enlace, y se entrega al API mediante
+  `POST`; nunca aparece en respuesta ni logs. Fallo SMTP no revela si el correo existe; se
+  cuenta en métrica sin datos personales y se puede reenviar.
+- **Revisar si:** se elige proveedor, se implementa el frontend de los enlaces o se requieren
+  límites de intentos por cuenta además del límite por peer IP.

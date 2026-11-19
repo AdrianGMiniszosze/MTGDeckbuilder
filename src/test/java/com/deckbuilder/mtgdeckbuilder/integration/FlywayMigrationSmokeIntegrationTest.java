@@ -1,6 +1,7 @@
 package com.deckbuilder.mtgdeckbuilder.integration;
 
 import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 
@@ -9,6 +10,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,7 +20,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * Verifies that a completely empty database can be provisioned by Flyway alone
  * (V1 baseline + V2 format seed + V3 deck validation model + V4 commander +
  * V5 import support + V6 ruling staging + V7 refresh tokens + V8 auth
- * rate-limit buckets) and that the
+ * rate-limit buckets + V9 account-action tokens) and that the
  * resulting schema keeps data shape while format policy lives in Java.
  */
 class FlywayMigrationSmokeIntegrationTest {
@@ -31,17 +33,33 @@ class FlywayMigrationSmokeIntegrationTest {
                 .withPassword("test")) {
             postgres.start();
 
-            Flyway flyway = Flyway.configure()
+            Flyway throughV8 = Flyway.configure()
+                    .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
+                    .locations("classpath:db/migration")
+                    .target(MigrationVersion.fromVersion("8"))
+                    .load();
+
+            var result = throughV8.migrate();
+
+            assertThat(result.migrationsExecuted).isEqualTo(8);
+            assertThat(throughV8.info().applied())
+                    .extracting(migration -> migration.getVersion().getVersion())
+                    .containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
+
+            final long legacyUserId;
+            try (Connection connection = DriverManager.getConnection(
+                    postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())) {
+                legacyUserId = insertUser(connection);
+            }
+
+            final Flyway flyway = Flyway.configure()
                     .dataSource(postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword())
                     .locations("classpath:db/migration")
                     .load();
-
-            var result = flyway.migrate();
-
-            assertThat(result.migrationsExecuted).isEqualTo(8);
+            assertThat(flyway.migrate().migrationsExecuted).isEqualTo(1);
             assertThat(flyway.info().applied())
                     .extracting(migration -> migration.getVersion().getVersion())
-                    .containsExactly("1", "2", "3", "4", "5", "6", "7", "8");
+                    .containsExactly("1", "2", "3", "4", "5", "6", "7", "8", "9");
 
             try (Connection connection = DriverManager.getConnection(
                     postgres.getJdbcUrl(),
@@ -52,13 +70,14 @@ class FlywayMigrationSmokeIntegrationTest {
                 assertLegacyColumnsAreGone(connection);
                 assertSeedFormats(connection);
                 assertImportSupport(connection);
+                assertThat(readNullableTimestamp(connection,
+                        "SELECT email_verified_at FROM users WHERE id = " + legacyUserId)).isNotNull();
 
-                long userId = insertUser(connection);
                 long standardFormatId = formatId(connection, "Standard");
 
-                assertDeckStateConstraints(connection, standardFormatId, userId);
-                assertCardDeckIntegrity(connection, standardFormatId, userId);
-                assertDeckCommanderIntegrity(connection, standardFormatId, userId);
+                assertDeckStateConstraints(connection, standardFormatId, legacyUserId);
+                assertCardDeckIntegrity(connection, standardFormatId, legacyUserId);
+                assertDeckCommanderIntegrity(connection, standardFormatId, legacyUserId);
             }
         }
     }
@@ -69,7 +88,8 @@ class FlywayMigrationSmokeIntegrationTest {
                 "card_types", "card_supertypes", "card_subtypes", "card_keywords",
                 "card_faces", "card_rulings", "formats", "card_legality", "decks",
                 "card_deck", "deck_commander", "tags", "card_tag", "card_relationships",
-                "import_seen", "import_ruling", "refresh_tokens", "auth_rate_limit_buckets"}) {
+                "import_seen", "import_ruling", "refresh_tokens", "auth_rate_limit_buckets",
+                "account_action_tokens"}) {
             assertThat(hasTable(connection, table)).as("table %s", table).isTrue();
         }
     }
@@ -110,6 +130,12 @@ class FlywayMigrationSmokeIntegrationTest {
         assertThat(hasColumn(connection, "auth_rate_limit_buckets", "window_start_epoch")).isTrue();
         assertThat(hasColumn(connection, "auth_rate_limit_buckets", "request_count")).isTrue();
         assertThat(hasColumn(connection, "auth_rate_limit_buckets", "updated_at")).isTrue();
+        assertThat(hasColumn(connection, "users", "email_verified_at")).isTrue();
+        assertThat(hasColumn(connection, "account_action_tokens", "user_id")).isTrue();
+        assertThat(hasColumn(connection, "account_action_tokens", "purpose")).isTrue();
+        assertThat(hasColumn(connection, "account_action_tokens", "token_hash")).isTrue();
+        assertThat(hasColumn(connection, "account_action_tokens", "expires_at")).isTrue();
+        assertThat(hasColumn(connection, "account_action_tokens", "consumed_at")).isTrue();
     }
 
     private static void assertLegacyColumnsAreGone(Connection connection) throws Exception {
@@ -287,6 +313,14 @@ class FlywayMigrationSmokeIntegrationTest {
              ResultSet resultSet = statement.executeQuery()) {
             resultSet.next();
             return resultSet.getLong(1);
+        }
+    }
+
+    private static Timestamp readNullableTimestamp(Connection connection, String sql) throws Exception {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getTimestamp(1);
         }
     }
 

@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 import com.deckbuilder.mtgdeckbuilder.application.AuthService;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.AccountDisabledException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.EmailNotVerifiedException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidCredentialsException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidRefreshTokenException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.security.JwtService;
@@ -45,6 +46,9 @@ public class AuthServiceImpl implements AuthService {
 		if (!Boolean.TRUE.equals(user.getIsActive())) {
 			throw new AccountDisabledException();
 		}
+		if (user.getEmailVerifiedAt() == null) {
+			throw new EmailNotVerifiedException();
+		}
 
 		final User updated = this.userService.recordLogin(user.getId());
 		return sessionFor(updated);
@@ -62,6 +66,10 @@ public class AuthServiceImpl implements AuthService {
 		if (!Boolean.TRUE.equals(user.getIsActive())) {
 			this.refreshTokenService.revokeAllForUser(rotation.userId());
 			throw new AccountDisabledException();
+		}
+		if (user.getEmailVerifiedAt() == null) {
+			this.refreshTokenService.revokeAllForUser(rotation.userId());
+			throw new EmailNotVerifiedException();
 		}
 		return new AuthSession(this.jwtService.issueAccessToken(user), rotation.refreshToken(),
 				this.jwtService.accessTokenSeconds());

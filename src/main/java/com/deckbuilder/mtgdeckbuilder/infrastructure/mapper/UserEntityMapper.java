@@ -15,6 +15,7 @@ public interface UserEntityMapper {
 	@Mapping(target = "role", defaultValue = "USER")
 	@Mapping(target = "isActive", defaultValue = "true")
 	@Mapping(target = "lastLogin", ignore = true)
+	@Mapping(target = "emailVerifiedAt", ignore = true)
 	UserEntity toEntity(User model);
 
 	@Mapping(source = "createdAt", target = "registrationDate")

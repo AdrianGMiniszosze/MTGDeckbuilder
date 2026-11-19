@@ -36,12 +36,36 @@ app.security.rate-limit.refresh-limit=60
 app.security.rate-limit.refresh-window=PT5M
 app.security.rate-limit.logout-limit=60
 app.security.rate-limit.logout-window=PT5M
+app.security.rate-limit.email-verify-limit=20
+app.security.rate-limit.email-verify-window=PT1H
+app.security.rate-limit.email-resend-limit=5
+app.security.rate-limit.email-resend-window=PT1H
+app.security.rate-limit.password-reset-request-limit=5
+app.security.rate-limit.password-reset-request-window=PT1H
+app.security.rate-limit.password-reset-limit=10
+app.security.rate-limit.password-reset-window=PT1H
 app.security.rate-limit.bucket-retention=PT24H
 app.security.rate-limit.cleanup-delay=PT1H
+
+# Email verification and password recovery use a generic SMTP server.
+spring.mail.host=${MAIL_HOST:localhost}
+spring.mail.port=${MAIL_PORT:1025}
+spring.mail.username=${MAIL_USERNAME:}
+spring.mail.password=${MAIL_PASSWORD:}
+spring.mail.properties.mail.smtp.auth=${MAIL_AUTH:false}
+spring.mail.properties.mail.smtp.starttls.enable=${MAIL_STARTTLS:false}
+app.security.email.from=${MAIL_FROM:no-reply@mtgdeckbuilder.local}
+app.security.email.frontend-base-url=${APP_PUBLIC_URL:http://localhost:3000}
+app.security.email.verification-path=/verify-email
+app.security.email.password-reset-path=/reset-password
+app.security.email.verification-token-ttl=P1D
+app.security.email.password-reset-token-ttl=PT1H
+app.security.email.token-cleanup-delay=PT1H
 
 # Metrics contain endpoint-only counters; actuator access is admin-only.
 management.endpoints.web.exposure.include=health,metrics
 management.endpoint.health.show-details=never
+management.health.mail.enabled=false
 
 # JPA Configuration
 # Dialect is auto-detected from JDBC metadata; pinning it makes Hibernate 6 log HHH90000025.

@@ -249,6 +249,7 @@ class SecurityIntegrationTest extends PostgresIntegrationTest {
 		entity.setHashedPassword(this.passwordHasher.hash(PASSWORD));
 		entity.setRole(role);
 		entity.setIsActive(true);
+		entity.setEmailVerifiedAt(LocalDateTime.now());
 		entity.setCreatedAt(LocalDateTime.now());
 		return this.userRepository.save(entity);
 	}

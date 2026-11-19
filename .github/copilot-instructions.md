@@ -37,6 +37,7 @@ The API is defined in `src/main/resources/api/openapi.yml` and follows a REST pa
 - `/formats` - Format definitions
 - `/sets` - Set management
 - `/tags` - Card tagging system
+- `/auth` - Registration, JWT login/refresh, email verification and password recovery
 
 Models are auto-generated using the scs-multiapi-maven-plugin with DTO suffix.
 
@@ -50,7 +51,7 @@ cd infra
 docker compose up -d
 ```
 
-2. Application runs at http://localhost:8080/api
+2. Application runs at http://localhost:8080 (routes are root-level, e.g. `/cards`)
 
 ### Build and Test
 
@@ -91,7 +92,7 @@ API models are generated from OpenAPI spec:
 
 1. Database: Connects via JDBC to PostgreSQL (see `application.properties`)
 2. Card Embeddings: Uses pgvector for embedding storage and similarity search
-3. Authentication: (TODO: Document auth system when implemented)
+3. Authentication: stateless 15-minute HS256 access JWT plus 7-day rotating opaque refresh token. New registrations must verify email before login; reset/verification tokens are single-use and stored as hashes. PostgreSQL-backed per-peer auth limits are shared across replicas. Configure the JWT secret and generic SMTP through environment/properties.
 
 ## Common Operations
 

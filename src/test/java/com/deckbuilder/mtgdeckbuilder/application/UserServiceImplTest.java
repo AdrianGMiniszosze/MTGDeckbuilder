@@ -3,6 +3,7 @@ package com.deckbuilder.mtgdeckbuilder.application;
 import com.deckbuilder.mtgdeckbuilder.application.implement.PasswordHasher;
 import com.deckbuilder.mtgdeckbuilder.application.implement.UserServiceImpl;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.AccountActionTokenRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DuplicateUserException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidUserDataException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundException;
@@ -10,6 +11,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.User;
+import com.deckbuilder.mtgdeckbuilder.model.AccountActionPurpose;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,9 @@ class UserServiceImplTest {
 	private UserRepository userRepository;
 
 	@Mock
+	private AccountActionTokenRepository accountActionTokenRepository;
+
+	@Mock
 	private UserEntityMapper userEntityMapper;
 
 	@Mock
@@ -65,6 +70,7 @@ class UserServiceImplTest {
 		this.testUserEntity.setHashedPassword("hashedPassword123");
 		this.testUserEntity.setCountry("USA");
 		this.testUserEntity.setCreatedAt(LocalDateTime.now());
+		this.testUserEntity.setEmailVerifiedAt(LocalDateTime.now().minusDays(1));
 
 		this.testUser = new User();
 		this.testUser.setId(1L);
@@ -73,6 +79,7 @@ class UserServiceImplTest {
 		this.testUser.setEmail("john@example.com");
 		this.testUser.setHashedPassword("hashedPassword123");
 		this.testUser.setCountry("USA");
+		this.testUser.setEmailVerifiedAt(this.testUserEntity.getEmailVerifiedAt());
 	}
 
 	@Test
@@ -242,7 +249,22 @@ class UserServiceImplTest {
 		assertThat(result.getId()).isEqualTo(1L);
 		assertThat(result.getUsername()).isEqualTo("johndoe");
 		assertThat(this.testUserEntity.getHashedPassword()).isEqualTo("$2a$10$stored-hash");
+		assertThat(this.testUserEntity.getEmailVerifiedAt()).isNotNull();
 		verify(this.passwordHasher).hash("hashedPassword123");
+		verify(this.userRepository).save(this.testUserEntity);
+	}
+
+	@Test
+	@DisplayName("Should create a public registration as unverified")
+	void shouldCreateUnverifiedUser() {
+		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(this.testUserEntity);
+		when(this.passwordHasher.hash("hashedPassword123")).thenReturn("$2a$10$stored-hash");
+		when(this.userRepository.save(this.testUserEntity)).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		this.userService.createUnverified(this.testUser);
+
+		assertThat(this.testUserEntity.getEmailVerifiedAt()).isNull();
 		verify(this.userRepository).save(this.testUserEntity);
 	}
 
@@ -269,8 +291,29 @@ class UserServiceImplTest {
 		assertThat(result.getId()).isEqualTo(1L);
 		assertThat(result.getUsername()).isEqualTo("johndoe");
 		assertThat(incoming.getHashedPassword()).isEqualTo("$2a$10$stored-hash");
+		assertThat(incoming.getEmailVerifiedAt()).isEqualTo(this.testUserEntity.getEmailVerifiedAt());
 		verify(this.userRepository).findById(1L);
 		verify(this.userRepository).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should revoke email verification when email changes")
+	void shouldUnverifyWhenEmailChanges() {
+		final User changedEmail = this.testUser.toBuilder().email("new@example.com").build();
+		final UserEntity incoming = new UserEntity();
+		incoming.setEmail("new@example.com");
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userEntityMapper.toEntity(changedEmail)).thenReturn(incoming);
+		when(this.userRepository.save(any(UserEntity.class))).thenReturn(incoming);
+		when(this.userEntityMapper.toModel(incoming)).thenReturn(changedEmail);
+
+		this.userService.update(1L, changedEmail);
+
+		assertThat(incoming.getEmailVerifiedAt()).isNull();
+		verify(this.accountActionTokenRepository).consumeActive(eq(1L),
+				eq(AccountActionPurpose.EMAIL_VERIFICATION), any(LocalDateTime.class));
+		verify(this.accountActionTokenRepository).consumeActive(eq(1L),
+				eq(AccountActionPurpose.PASSWORD_RESET), any(LocalDateTime.class));
 	}
 
 	@Test
@@ -318,6 +361,24 @@ class UserServiceImplTest {
 		assertThat(incoming.getRole()).isEqualTo(this.testUserEntity.getRole());
 		assertThat(incoming.getIsActive()).isEqualTo(this.testUserEntity.getIsActive());
 		assertThat(incoming.getCreatedAt()).isEqualTo(this.testUserEntity.getCreatedAt());
+		verify(this.passwordHasher, never()).hash(any());
+	}
+
+	@Test
+	@DisplayName("Should keep the stored password when update sends a blank password")
+	void shouldKeepPassword_WhenUpdatePasswordIsBlank() {
+		final UserEntity incoming = new UserEntity();
+		incoming.setUsername("johndoe");
+		incoming.setEmail("john@example.com");
+		incoming.setHashedPassword("   ");
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userEntityMapper.toEntity(this.testUser)).thenReturn(incoming);
+		when(this.userRepository.save(any(UserEntity.class))).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		this.userService.update(1L, this.testUser);
+
+		assertThat(incoming.getHashedPassword()).isEqualTo("hashedPassword123");
 		verify(this.passwordHasher, never()).hash(any());
 	}
 
@@ -373,6 +434,62 @@ class UserServiceImplTest {
 
 		// Then
 		verify(this.userRepository).deleteById(userId);
+	}
+
+	@Test
+	@DisplayName("Should mark an unverified email as verified")
+	void shouldVerifyEmail() {
+		this.testUserEntity.setEmailVerifiedAt(null);
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userRepository.save(this.testUserEntity)).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		this.userService.verifyEmail(1L);
+
+		assertThat(this.testUserEntity.getEmailVerifiedAt()).isNotNull();
+		verify(this.userRepository).save(this.testUserEntity);
+	}
+
+	@Test
+	@DisplayName("Should leave an already verified email unchanged")
+	void shouldNotRewriteVerifiedEmail() {
+		final LocalDateTime verifiedAt = this.testUserEntity.getEmailVerifiedAt();
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		this.userService.verifyEmail(1L);
+
+		assertThat(this.testUserEntity.getEmailVerifiedAt()).isEqualTo(verifiedAt);
+		verify(this.userRepository, never()).save(any(UserEntity.class));
+	}
+
+	@Test
+	@DisplayName("Should set a password and verify email during recovery")
+	void shouldResetPasswordAndVerifyEmail() {
+		this.testUserEntity.setEmailVerifiedAt(null);
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.passwordHasher.hash("new-password-123")).thenReturn("$2a$10$new-password-hash");
+		when(this.userRepository.save(this.testUserEntity)).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		this.userService.resetPassword(1L, "new-password-123");
+
+		assertThat(this.testUserEntity.getHashedPassword()).isEqualTo("$2a$10$new-password-hash");
+		assertThat(this.testUserEntity.getEmailVerifiedAt()).isNotNull();
+	}
+
+	@Test
+	@DisplayName("Should keep verification timestamp when resetting an already verified account")
+	void shouldKeepEmailVerificationOnPasswordReset() {
+		final LocalDateTime verifiedAt = this.testUserEntity.getEmailVerifiedAt();
+		when(this.userRepository.findById(1L)).thenReturn(Optional.of(this.testUserEntity));
+		when(this.passwordHasher.hash("new-password-123")).thenReturn("$2a$10$new-password-hash");
+		when(this.userRepository.save(this.testUserEntity)).thenReturn(this.testUserEntity);
+		when(this.userEntityMapper.toModel(this.testUserEntity)).thenReturn(this.testUser);
+
+		this.userService.resetPassword(1L, "new-password-123");
+
+		assertThat(this.testUserEntity.getEmailVerifiedAt()).isEqualTo(verifiedAt);
 	}
 
 	@Test

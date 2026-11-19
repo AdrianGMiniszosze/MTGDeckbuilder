@@ -11,9 +11,13 @@ public interface UserService {
 	Optional<User> findById(Long id);
 	Optional<User> findByUsername(String username);
 	Optional<User> findByUsernameOrEmail(String identifier);
+	Optional<User> findByEmail(String email);
 	User create(User user);
+	User createUnverified(User user);
 	User update(Long id, User user);
 	User recordLogin(Long id);
+	User verifyEmail(Long id);
+	User resetPassword(Long id, String rawPassword);
 	void deleteById(Long id);
 	List<Deck> getUserDecks(Long userId, int pageSize, int pageNumber);
 }

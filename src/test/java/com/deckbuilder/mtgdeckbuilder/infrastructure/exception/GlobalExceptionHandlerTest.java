@@ -325,6 +325,23 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("Should map an unverified email to 403")
+    void shouldMapEmailNotVerified() {
+        assertMapped(handler.handleEmailNotVerified(new EmailNotVerifiedException(), request()),
+                HttpStatus.FORBIDDEN, "EMAIL_NOT_VERIFIED");
+    }
+
+    @Test
+    @DisplayName("Should map invalid account action token to a generic 400")
+    void shouldMapInvalidAccountActionToken() {
+        final ResponseEntity<ErrorResponse> response = handler.handleInvalidAccountActionToken(
+                new InvalidAccountActionTokenException(), request());
+
+        assertMapped(response, HttpStatus.BAD_REQUEST, "INVALID_ACTION_TOKEN");
+        assertThat(body(response).getMessage()).doesNotContain("email", "password");
+    }
+
+    @Test
     @DisplayName("Should map a duplicate user to 409")
     void shouldMapDuplicateUser() {
         assertMapped(handler.handleDuplicateUser(new DuplicateUserException("username", "johndoe"), request()),

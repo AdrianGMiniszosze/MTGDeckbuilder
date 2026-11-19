@@ -38,6 +38,9 @@ public class UserEntity {
 	@Column(name = "last_login")
 	private LocalDateTime lastLogin;
 
+	@Column(name = "email_verified_at")
+	private LocalDateTime emailVerifiedAt;
+
 	@Column(name = "created_at", nullable = false)
 	private LocalDateTime createdAt;
 

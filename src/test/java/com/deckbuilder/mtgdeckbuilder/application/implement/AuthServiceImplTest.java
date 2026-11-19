@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.AccountDisabledException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.EmailNotVerifiedException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidCredentialsException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidRefreshTokenException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.security.JwtService;
@@ -50,7 +51,8 @@ class AuthServiceImplTest {
 	@BeforeEach
 	void setUp() {
 		this.activeUser = User.builder().id(3L).username("johndoe").email("john@example.com")
-				.hashedPassword("stored-hash").role("USER").isActive(true).build();
+				.hashedPassword("stored-hash").role("USER").isActive(true)
+				.emailVerifiedAt(java.time.LocalDateTime.now()).build();
 	}
 
 	@Test
@@ -105,6 +107,18 @@ class AuthServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Should reject login until email is verified")
+	void shouldRejectUnverifiedEmail() {
+		final User unverified = this.activeUser.toBuilder().emailVerifiedAt(null).build();
+		when(this.userService.findByUsernameOrEmail("johndoe")).thenReturn(Optional.of(unverified));
+		when(this.passwordHasher.matches("secret", "stored-hash")).thenReturn(true);
+
+		assertThatThrownBy(() -> this.authService.login("johndoe", "secret"))
+				.isInstanceOf(EmailNotVerifiedException.class);
+		verify(this.userService, never()).recordLogin(any());
+	}
+
+	@Test
 	@DisplayName("Should rotate and return a new session")
 	void shouldRefresh() {
 		when(this.refreshTokenService.rotate("old")).thenReturn(new RefreshTokenService.Rotation(3L, "new"));
@@ -136,6 +150,17 @@ class AuthServiceImplTest {
 		when(this.userService.findById(3L)).thenReturn(Optional.of(disabled));
 
 		assertThatThrownBy(() -> this.authService.refresh("old")).isInstanceOf(AccountDisabledException.class);
+		verify(this.refreshTokenService).revokeAllForUser(3L);
+	}
+
+	@Test
+	@DisplayName("Should revoke refresh sessions until email is verified")
+	void shouldRejectRefreshForUnverifiedEmail() {
+		final User unverified = this.activeUser.toBuilder().emailVerifiedAt(null).build();
+		when(this.refreshTokenService.rotate("old")).thenReturn(new RefreshTokenService.Rotation(3L, "new"));
+		when(this.userService.findById(3L)).thenReturn(Optional.of(unverified));
+
+		assertThatThrownBy(() -> this.authService.refresh("old")).isInstanceOf(EmailNotVerifiedException.class);
 		verify(this.refreshTokenService).revokeAllForUser(3L);
 	}
 

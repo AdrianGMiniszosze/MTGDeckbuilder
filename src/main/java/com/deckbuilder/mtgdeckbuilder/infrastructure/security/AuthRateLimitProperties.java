@@ -30,6 +30,18 @@ public class AuthRateLimitProperties {
 	private int logoutLimit = 60;
 	private Duration logoutWindow = Duration.ofMinutes(5);
 
+	private int emailVerifyLimit = 20;
+	private Duration emailVerifyWindow = Duration.ofHours(1);
+
+	private int emailResendLimit = 5;
+	private Duration emailResendWindow = Duration.ofHours(1);
+
+	private int passwordResetRequestLimit = 5;
+	private Duration passwordResetRequestWindow = Duration.ofHours(1);
+
+	private int passwordResetLimit = 10;
+	private Duration passwordResetWindow = Duration.ofHours(1);
+
 	private Duration bucketRetention = Duration.ofDays(1);
 
 	@PostConstruct
@@ -49,6 +61,10 @@ public class AuthRateLimitProperties {
 			case REGISTER -> new Rule(this.registerLimit, this.registerWindow);
 			case REFRESH -> new Rule(this.refreshLimit, this.refreshWindow);
 			case LOGOUT -> new Rule(this.logoutLimit, this.logoutWindow);
+			case EMAIL_VERIFY -> new Rule(this.emailVerifyLimit, this.emailVerifyWindow);
+			case EMAIL_RESEND -> new Rule(this.emailResendLimit, this.emailResendWindow);
+			case PASSWORD_RESET_REQUEST -> new Rule(this.passwordResetRequestLimit, this.passwordResetRequestWindow);
+			case PASSWORD_RESET -> new Rule(this.passwordResetLimit, this.passwordResetWindow);
 		};
 	}
 

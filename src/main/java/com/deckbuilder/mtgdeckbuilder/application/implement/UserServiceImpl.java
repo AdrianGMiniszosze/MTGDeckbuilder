@@ -2,6 +2,7 @@ package com.deckbuilder.mtgdeckbuilder.application.implement;
 
 import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.application.UserService;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.AccountActionTokenRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.UserRepository;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DuplicateUserException;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidUserDataException;
@@ -9,6 +10,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.UserNotFoundExcep
 import com.deckbuilder.mtgdeckbuilder.infrastructure.mapper.UserEntityMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.model.UserEntity;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.AccountActionPurpose;
 import com.deckbuilder.mtgdeckbuilder.model.User;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -18,12 +20,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 	private final UserRepository userRepository;
+	private final AccountActionTokenRepository accountActionTokenRepository;
 	private final UserEntityMapper userEntityMapper;
 	private final DeckService deckService;
 	private final PasswordHasher passwordHasher;
@@ -50,6 +54,7 @@ public class UserServiceImpl implements UserService {
 				.map(this.userEntityMapper::toModel);
 	}
 
+	@Override
 	public Optional<User> findByEmail(String email) {
 		return this.userRepository.findByEmail(email).map(this.userEntityMapper::toModel);
 	}
@@ -57,6 +62,16 @@ public class UserServiceImpl implements UserService {
 	@Override
 	@Transactional
 	public User create(User user) {
+		return createUser(user, true);
+	}
+
+	@Override
+	@Transactional
+	public User createUnverified(User user) {
+		return createUser(user, false);
+	}
+
+	private User createUser(User user, boolean emailVerified) {
 		if (user.getHashedPassword() == null || user.getHashedPassword().isBlank()) {
 			throw new InvalidUserDataException("hashed_password is required to create a user");
 		}
@@ -70,6 +85,7 @@ public class UserServiceImpl implements UserService {
 		entity.setHashedPassword(this.passwordHasher.hash(user.getHashedPassword()));
 		entity.setRole("USER");
 		entity.setIsActive(true);
+		entity.setEmailVerifiedAt(emailVerified ? LocalDateTime.now() : null);
 		entity = this.userRepository.save(entity);
 		return this.userEntityMapper.toModel(entity);
 	}
@@ -96,6 +112,16 @@ public class UserServiceImpl implements UserService {
 		entity.setIsActive(existing.getIsActive());
 		entity.setLastLogin(existing.getLastLogin());
 		entity.setCreatedAt(existing.getCreatedAt());
+		final boolean emailChanged = !Objects.equals(existing.getEmail(), entity.getEmail());
+		entity.setEmailVerifiedAt(!emailChanged
+				? existing.getEmailVerifiedAt()
+				: null);
+		if (emailChanged) {
+			final LocalDateTime now = LocalDateTime.now();
+			for (AccountActionPurpose purpose : AccountActionPurpose.values()) {
+				this.accountActionTokenRepository.consumeActive(id, purpose, now);
+			}
+		}
 		entity = this.userRepository.save(entity);
 		return this.userEntityMapper.toModel(entity);
 	}
@@ -106,6 +132,30 @@ public class UserServiceImpl implements UserService {
 		final UserEntity entity = this.userRepository.findById(id)
 				.orElseThrow(() -> new UserNotFoundException(id));
 		entity.setLastLogin(LocalDateTime.now());
+		return this.userEntityMapper.toModel(this.userRepository.save(entity));
+	}
+
+	@Override
+	@Transactional
+	public User verifyEmail(Long id) {
+		final UserEntity entity = this.userRepository.findById(id)
+				.orElseThrow(() -> new UserNotFoundException(id));
+		if (entity.getEmailVerifiedAt() == null) {
+			entity.setEmailVerifiedAt(LocalDateTime.now());
+			this.userRepository.save(entity);
+		}
+		return this.userEntityMapper.toModel(entity);
+	}
+
+	@Override
+	@Transactional
+	public User resetPassword(Long id, String rawPassword) {
+		final UserEntity entity = this.userRepository.findById(id)
+				.orElseThrow(() -> new UserNotFoundException(id));
+		entity.setHashedPassword(this.passwordHasher.hash(rawPassword));
+		if (entity.getEmailVerifiedAt() == null) {
+			entity.setEmailVerifiedAt(LocalDateTime.now());
+		}
 		return this.userEntityMapper.toModel(this.userRepository.save(entity));
 	}
 

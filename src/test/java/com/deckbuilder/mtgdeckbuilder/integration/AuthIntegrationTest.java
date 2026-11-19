@@ -13,13 +13,21 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.mail.SimpleMailMessage;
+import org.mockito.ArgumentCaptor;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,6 +50,9 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 	@Autowired
 	private ObjectMapper objectMapper;
 
+	@MockitoBean
+	private JavaMailSender mailSender;
+
 	private UserEntity user;
 
 	@AfterEach
@@ -62,6 +73,7 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 		entity.setHashedPassword(this.passwordHasher.hash("secret-password"));
 		entity.setRole("USER");
 		entity.setIsActive(true);
+		entity.setEmailVerifiedAt(LocalDateTime.now());
 		entity.setCreatedAt(LocalDateTime.now());
 		this.user = this.userRepository.save(entity);
 	}
@@ -76,6 +88,7 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 					"""))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.username").value("janedoe"))
+			.andExpect(jsonPath("$.email_verified").value(false))
 			.andExpect(jsonPath("$.hashed_password").doesNotExist());
 
 		final UserEntity created = this.userRepository.findByUsername("janedoe").orElseThrow();
@@ -83,6 +96,21 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 		assertThat(created.getIsActive()).isTrue();
 		assertThat(created.getHashedPassword()).isNotEqualTo("another-secret");
 		assertThat(this.passwordHasher.matches("another-secret", created.getHashedPassword())).isTrue();
+		assertThat(created.getEmailVerifiedAt()).isNull();
+
+		final ArgumentCaptor<SimpleMailMessage> mail = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		org.mockito.Mockito.verify(this.mailSender).send(mail.capture());
+		final String token = tokenFromEmail(mail.getValue());
+		this.mockMvc
+			.perform(post("/auth/verify-email").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"verification_token\":\"" + token + "\"}"))
+			.andExpect(status().isNoContent());
+		assertThat(this.userRepository.findByUsername("janedoe").orElseThrow().getEmailVerifiedAt()).isNotNull();
+		this.mockMvc
+			.perform(post("/auth/verify-email").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"verification_token\":\"" + token + "\"}"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.error").value("INVALID_ACTION_TOKEN"));
 	}
 
 	@Test
@@ -129,6 +157,37 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 		this.mockMvc
 			.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"username\":\"john@example.com\",\"password\":\"secret-password\"}"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
+	@DisplayName("Should block login until email is verified and allow resending")
+	void shouldRequireEmailVerification() throws Exception {
+		this.user.setEmailVerifiedAt(null);
+		this.userRepository.save(this.user);
+
+		this.mockMvc
+			.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"username\":\"johndoe\",\"password\":\"secret-password\"}"))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.error").value("EMAIL_NOT_VERIFIED"));
+		assertThat(this.userRepository.findById(this.user.getId()).orElseThrow().getLastLogin()).isNull();
+
+		this.mockMvc
+			.perform(post("/auth/verify-email/resend").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"john@example.com\"}"))
+			.andExpect(status().isAccepted())
+			.andExpect(content().string(""));
+		final ArgumentCaptor<SimpleMailMessage> mail = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		org.mockito.Mockito.verify(this.mailSender).send(mail.capture());
+		final String token = tokenFromEmail(mail.getValue());
+		this.mockMvc
+			.perform(post("/auth/verify-email").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"verification_token\":\"" + token + "\"}"))
+			.andExpect(status().isNoContent());
+		this.mockMvc
+			.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"username\":\"johndoe\",\"password\":\"secret-password\"}"))
 			.andExpect(status().isOk());
 	}
 
@@ -229,6 +288,46 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 	}
 
 	@Test
+	@DisplayName("Should reset password without revealing whether the email exists")
+	void shouldResetPassword() throws Exception {
+		final String oldRefresh = login().get("refresh_token").asText();
+		this.user.setEmailVerifiedAt(null);
+		this.userRepository.save(this.user);
+
+		this.mockMvc
+			.perform(post("/auth/password-reset/request").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"missing@example.com\"}"))
+			.andExpect(status().isAccepted())
+			.andExpect(content().string(""));
+		this.mockMvc
+			.perform(post("/auth/password-reset/request").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"john@example.com\"}"))
+			.andExpect(status().isAccepted())
+			.andExpect(content().string(""));
+
+		final ArgumentCaptor<SimpleMailMessage> mail = ArgumentCaptor.forClass(SimpleMailMessage.class);
+		org.mockito.Mockito.verify(this.mailSender).send(mail.capture());
+		final String resetToken = tokenFromEmail(mail.getValue());
+		this.mockMvc
+			.perform(post("/auth/password-reset").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"reset_token\":\"" + resetToken + "\",\"new_password\":\"new-secret-456\"}"))
+			.andExpect(status().isNoContent());
+		assertThat(this.userRepository.findById(this.user.getId()).orElseThrow().getEmailVerifiedAt()).isNotNull();
+		this.mockMvc
+			.perform(post("/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"refresh_token\":\"" + oldRefresh + "\"}"))
+			.andExpect(status().isUnauthorized());
+		this.mockMvc
+			.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"username\":\"johndoe\",\"password\":\"secret-password\"}"))
+			.andExpect(status().isUnauthorized());
+		this.mockMvc
+			.perform(post("/auth/login").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"username\":\"johndoe\",\"password\":\"new-secret-456\"}"))
+			.andExpect(status().isOk());
+	}
+
+	@Test
 	@DisplayName("Should return the current user for a valid access token")
 	void shouldReturnCurrentUser() throws Exception {
 		final String access = login().get("access_token").asText();
@@ -236,6 +335,7 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 		this.mockMvc.perform(get("/auth/me").header("Authorization", "Bearer " + access))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.username").value("johndoe"))
+			.andExpect(jsonPath("$.email_verified").value(true))
 			.andExpect(jsonPath("$.hashed_password").doesNotExist());
 	}
 
@@ -255,5 +355,11 @@ class AuthIntegrationTest extends PostgresIntegrationTest {
 				.content("{\"username\":\"johndoe\",\"password\":\"secret-password\"}"))
 			.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
 		return this.objectMapper.readTree(body);
+	}
+
+	private static String tokenFromEmail(SimpleMailMessage message) {
+		final Matcher matcher = Pattern.compile("#token=([A-Za-z0-9_-]+)").matcher(message.getText());
+		assertThat(matcher.find()).isTrue();
+		return matcher.group(1);
 	}
 }

@@ -19,6 +19,14 @@ class AuthRateLimitEndpointTest {
 				.contains(AuthRateLimitEndpoint.REFRESH);
 		assertThat(AuthRateLimitEndpoint.resolve("POST", "/auth/logout"))
 				.contains(AuthRateLimitEndpoint.LOGOUT);
+		assertThat(AuthRateLimitEndpoint.resolve("POST", "/auth/verify-email"))
+				.contains(AuthRateLimitEndpoint.EMAIL_VERIFY);
+		assertThat(AuthRateLimitEndpoint.resolve("POST", "/auth/verify-email/resend"))
+				.contains(AuthRateLimitEndpoint.EMAIL_RESEND);
+		assertThat(AuthRateLimitEndpoint.resolve("POST", "/auth/password-reset/request"))
+				.contains(AuthRateLimitEndpoint.PASSWORD_RESET_REQUEST);
+		assertThat(AuthRateLimitEndpoint.resolve("POST", "/auth/password-reset"))
+				.contains(AuthRateLimitEndpoint.PASSWORD_RESET);
 		assertThat(AuthRateLimitEndpoint.LOGIN.metricName()).isEqualTo("login");
 	}
 
@@ -27,6 +35,7 @@ class AuthRateLimitEndpointTest {
 	void shouldIgnoreUnknownRoutes() {
 		assertThat(AuthRateLimitEndpoint.resolve("GET", "/auth/login")).isEmpty();
 		assertThat(AuthRateLimitEndpoint.resolve("POST", "/auth/me")).isEmpty();
+		assertThat(AuthRateLimitEndpoint.resolve("POST", "/auth/password-reset/unknown")).isEmpty();
 		assertThat(AuthRateLimitEndpoint.resolve(null, "/auth/login")).isEmpty();
 		assertThat(AuthRateLimitEndpoint.resolve("POST", null)).isEmpty();
 	}

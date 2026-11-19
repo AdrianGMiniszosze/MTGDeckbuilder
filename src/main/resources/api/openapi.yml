@@ -12,7 +12,7 @@ paths:
   /auth/register:
     post:
       summary: Register a new user
-      description: Public self-registration. Always creates an active USER account.
+      description: Public self-registration. Creates an active USER account that must verify its email before login.
       operationId: registerUser
       tags:
         - Auth
@@ -85,7 +85,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
-          description: Account disabled
+          description: Account disabled or email not verified
           content:
             application/json:
               schema:
@@ -133,6 +133,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Account disabled or email not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '429':
           description: Authentication request limit exceeded
           headers:
@@ -166,6 +172,150 @@ paths:
       responses:
         '204':
           description: Refresh token revoked or already invalid
+        '429':
+          description: Authentication request limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Shared rate-limit store unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/verify-email:
+    post:
+      summary: Verify the account email
+      description: Consumes a single-use email verification token.
+      operationId: verifyEmail
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+      responses:
+        '204':
+          description: Email verified
+        '400':
+          description: Token is invalid, expired or already consumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Authentication request limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Shared rate-limit store unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/verify-email/resend:
+    post:
+      summary: Resend email verification
+      description: Returns the same empty response whether the address exists or is already verified.
+      operationId: resendVerificationEmail
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+      responses:
+        '202':
+          description: Request accepted; no account information is disclosed
+        '429':
+          description: Authentication request limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Shared rate-limit store unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/password-reset/request:
+    post:
+      summary: Request a password reset
+      description: Returns the same empty response whether the address exists or not.
+      operationId: requestPasswordReset
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailRequest'
+      responses:
+        '202':
+          description: Request accepted; no account information is disclosed
+        '429':
+          description: Authentication request limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Shared rate-limit store unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/password-reset:
+    post:
+      summary: Reset a password
+      description: Consumes a single-use reset token and revokes all existing refresh sessions.
+      operationId: resetPassword
+      tags:
+        - Auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordResetConfirmRequest'
+      responses:
+        '204':
+          description: Password reset; all refresh sessions revoked
+        '400':
+          description: Token or new password is invalid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '429':
           description: Authentication request limit exceeded
           headers:
@@ -1575,6 +1725,10 @@ components:
           type: string
           format: date-time
           readOnly: true
+        email_verified:
+          type: boolean
+          readOnly: true
+          description: True after the user verifies control of the current email.
         hashed_password:
           type: string
           writeOnly: true
@@ -2176,6 +2330,43 @@ components:
           type: string
           minLength: 1
           description: Opaque refresh token returned by login or refresh.
+
+    EmailRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 100
+
+    VerifyEmailRequest:
+      type: object
+      required:
+        - verification_token
+      properties:
+        verification_token:
+          type: string
+          minLength: 1
+          writeOnly: true
+
+    PasswordResetConfirmRequest:
+      type: object
+      required:
+        - reset_token
+        - new_password
+      properties:
+        reset_token:
+          type: string
+          minLength: 1
+          writeOnly: true
+        new_password:
+          type: string
+          minLength: 8
+          maxLength: 255
+          writeOnly: true
+          description: New raw password; at most 72 bytes (UTF-8).
 
     TokenResponse:
       type: object

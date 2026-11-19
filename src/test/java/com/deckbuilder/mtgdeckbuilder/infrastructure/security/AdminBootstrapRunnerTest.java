@@ -118,6 +118,7 @@ class AdminBootstrapRunnerTest {
 		assertThat(admin.getCountry()).isEqualTo("ES");
 		assertThat(admin.getRole()).isEqualTo("ADMIN");
 		assertThat(admin.getIsActive()).isTrue();
+		assertThat(admin.getEmailVerifiedAt()).isNotNull();
 		assertThat(admin.getHashedPassword()).isEqualTo("$2a$10$hash");
 	}
 }

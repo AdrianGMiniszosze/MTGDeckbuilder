@@ -48,7 +48,8 @@ public class SecurityConfig {
 				.authorizeHttpRequests(auth -> auth.requestMatchers("/error").permitAll()
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.POST, "/auth/register", "/auth/login", "/auth/refresh",
-								"/auth/logout")
+								"/auth/logout", "/auth/verify-email", "/auth/verify-email/resend",
+								"/auth/password-reset/request", "/auth/password-reset")
 						.permitAll()
 						.requestMatchers(HttpMethod.GET, "/cards/**", "/sets/**", "/formats/**", "/tags/**")
 						.permitAll().requestMatchers(HttpMethod.GET, "/decks", "/decks/*", "/decks/*/validation")

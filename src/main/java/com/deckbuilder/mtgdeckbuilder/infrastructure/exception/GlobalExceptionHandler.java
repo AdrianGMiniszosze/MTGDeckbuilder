@@ -159,6 +159,30 @@ public class GlobalExceptionHandler {
 	}
 
 	/**
+	 * Tell an authenticated login attempt that email verification is required.
+	 */
+	@ExceptionHandler(EmailNotVerifiedException.class)
+	public ResponseEntity<ErrorResponse> handleEmailNotVerified(EmailNotVerifiedException ex,
+			HttpServletRequest request) {
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("EMAIL_NOT_VERIFIED").status(HttpStatus.FORBIDDEN.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+		return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+	}
+
+	/**
+	 * Keep invalid account-action tokens indistinguishable regardless of purpose.
+	 */
+	@ExceptionHandler(InvalidAccountActionTokenException.class)
+	public ResponseEntity<ErrorResponse> handleInvalidAccountActionToken(InvalidAccountActionTokenException ex,
+			HttpServletRequest request) {
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("INVALID_ACTION_TOKEN").status(HttpStatus.BAD_REQUEST.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+	}
+
+	/**
 	 * Handle duplicate usernames or emails.
 	 */
 	@ExceptionHandler(DuplicateUserException.class)

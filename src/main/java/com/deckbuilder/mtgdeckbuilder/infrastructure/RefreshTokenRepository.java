@@ -21,7 +21,7 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshTokenEntity
 	@Query("DELETE FROM RefreshTokenEntity t WHERE t.expiresAt < :cutoff")
 	int deleteExpired(@Param("cutoff") LocalDateTime cutoff);
 
-	@Modifying(clearAutomatically = true)
+	@Modifying(clearAutomatically = true, flushAutomatically = true)
 	@Query("UPDATE RefreshTokenEntity t SET t.revokedAt = :now WHERE t.userId = :userId AND t.revokedAt IS NULL")
 	int revokeAllForUser(@Param("userId") Long userId, @Param("now") LocalDateTime now);
 }

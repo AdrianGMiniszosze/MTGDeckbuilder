@@ -22,4 +22,5 @@ public class User {
 	private LocalDateTime registrationDate;
 	private Boolean isActive;
 	private LocalDateTime lastLogin;
+	private LocalDateTime emailVerifiedAt;
 }

@@ -27,7 +27,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 		"app.security.rate-limit.refresh-limit=2",
 		"app.security.rate-limit.refresh-window=PT1M",
 		"app.security.rate-limit.logout-limit=2",
-		"app.security.rate-limit.logout-window=PT1M"
+		"app.security.rate-limit.logout-window=PT1M",
+		"app.security.rate-limit.email-verify-limit=1",
+		"app.security.rate-limit.email-verify-window=PT1M",
+		"app.security.rate-limit.email-resend-limit=1",
+		"app.security.rate-limit.email-resend-window=PT1M",
+		"app.security.rate-limit.password-reset-request-limit=1",
+		"app.security.rate-limit.password-reset-request-window=PT1M",
+		"app.security.rate-limit.password-reset-limit=1",
+		"app.security.rate-limit.password-reset-window=PT1M"
 })
 class AuthRateLimitIntegrationTest extends PostgresIntegrationTest {
 
@@ -93,6 +101,34 @@ class AuthRateLimitIntegrationTest extends PostgresIntegrationTest {
 		logout(logoutAddress, refreshBody).andExpect(status().isTooManyRequests());
 	}
 
+	@Test
+	@DisplayName("Should throttle verification and password recovery routes")
+	void shouldThrottleAccountActionRoutes() throws Exception {
+		final String verifyAddress = "198.51.100.77";
+		verifyEmail(verifyAddress, "{\"verification_token\":\"bad-token\"}")
+				.andExpect(status().isBadRequest());
+		verifyEmail(verifyAddress, "{\"verification_token\":\"bad-token\"}")
+				.andExpect(status().isTooManyRequests());
+
+		final String resendAddress = "198.51.100.78";
+		emailRequest("/auth/verify-email/resend", resendAddress, "missing@example.com")
+				.andExpect(status().isAccepted());
+		emailRequest("/auth/verify-email/resend", resendAddress, "missing@example.com")
+				.andExpect(status().isTooManyRequests());
+
+		final String requestAddress = "198.51.100.79";
+		emailRequest("/auth/password-reset/request", requestAddress, "missing@example.com")
+				.andExpect(status().isAccepted());
+		emailRequest("/auth/password-reset/request", requestAddress, "missing@example.com")
+				.andExpect(status().isTooManyRequests());
+
+		final String resetAddress = "198.51.100.80";
+		resetPassword(resetAddress, "{\"reset_token\":\"bad-token\",\"new_password\":\"new-secret-123\"}")
+				.andExpect(status().isBadRequest());
+		resetPassword(resetAddress, "{\"reset_token\":\"bad-token\",\"new_password\":\"new-secret-123\"}")
+				.andExpect(status().isTooManyRequests());
+	}
+
 	private org.springframework.test.web.servlet.ResultActions login(String address) throws Exception {
 		return this.mockMvc.perform(post("/auth/login").with(remoteAddress(address))
 				.contentType(MediaType.APPLICATION_JSON)
@@ -106,6 +142,24 @@ class AuthRateLimitIntegrationTest extends PostgresIntegrationTest {
 
 	private org.springframework.test.web.servlet.ResultActions logout(String address, String body) throws Exception {
 		return this.mockMvc.perform(post("/auth/logout").with(remoteAddress(address))
+				.contentType(MediaType.APPLICATION_JSON).content(body));
+	}
+
+	private org.springframework.test.web.servlet.ResultActions verifyEmail(String address, String body)
+			throws Exception {
+		return this.mockMvc.perform(post("/auth/verify-email").with(remoteAddress(address))
+				.contentType(MediaType.APPLICATION_JSON).content(body));
+	}
+
+	private org.springframework.test.web.servlet.ResultActions emailRequest(String path, String address, String email)
+			throws Exception {
+		return this.mockMvc.perform(post(path).with(remoteAddress(address)).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"email\":\"" + email + "\"}"));
+	}
+
+	private org.springframework.test.web.servlet.ResultActions resetPassword(String address, String body)
+			throws Exception {
+		return this.mockMvc.perform(post("/auth/password-reset").with(remoteAddress(address))
 				.contentType(MediaType.APPLICATION_JSON).content(body));
 	}
 

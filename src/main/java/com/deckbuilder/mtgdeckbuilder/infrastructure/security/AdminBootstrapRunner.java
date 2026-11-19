@@ -11,6 +11,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplicat
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 /**
  * Creates the first administrator so the admin-only endpoints are reachable on
  * a fresh database. It never modifies or promotes existing accounts.
@@ -45,6 +47,7 @@ public class AdminBootstrapRunner implements ApplicationRunner {
 		admin.setHashedPassword(this.passwordHasher.hash(this.properties.getPassword()));
 		admin.setRole("ADMIN");
 		admin.setIsActive(true);
+		admin.setEmailVerifiedAt(LocalDateTime.now());
 		this.userRepository.save(admin);
 		log.info("Bootstrapped administrator '{}'", admin.getUsername());
 	}

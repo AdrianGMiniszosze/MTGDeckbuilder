@@ -25,6 +25,14 @@ class AuthRateLimitPropertiesTest {
 				.isEqualTo(new AuthRateLimitProperties.Rule(60, Duration.ofMinutes(5)));
 		assertThat(properties.ruleFor(AuthRateLimitEndpoint.LOGOUT))
 				.isEqualTo(new AuthRateLimitProperties.Rule(60, Duration.ofMinutes(5)));
+		assertThat(properties.ruleFor(AuthRateLimitEndpoint.EMAIL_VERIFY))
+				.isEqualTo(new AuthRateLimitProperties.Rule(20, Duration.ofHours(1)));
+		assertThat(properties.ruleFor(AuthRateLimitEndpoint.EMAIL_RESEND))
+				.isEqualTo(new AuthRateLimitProperties.Rule(5, Duration.ofHours(1)));
+		assertThat(properties.ruleFor(AuthRateLimitEndpoint.PASSWORD_RESET_REQUEST))
+				.isEqualTo(new AuthRateLimitProperties.Rule(5, Duration.ofHours(1)));
+		assertThat(properties.ruleFor(AuthRateLimitEndpoint.PASSWORD_RESET))
+				.isEqualTo(new AuthRateLimitProperties.Rule(10, Duration.ofHours(1)));
 	}
 
 	@Test

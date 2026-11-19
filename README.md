@@ -237,7 +237,7 @@ mvnw.cmd jacoco:report
 ```
 
 The report answers "what is still untested"; the gate (`jacoco:check`, 100 % lines and
-96.9 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
+97.1 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
 unit, smoke and integration suites have all contributed to `target/jacoco.exec`. The
 floors are a ratchet: raise them when coverage improves, never lower them to make a
 build pass.
@@ -275,6 +275,10 @@ The full API contract is defined in `src/main/resources/api/openapi.yml`.
 | `POST /auth/login` | Obtain access and refresh tokens |
 | `POST /auth/refresh` | Rotate a refresh token |
 | `POST /auth/logout` | Revoke a refresh token |
+| `POST /auth/verify-email` | Verify email with a single-use token |
+| `POST /auth/verify-email/resend` | Resend verification without revealing account state |
+| `POST /auth/password-reset/request` | Request password recovery |
+| `POST /auth/password-reset` | Set a new password with a single-use token |
 | `GET /auth/me` | Get the authenticated profile |
 
 Cards and sets are read-only over HTTP: their data comes from the Scryfall importer, and there is no create/update/delete route for them.
@@ -289,7 +293,11 @@ Public reads: cards, sets, formats, tags, and published non-private decks. Draft
 
 To provision the first administrator on an empty database, temporarily set `BOOTSTRAP_ADMIN_ENABLED=true` and provide `BOOTSTRAP_ADMIN_USERNAME`, `BOOTSTRAP_ADMIN_EMAIL`, and `BOOTSTRAP_ADMIN_PASSWORD`. Disable bootstrap after startup. It is disabled by default; no default password exists.
 
-Auth endpoints use PostgreSQL-backed fixed windows shared across app instances: login 20/5 min, registration 10/hour, refresh/logout 60/5 min per socket peer. Limits are configurable under `app.security.rate-limit.*`. Exceeded limits return `429` with `Retry-After`; an unavailable limiter store fails closed with `503`. The peer address is the TCP socket address: do not trust forwarded-IP headers unless a trusted proxy strips client-supplied values. `/actuator/metrics` requires `ADMIN`; metrics never tag usernames, IPs or tokens.
+Auth endpoints use PostgreSQL-backed fixed windows shared across app instances: login 20/5 min, registration 10/hour, refresh/logout 60/5 min per socket peer; verification/resend/recovery have separate hourly limits. Limits are configurable under `app.security.rate-limit.*`. Exceeded limits return `429` with `Retry-After`; an unavailable limiter store fails closed with `503`. The peer address is the TCP socket address: do not trust forwarded-IP headers unless a trusted proxy strips client-supplied values. `/actuator/metrics` requires `ADMIN`; metrics never tag usernames, IPs or tokens.
+
+Registration sends a single-use email verification token; login and refresh stay blocked until verification. Password-reset and verification-resend requests always return `202`, even for unknown emails. Existing accounts stay verified on upgrade; changing an account's email requires verification again. Configure generic SMTP (`MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM`) and `APP_PUBLIC_URL`; action tokens are hashed in PostgreSQL and appear only in email. SMTP delivery failures do not disclose account state; inspect `auth.email.delivery.failure` and allow resend.
+
+Compose starts local Mailpit `v1.34.0`: the app connects to `mailpit:1025`; inbox UI is `http://localhost:8025`. Both host ports bind to loopback. Host-run app uses `MAIL_HOST=localhost`. Mailpit is development-only; production must override `MAIL_*` with a real SMTP provider.
 
 `GET /cards` and `GET /cards/search` hide cards with `is_obsolete = true`; pass `include_obsolete=true` to include cards that are missing from the latest Scryfall bulk import. `GET /cards/random` always excludes them.
 
@@ -308,6 +316,10 @@ The application resolves configuration from environment variables, with sensible
 | `JWT_SECRET` | required outside dev | HS256 signing secret, at least 32 bytes |
 | `BOOTSTRAP_ADMIN_ENABLED` | `false` | Opt-in creation of the first admin only |
 | `app.security.rate-limit.*` | See config examples | Shared endpoint limits, windows and bucket retention |
+| `MAIL_HOST`, `MAIL_PORT` | `localhost`, `1025` in dev | Generic SMTP server |
+| `MAIL_USERNAME`, `MAIL_PASSWORD` | empty in dev | SMTP credentials |
+| `MAIL_FROM` | local no-reply address | Authentication message sender |
+| `APP_PUBLIC_URL` | `http://localhost:3000` in dev | Frontend base for verification/reset links |
 
 See `src/main/resources/application.properties.example` and the profile-specific `src/main/resources/application-*.properties` files for the full property list, and `infra/.env.example` for the Docker Compose variables.
 
@@ -323,7 +335,7 @@ MTGDeckbuilder/
 │   │   ├── java/com/deckbuilder/mtgdeckbuilder/  # contract, application, infrastructure, model
 │   │   └── resources/
 │   │       ├── api/openapi.yml     # API contract (source of truth)
-│   │       ├── db/migration/       # Flyway V1-V8
+│   │       ├── db/migration/       # Flyway V1-V9
 │   │       └── application*.properties
 │   └── test/
 │       └── java/com/deckbuilder/mtgdeckbuilder/  # *Test (no Docker) and *IntegrationTest

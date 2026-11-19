@@ -13,6 +13,14 @@ services:
       # Schema is owned by Flyway (classpath:db/migration); no bootstrap scripts.
       - postgres_data:/var/lib/postgresql/data
 
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    container_name: mtgdeckbuilder_mailpit
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
   app:
     build:
       context: ..
@@ -23,10 +31,19 @@ services:
       - "8080:8080"
     depends_on:
       - db
+      - mailpit
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_MAIL_HOST: ${MAIL_HOST:-mailpit}
+      SPRING_MAIL_PORT: ${MAIL_PORT:-1025}
+      SPRING_MAIL_USERNAME: ${MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${MAIL_AUTH:-false}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_STARTTLS:-false}
+      APP_SECURITY_EMAIL_FROM: ${MAIL_FROM:-no-reply@mtgdeckbuilder.local}
+      APP_SECURITY_EMAIL_FRONTEND_BASE_URL: ${APP_PUBLIC_URL:-http://localhost:3000}
 
 volumes:
   postgres_data:

@@ -12,6 +12,7 @@ import java.util.List;
 public interface UserMapper {
 	@Mapping(target = "hashed_password", ignore = true)
 	@Mapping(source = "registrationDate", target = "registration_date")
+	@Mapping(target = "email_verified", expression = "java(user.getEmailVerifiedAt() != null)")
 	UserDTO toUserDTO(User user);
 
 	List<UserDTO> toUserDTOs(List<User> users);
@@ -20,11 +21,13 @@ public interface UserMapper {
 	@Mapping(source = "registration_date", target = "registrationDate")
 	@Mapping(target = "isActive", ignore = true)
 	@Mapping(target = "lastLogin", ignore = true)
+	@Mapping(target = "emailVerifiedAt", ignore = true)
 	User toUser(UserDTO userDTO);
 
 	@Mapping(source = "hashed_password", target = "hashedPassword")
 	@Mapping(source = "registration_date", target = "registrationDate")
 	@Mapping(target = "isActive", ignore = true)
 	@Mapping(target = "lastLogin", ignore = true)
+	@Mapping(target = "emailVerifiedAt", ignore = true)
 	void updateUser(@MappingTarget User user, UserDTO userDTO);
 }
