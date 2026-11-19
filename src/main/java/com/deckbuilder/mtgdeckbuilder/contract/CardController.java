@@ -4,6 +4,8 @@ import com.deckbuilder.apigenerator.openapi.api.CardsApi;
 import com.deckbuilder.apigenerator.openapi.api.model.CardDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CardTagDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.CardSearchResponseDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CardTagRequestDTO;
+import com.deckbuilder.apigenerator.openapi.api.model.CardTagUpdateDTO;
 import com.deckbuilder.apigenerator.openapi.api.model.PageInfoDTO;
 import com.deckbuilder.mtgdeckbuilder.application.CardService;
 import com.deckbuilder.mtgdeckbuilder.application.CardTagService;
@@ -13,6 +15,7 @@ import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.CardNotFoundExcep
 import com.deckbuilder.mtgdeckbuilder.model.Card;
 import com.deckbuilder.mtgdeckbuilder.model.CardSearchCriteria;
 import com.deckbuilder.mtgdeckbuilder.model.CardSearchResult;
+import com.deckbuilder.mtgdeckbuilder.model.CardTag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -48,37 +51,32 @@ public class CardController implements CardsApi {
 	}
 
 	@Override
-	public ResponseEntity<CardDTO> createCard(@Valid CardDTO cardDTO) {
-		final Card card = this.cardMapper.toEntity(cardDTO);
-		final Card createdCard = this.cardService.createCard(card);
-		return ResponseEntity.status(HttpStatus.CREATED).body(this.cardMapper.toDto(createdCard));
-	}
-
-	@Override
-	public ResponseEntity<CardDTO> updateCard(Integer id, @Valid CardDTO cardDTO) {
-		final Card card = this.cardMapper.toEntity(cardDTO);
-		final Card updatedCard = this.cardService.updateCard(id.longValue(), card)
-				.orElseThrow(() -> new CardNotFoundException(id.longValue()));
-		return ResponseEntity.ok(this.cardMapper.toDto(updatedCard));
-	}
-
-	@Override
-	public ResponseEntity<Void> deleteCard(Integer id) {
-		this.cardService.deleteCard(id.longValue());
-		return ResponseEntity.noContent().build();
-	}
-
-	@Override
 	public ResponseEntity<List<CardTagDTO>> listTagsForCard(Integer id) {
 		final var cardTags = this.cardTagService.findByCardId(id.longValue());
 		return ResponseEntity.ok(this.cardTagMapper.toCardTagDTOs(cardTags));
 	}
 
 	@Override
-	public ResponseEntity<CardTagDTO> updateCardTag(Integer id, Integer tagId, @Valid CardTagDTO cardTagDTO) {
-		final var cardTag = this.cardTagMapper.toCardTag(cardTagDTO);
-		final var updated = this.cardTagService.updateCardTag(id.longValue(), tagId.longValue(), cardTag)
-				.orElseThrow(() -> new CardNotFoundException(id.longValue()));
+	public ResponseEntity<CardTagDTO> createCardTag(Integer id, @Valid CardTagRequestDTO cardTagRequestDTO) {
+		final var cardTag = CardTag.builder()
+			.tagId(cardTagRequestDTO.getTag_id().longValue())
+			.weight(cardTagRequestDTO.getWeight() != null ? cardTagRequestDTO.getWeight().doubleValue() : null)
+			.confidence(
+					cardTagRequestDTO.getConfidence() != null ? cardTagRequestDTO.getConfidence().doubleValue() : null)
+			.build();
+		final var created = this.cardTagService.createCardTag(id.longValue(), cardTag);
+		return ResponseEntity.status(HttpStatus.CREATED).body(this.cardTagMapper.toCardTagDTO(created));
+	}
+
+	@Override
+	public ResponseEntity<CardTagDTO> updateCardTag(Integer id, Integer tagId,
+			@Valid CardTagUpdateDTO cardTagUpdateDTO) {
+		final var cardTag = CardTag.builder()
+			.weight(cardTagUpdateDTO.getWeight() != null ? cardTagUpdateDTO.getWeight().doubleValue() : null)
+			.confidence(
+					cardTagUpdateDTO.getConfidence() != null ? cardTagUpdateDTO.getConfidence().doubleValue() : null)
+			.build();
+		final var updated = this.cardTagService.updateCardTag(id.longValue(), tagId.longValue(), cardTag);
 		return ResponseEntity.ok(this.cardTagMapper.toCardTagDTO(updated));
 	}
 

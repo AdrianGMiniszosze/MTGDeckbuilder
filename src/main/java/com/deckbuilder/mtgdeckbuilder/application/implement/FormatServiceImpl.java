@@ -58,14 +58,11 @@ public class FormatServiceImpl implements FormatService {
 	@Override
 	@Transactional
 	public Format update(Long id, Format format) {
-		final Optional<FormatEntity> existingFormat = this.formatRepository.findById(id);
-		if (existingFormat.isEmpty()) {
-			throw new FormatNotFoundException(id);
-		}
-		FormatEntity entity = this.formatEntityMapper.toEntity(format);
-		entity.setId(id);
-		entity = this.formatRepository.save(entity);
-		return this.formatEntityMapper.toModel(entity);
+		final FormatEntity entity = this.formatRepository.findById(id)
+			.orElseThrow(() -> new FormatNotFoundException(id));
+		this.formatEntityMapper.updateEntity(format, entity);
+		final FormatEntity saved = this.formatRepository.save(entity);
+		return this.formatEntityMapper.toModel(saved);
 	}
 
 	@Override

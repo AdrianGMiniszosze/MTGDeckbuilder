@@ -142,6 +142,51 @@ public class GlobalExceptionHandler {
 	}
 
 	/**
+	 * Handle card tag not found exceptions
+	 */
+	@ExceptionHandler(CardTagNotFoundException.class)
+	public ResponseEntity<ErrorResponse> handleCardTagNotFound(CardTagNotFoundException ex,
+			HttpServletRequest request) {
+		log.warn("Card tag not found: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("CARD_TAG_NOT_FOUND").status(HttpStatus.NOT_FOUND.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+	}
+
+	/**
+	 * Handle attempts to assign a tag a card already has
+	 */
+	@ExceptionHandler(DuplicateCardTagException.class)
+	public ResponseEntity<ErrorResponse> handleDuplicateCardTag(DuplicateCardTagException ex,
+			HttpServletRequest request) {
+		log.warn("Duplicate card tag: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("CARD_TAG_EXISTS").status(HttpStatus.CONFLICT.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+	}
+
+	/**
+	 * Handle invalid card tag payloads
+	 */
+	@ExceptionHandler(InvalidCardTagException.class)
+	public ResponseEntity<ErrorResponse> handleInvalidCardTag(InvalidCardTagException ex,
+			HttpServletRequest request) {
+		log.warn("Invalid card tag: {}", ex.getMessage());
+
+		final ErrorResponse error = ErrorResponse.builder().success(false).message(ex.getMessage())
+				.error("INVALID_CARD_TAG").status(HttpStatus.BAD_REQUEST.value()).path(request.getRequestURI())
+				.timestamp(LocalDateTime.now()).build();
+
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+	}
+
+	/**
 	 * Handle set not found exceptions
 	 */
 	@ExceptionHandler(SetNotFoundException.class)

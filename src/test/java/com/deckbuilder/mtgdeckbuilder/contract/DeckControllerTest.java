@@ -8,6 +8,7 @@ import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
 import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
@@ -72,33 +74,78 @@ class DeckControllerTest {
 		final CompleteDeckDTO deckDTO2 = CompleteDeckDTO.builder().id(2).deck_name("Deck 2").user_id(1).format(1)
 				.build();
 
-		when(this.deckService.getAll(10, 0)).thenReturn(Arrays.asList(this.testDeck, deck2));
+		when(this.deckService.getAll(20, 0, null, null, null)).thenReturn(Arrays.asList(this.testDeck, deck2));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Arrays.asList(this.testCompleteDeckDTO, deckDTO2));
 
 		// When
-		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(null, null);
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(null, null, null, null,
+				null);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(2);
 		assertThat(response.getBody().getFirst().getDeck_name()).isEqualTo("Test Deck");
-		verify(this.deckService).getAll(10, 0);
+		verify(this.deckService).getAll(20, 0, null, null, null);
 	}
 
 	@Test
 	@DisplayName("Should list decks with custom pagination")
 	void shouldListDecks_WithCustomPagination() {
 		// Given
-		when(this.deckService.getAll(20, 1)).thenReturn(Collections.singletonList(this.testDeck));
+		when(this.deckService.getAll(20, 1, null, null, null)).thenReturn(Collections.singletonList(this.testDeck));
 		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testCompleteDeckDTO));
 
 		// When
-		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(20, 1);
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(20, 1, null, null, null);
 
 		// Then
 		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
 		assertThat(response.getBody()).hasSize(1);
-		verify(this.deckService).getAll(20, 1);
+		verify(this.deckService).getAll(20, 1, null, null, null);
+	}
+
+	@Test
+	@DisplayName("Should filter decks by owner, format and status")
+	void shouldFilterDecks() {
+		// Given
+		when(this.deckService.getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED))
+			.thenReturn(Collections.singletonList(this.testDeck));
+		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testCompleteDeckDTO));
+
+		// When
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(null, null, 5, 2,
+				"published");
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		verify(this.deckService).getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED);
+	}
+
+	@Test
+	@DisplayName("Should accept the draft status filter case-insensitively")
+	void shouldAcceptDraftStatusFilter() {
+		// Given
+		when(this.deckService.getAll(20, 0, null, null, DeckStatus.DRAFT))
+			.thenReturn(Collections.singletonList(this.testDeck));
+		when(this.deckMapper.toCompleteDecksDTO(anyList())).thenReturn(Collections.singletonList(this.testCompleteDeckDTO));
+
+		// When
+		final ResponseEntity<List<CompleteDeckDTO>> response = this.deckController.listDecks(null, null, null, null,
+				"DRAFT");
+
+		// Then
+		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+		verify(this.deckService).getAll(20, 0, null, null, DeckStatus.DRAFT);
+	}
+
+	@Test
+	@DisplayName("Should reject an unknown deck status filter")
+	void shouldRejectUnknownStatusFilter() {
+		assertThatThrownBy(() -> this.deckController.listDecks(null, null, null, null, "archived"))
+			.isInstanceOf(InvalidDeckCompositionException.class)
+			.hasMessageContaining("Invalid status");
+
+		verify(this.deckService, never()).getAll(anyInt(), anyInt(), any(), any(), any());
 	}
 
 	@Test

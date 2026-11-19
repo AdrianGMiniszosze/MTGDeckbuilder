@@ -116,6 +116,41 @@ class DeckServiceImplTest {
 	}
 
 	@Test
+	@DisplayName("Should filter decks by owner, format and status")
+	void shouldFilterDecks() {
+		// Given
+		when(this.deckRepository.search(eq(5L), eq(2L), eq("published"), any(Pageable.class)))
+			.thenReturn(new PageImpl<>(List.of(this.testDeckEntity)));
+		when(this.cardInDeckRepository.findByDeckIdIn(anyCollection())).thenReturn(List.of(this.testCardInDeck));
+		when(this.deckEntityMapper.toModel(this.testDeckEntity)).thenReturn(this.testDeck);
+
+		// When
+		final List<Deck> result = this.deckService.getAll(20, 0, 5L, 2L, DeckStatus.PUBLISHED);
+
+		// Then
+		assertThat(result).hasSize(1);
+		assertThat(result.getFirst().getName()).isEqualTo("Test Deck");
+		assertThat(result.getFirst().getCards()).extracting(Deck.CardInDeck::getCardId).containsExactly(100L);
+		verify(this.deckRepository).search(5L, 2L, "published", Pageable.ofSize(20));
+		verify(this.deckRepository, never()).findAll(any(Pageable.class));
+	}
+
+	@Test
+	@DisplayName("Should filter decks with a partial filter set")
+	void shouldFilterDecksWithPartialFilters() {
+		// Given
+		when(this.deckRepository.search(isNull(), isNull(), eq("draft"), any(Pageable.class)))
+			.thenReturn(Page.empty());
+
+		// When
+		final List<Deck> result = this.deckService.getAll(20, 0, null, null, DeckStatus.DRAFT);
+
+		// Then
+		assertThat(result).isEmpty();
+		verify(this.deckRepository).search(null, null, "draft", Pageable.ofSize(20));
+	}
+
+	@Test
 	@DisplayName("Should attach the card rows of every listed deck in one query")
 	void shouldAttachCardsToListedDecks() {
 		// Given

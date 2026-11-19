@@ -45,9 +45,13 @@ public class DeckServiceImpl implements DeckService {
 	private final DeckCommanderRepository deckCommanderRepository;
 
 	@Override
-	public List<Deck> getAll(int pageSize, int pageNumber) {
+	public List<Deck> getAll(int pageSize, int pageNumber, Long userId, Long formatId, DeckStatus status) {
 		final Pageable pageable = PageRequest.of(pageNumber, pageSize);
-		return this.withCards(this.deckRepository.findAll(pageable).getContent());
+		if (userId == null && formatId == null && status == null) {
+			return this.withCards(this.deckRepository.findAll(pageable).getContent());
+		}
+		final String statusValue = status != null ? status.getValue() : null;
+		return this.withCards(this.deckRepository.search(userId, formatId, statusValue, pageable).getContent());
 	}
 
 	@Override

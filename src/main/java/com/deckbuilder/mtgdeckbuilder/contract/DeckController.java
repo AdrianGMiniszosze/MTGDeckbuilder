@@ -9,7 +9,9 @@ import com.deckbuilder.mtgdeckbuilder.application.DeckService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.DeckValidationMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.DeckNotFoundException;
+import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.InvalidDeckCompositionException;
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,6 +19,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequiredArgsConstructor
@@ -26,10 +29,26 @@ public class DeckController implements DecksApi {
 	private final DeckValidationMapper deckValidationMapper;
 
 	@Override
-	public ResponseEntity<List<CompleteDeckDTO>> listDecks(Integer pagesize, Integer pagenumber) {
-		final var decks = this.deckService.getAll(pagesize != null ? pagesize : 10,
-				pagenumber != null ? pagenumber : 0);
+	public ResponseEntity<List<CompleteDeckDTO>> listDecks(Integer pagesize, Integer pagenumber, Integer userId,
+			Integer format, String status) {
+		final var decks = this.deckService.getAll(pagesize != null ? pagesize : 20,
+				pagenumber != null ? pagenumber : 0,
+				userId != null ? userId.longValue() : null,
+				format != null ? format.longValue() : null,
+				parseStatus(status));
 		return ResponseEntity.ok(this.deckMapper.toCompleteDecksDTO(decks));
+	}
+
+	private static DeckStatus parseStatus(String status) {
+		if (status == null) {
+			return null;
+		}
+		return switch (status.toLowerCase(Locale.ROOT)) {
+			case "draft" -> DeckStatus.DRAFT;
+			case "published" -> DeckStatus.PUBLISHED;
+			default -> throw new InvalidDeckCompositionException(
+					"Invalid status. Must be 'draft' or 'published'");
+		};
 	}
 
 	@Override

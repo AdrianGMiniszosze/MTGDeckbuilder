@@ -237,7 +237,7 @@ mvnw.cmd jacoco:report
 ```
 
 The report answers "what is still untested"; the gate (`jacoco:check`, 99.9 % lines and
-95.8 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
+96.4 % branches for the whole project) runs in CI and in `mvnw.cmd verify`, where the
 unit, smoke and integration suites have all contributed to `target/jacoco.exec`. The
 floors are a ratchet: raise them when coverage improves, never lower them to make a
 build pass.
@@ -252,18 +252,31 @@ The full API contract is defined in `src/main/resources/api/openapi.yml`.
 |---|---|
 | `GET /cards` | List and search cards |
 | `GET /cards/{id}` | Get a single card |
-| `GET /decks` | List decks |
+| `GET /cards/{id}/tags` | List the semantic tags of a card |
+| `POST /cards/{id}/tags` | Assign a tag to a card |
+| `PUT /cards/{id}/tags/{tag_id}` | Update the weight/confidence of a card tag |
+| `DELETE /cards/{id}/tags/{tag_id}` | Remove a card tag (idempotent) |
+| `GET /decks` | List decks (optional `user_id`, `format`, `status` filters) |
 | `POST /decks` | Create a new deck |
 | `PUT /decks/{id}` | Update a deck |
 | `DELETE /decks/{id}` | Delete a deck |
+| `GET /decks/{id}/validation` | Calculate the full deck diagnosis |
+| `POST /decks/{id}/publish` | Publish a deck; illegal decks return `409` with issues |
+| `POST /decks/{id}/unpublish` | Return a published deck to `draft` |
 | `GET /users` | List users |
 | `GET /users/{id}/decks` | List decks for a specific user |
 | `GET /formats` | List game formats |
+| `POST /formats` | Create a format |
+| `PUT /formats/{id}` | Update a format (omitted rules keep their value) |
 | `GET /sets` | List card sets |
 | `GET /tags` | List tags |
 | `POST /tags` | Create a tag |
 
+Cards and sets are read-only over HTTP: their data comes from the Scryfall importer, and there is no create/update/delete route for them.
+
 All list endpoints support pagination and default to 20 items on page 0. Parameter names are not fully standardized in the current contract: `/sets` uses `pageSize` / `pageNumber`, while the rest use `pagesize` / `pagenumber`. Follow `src/main/resources/api/openapi.yml` for each endpoint.
+
+`GET /decks` filters are a query, not authorization: there is no authentication yet, so `user_id` does not hide private decks from other callers.
 
 `GET /cards` and `GET /cards/search` hide cards with `is_obsolete = true`; pass `include_obsolete=true` to include cards that are missing from the latest Scryfall bulk import. `GET /cards/random` always excludes them.
 

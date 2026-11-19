@@ -65,6 +65,13 @@ ni del historial de chat.
 | D-036 | 2026-11-18 | Usuario sin contraseña es `400`; el hash nunca se serializa | Aceptada |
 | D-037 | 2026-11-18 | `ddl-auto=validate` contra Flyway como test de deriva | Aceptada |
 | D-038 | 2026-11-18 | Contraseñas con BCrypt; 72 bytes máximo | Aceptada |
+| D-039 | 2026-11-19 | El contrato no escribe cartas ni sets; solo lectura | Aceptada |
+| D-040 | 2026-11-19 | `ContractConformanceTest` impide operaciones sin implementar | Aceptada |
+| D-041 | 2026-11-19 | `Format` expone sus reglas reales; `deck_size` es derivado | Aceptada |
+| D-042 | 2026-11-19 | `GET /decks` filtra por dueño, formato y estado | Aceptada |
+| D-043 | 2026-11-19 | Tags de carta con payload propio y borrado idempotente | Aceptada |
+| D-044 | 2026-11-19 | `card_text` sin límite artificial en el contrato | Aceptada |
+| D-045 | 2026-11-19 | Diagnóstico calculado nullable en el contrato | Aceptada |
 
 ## 4. Entradas
 
@@ -992,3 +999,179 @@ ni del historial de chat.
 - **Revisar si:** se define una política de contraseñas (longitud mínima real, bloqueo tras
   intentos) o se migran usuarios existentes de otros orígenes.
 - **Detalle:** Reemplaza el "hashing pendiente" de D-036; relacionada con D-035.
+
+### D-039 - El contrato no escribe cartas ni sets; solo lectura
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** `POST /cards`, `PUT/DELETE /cards/{id}`, `POST/PUT/DELETE /sets` y el recurso
+  global `/card_tag` desaparecen del contrato. Las cartas y los sets solo se leen; su
+  escritura es responsabilidad del importador (D-023–D-033). Los tags de una carta se
+  gestionan en `/cards/{id}/tags`, no en una colección global.
+- **Contexto:** La auditoría del contrato encontró rutas destructivas que ningún cliente
+  necesitaba: `DELETE /cards/{id}` borraba por cascada filas de `card_deck`, y la escritura
+  manual de cartas duplicaba la responsabilidad del importador con un modelo incompleto.
+  `/card_tag` exponía la tabla de unión como recurso independiente, con `card_id` en el
+  cuerpo en lugar de la ruta.
+- **Por qué:** Una ruta que escribe datos maestros sin pasar por el importador garantiza
+  divergencias (precios, legalidades, caras y rulings quedarían desactualizados). Quitar la
+  ruta elimina el fallo en vez de documentarlo. El tag de una carta pertenece a la carta:
+  la ruta anidada hace imposible crear una relación huérfana o para otra carta.
+- **Alternativas descartadas:** Dejar las rutas y marcarlas como internas (siguen siendo
+  alcanzables y destructivas); prohibirlas con un 403 en runtime (código muerto y contrato
+  mentiroso); mantener `/card_tag` con `card_id` en el cuerpo (permite inconsistencias entre
+  ruta y cuerpo).
+- **Consecuencias:** `CardController` y `SetController` quedan como controladores de
+  lectura; los servicios de escritura siguen existiendo para el importador y los tests,
+  pero dejan de ser alcanzables por HTTP. Cualquier cliente que usara esas rutas rompe,
+  que es lo deseado en una fase sin despliegue.
+- **Revisar si:** aparece una necesidad real de edición manual de cartas; entonces se
+  reabre con un recurso explícito y auditoría, no reutilizando el CRUD genérico.
+- **Detalle:** Relacionada con D-018 (identidad por `scryfall_id`) y D-026 (nunca borrar
+  cartas).
+
+### D-040 - `ContractConformanceTest` impide operaciones sin implementar
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** Un test escanea las interfaces `*Api` generadas y los `@RestController`,
+  y falla si alguna operación del contrato no tiene un override explícito. También falla si
+  una interfaz generada no tiene ningún controlador.
+- **Contexto:** El generador declara cada operación como `default` devolviendo 501. Un
+  controlador que olvida implementar una ruta compila, arranca y responde 501 en producción;
+  el compilador no lo detecta porque el método ya existe.
+- **Por qué:** Es la única forma de convertir un fallo silencioso en un fallo de CI. El test
+  comprueba el código generado contra el código real, así que añadir una ruta al YAML
+  obliga a implementarla o a ver el rojo.
+- **Alternativas descartadas:** Revisión manual del YAML (ya falló: las 501 pasaron
+  inadvertidas); desactivar los `default` en el generador (no es configurable y rompe la
+  compilación de los tests que instancian controladores parciales).
+- **Consecuencias:** El test se apoya en la estructura de directorios de `target/`; si el
+  empaquetado cambia a JAR, hay que ajustarlo. Cubre operaciones y controladores, no
+  parámetros: los nombres de parámetros siguen verificándose con `@RequestParam(name=...)`
+  (D-035).
+- **Revisar si:** se adopta otro generador o se empaqueta la aplicación de forma que las
+  clases no estén en un directorio del sistema de ficheros.
+- **Detalle:** Relacionada con D-035 y con la fase 9 (D-039).
+
+### D-041 - `Format` expone sus reglas reales; `deck_size` es derivado
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** `Format` publica `min_deck_size`, `max_deck_size`, `max_sideboard_size`,
+  `max_copies`, `singleton`, `requires_commander`, `tracks_legality` y `description`.
+  `deck_size` se mantiene como campo `readOnly` derivado (`max_deck_size` si existe;
+  `min_deck_size` en caso contrario) para no romper clientes existentes. Al crear, los
+  campos omitidos toman los defaults del formato (60 cartas, 4 copias, no singleton, sin
+  comandante, con legalidad). Al actualizar, un campo omitido conserva el valor guardado.
+- **Contexto:** El contrato solo exponía `format_name` y `deck_size`, mientras la tabla ya
+  tenía las reglas. El `PUT` reconstruía la entidad desde el DTO, así que editar la
+  descripción de Commander lo dejaba con `max_copies=4`, `singleton=false` y
+  `requires_commander=false`: una edición de texto cambiaba las reglas del formato.
+- **Por qué:** Las reglas son datos del formato, no constantes de Java; si el contrato no
+  las expone, el cliente no puede mostrarlas y el `PUT` las pisa. El merge no nulo evita que
+  un payload parcial borre configuración, igual que en los mazos (D-022).
+- **Alternativas descartadas:** Mantener solo `deck_size` y derivar las reglas en Java
+  (imposible para formatos nuevos); exigir el objeto completo en cada `PUT` (frágil y ya
+  causó el bug); guardar las reglas como JSON opaco (peor validación y consultas).
+- **Consecuencias:** `FormatDTO` cambia y los tests que solo usaban `deck_size` se ajustan.
+  `deck_size` queda documentado como resumen derivado, no como fuente de verdad.
+- **Revisar si:** se añaden formatos con reglas que no encajen en columnas (p. ej. límites
+  por carta concreta); entonces se evalúa una tabla de reglas.
+- **Detalle:** Relacionada con D-002 (las reglas viven en Java) y D-022 (merge parcial).
+
+### D-042 - `GET /decks` filtra por dueño, formato y estado
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** `GET /decks` acepta `user_id`, `format` y `status` opcionales, y usa 20
+  elementos por página por defecto (antes 10). Sin filtros se comporta como antes. La lista
+  sigue sin calcular el diagnóstico (D-014).
+- **Contexto:** El listado devolvía todos los mazos, incluidos los privados de otros
+  usuarios, y no permitía pedir "los míos" ni "los publicados". La paginación por defecto
+  era la única del API con 10 en lugar de 20.
+- **Por qué:** Los filtros son la consulta mínima que un cliente necesita para no descargar
+  la tabla entera y para no exponer mazos ajenos por accidente. Mantener el mismo default en
+  todos los listados evita sorpresas.
+- **Alternativas descartadas:** Devolver solo mazos públicos sin filtro (rompe el caso de
+  uso del dueño); exigir `user_id` siempre (rompe clientes actuales); filtrar en memoria
+  (no escala y desperdicia la consulta).
+- **Consecuencias:** Un `status` desconocido devuelve `400`; el filtro se traduce a
+  `draft`/`published`. No hay autenticación, así que `user_id` es un filtro, no un control
+  de acceso: quien quiera ver mazos privados puede pedirlos. Cerrar eso requiere auth y es
+  una decisión aparte.
+- **Revisar si:** se añade autenticación; entonces `user_id` debe dejar de ser un parámetro
+  libre y derivarse del token.
+- **Detalle:** Relacionada con D-014 (la lista no calcula diagnóstico) y D-001 (estados).
+
+### D-043 - Tags de carta con payload propio y borrado idempotente
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** `POST /cards/{id}/tags` recibe `CardTagRequest` (`tag_id` obligatorio,
+  `weight` y `confidence` opcionales) y aplica defaults (`weight=1.0`, `confidence=1.0`,
+  `source=manual`). `PUT /cards/{id}/tags/{tag_id}` recibe `CardTagUpdate` (sin ids) y
+  conserva los campos omitidos. Un duplicado devuelve `409 CARD_TAG_EXISTS`; una carta o tag
+  inexistente, `404`; valores fuera de rango, `400`. `DELETE` es idempotente y responde
+  `204` aunque la fila ya no exista.
+- **Contexto:** El `POST` aceptaba el recurso completo, así que el cliente podía enviar
+  `card_id` y `source` contradictorios con la ruta. El `PUT` no distinguía "campo omitido"
+  de "campo nulo" y podía machacar la confianza.
+- **Por qué:** Separar request y recurso elimina campos que el servidor decide. La
+  idempotencia del `DELETE` evita un 404 inútil en reintentos y encaja con que la clave es
+  compuesta: o la relación existe o no existe.
+- **Alternativas descartadas:** Upsert silencioso en el `POST` (oculta duplicados y hace
+  imposible detectar un cliente roto); `PUT` con el recurso completo (vuelve a permitir
+  cambiar identificadores); `404` en `DELETE` (obliga al cliente a distinguir fallo de
+  reintento).
+- **Consecuencias:** `CardTagService` valida carta, tag, rangos y duplicado antes de
+  escribir; los errores tienen códigos estables (`CARD_TAG_NOT_FOUND`, `CARD_TAG_EXISTS`,
+  `INVALID_CARD_TAG`). La tabla `card_tag` mantiene sus `CHECK` como última defensa.
+- **Revisar si:** se añaden tags automáticos con `source` distinto de `manual`; entonces la
+  creación manual no debe pisar el `source` del modelo.
+- **Detalle:** Relacionada con D-019 (tags semánticos) y D-039 (ruta anidada).
+
+### D-044 - `card_text` sin límite artificial en el contrato
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** `Card.card_text` deja de tener `maxLength` en `openapi.yml`. La columna ya
+  es `TEXT`.
+- **Contexto:** El contrato limitaba el texto a 500 caracteres. Al medir el bulk real,
+  `oracle_text` alcanza 1.509 caracteres (118.404 líneas), `flavor_text` 457 y `card_name`
+  141. El límite no afectaba a la lectura (Jackson no valida al serializar), pero habría
+  rechazado cualquier escritura de una carta real y mentía sobre la capacidad del modelo.
+- **Por qué:** Un `maxLength` debe reflejar una restricción real. Si la base no la impone y
+  los datos la superan, el límite solo genera falsos positivos y presión para truncar.
+- **Alternativas descartadas:** Subirlo a 2.000 (sigue siendo un número inventado y volverá
+  a quedarse corto); truncar en el importador (pierde texto de reglas).
+- **Consecuencias:** El DTO deja de generar `@Size` sobre `card_text`; la validación de
+  tamaño queda en la base (`TEXT`) y en el importador. Los demás campos mantienen sus
+  límites porque los datos reales caben.
+- **Revisar si:** se mide otro campo del bulk y supera su `maxLength`.
+- **Detalle:** Relacionada con D-018 (carga real) y D-039 (sin escritura manual de cartas).
+
+### D-045 - Diagnóstico calculado nullable en el contrato
+
+- **Fecha:** 2026-11-19
+- **Estado:** Aceptada
+- **Decisión:** `validation_status` e `issues` se declaran `nullable: true` en el contrato y
+  se generan como tipos anulables. `validation_status` e `issues` son `null` en la lista de
+  mazos; el detalle los rellena. `issue_count` es una referencia opcional (`$ref` no admite
+  `nullable` en OpenAPI 3.0) que ya se serializa como `null` en la lista. `CardDeck.id` se
+  marca `readOnly` y `deck_id` sale de `required`, porque el servidor los fija desde la ruta.
+- **Contexto:** El contrato declaraba estos campos como no nulos aunque `GET /decks` no
+  calcula el diagnóstico (D-014) y devuelve `null`. Además `POST /decks` exigía `deck_id`
+  en cada fila de `deck_contents` aunque el mazo aún no existía y el id lo asigna el
+  servidor, y `CardDeck` no tenía `id` pese a que `DeckIssue.deck_content_id` lo usa.
+- **Por qué:** Un contrato que miente sobre nulabilidad rompe clientes generados y obliga a
+  inventar valores. Marcar lo derivado como `readOnly` documenta quién manda y evita que un
+  cliente intente fijarlo.
+- **Alternativas descartadas:** Rellenar el diagnóstico en la lista (contradice D-014 y
+  cuesta una consulta por mazo); dejar `deck_id` obligatorio y rechazar el alta (obliga a
+  crear el mazo vacío y luego añadir cartas en dos pasos).
+- **Consecuencias:** Los DTOs generados usan envoltorios; los mappers ya toleran `null`.
+  `DeckIssue.deck_content_id` puede referenciar filas reales porque `CardDeck.id` se
+  serializa.
+- **Revisar si:** se decide calcular el diagnóstico en la lista (ver D-014).
+- **Detalle:** Reafirma D-014 y D-013; relacionada con D-022 (semántica del `PUT`).

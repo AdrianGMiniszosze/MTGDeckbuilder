@@ -22,8 +22,9 @@ public class FormatEntity {
 
 	private String description;
 
+	@Builder.Default
 	@Column(name = "min_deck_size", nullable = false)
-	private int minDeckSize;
+	private int minDeckSize = 60;
 
 	@Column(name = "max_deck_size")
 	private Integer maxDeckSize;

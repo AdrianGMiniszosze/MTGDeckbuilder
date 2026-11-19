@@ -49,7 +49,7 @@ invocation separately.
 
 Coverage is JaCoCo (`pom.xml`): agent on every `test` run, HTML report at
 `target/site/jacoco/index.html`, and `jacoco:check` enforcing a bundle floor (99.9 % lines,
-95.8 % branches) on `verify` or when invoked explicitly. The floors are a ratchet: raise
+96.4 % branches) on `verify` or when invoked explicitly. The floors are a ratchet: raise
 them when coverage improves. Generated OpenAPI classes, MapStruct `*Impl` and
 Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`).
 
@@ -59,6 +59,10 @@ Lombok-generated methods are excluded (`lombok.config` adds `@lombok.Generated`)
 - Never edit `target/` or generated classes. After changing `openapi.yml`, run `generate-sources` and recompile; use `clean` if generated output looks stale.
 - The spec's `servers: /api/v1` is **not applied** by the generator or config. Actual routes are root-level (`/cards`, `/decks`, …), despite the README's `/api/v1` examples.
 - Pagination is deliberately inconsistent: `/sets` uses `pageSize`/`pageNumber`; every other endpoint uses `pagesize`/`pagenumber`. Both default to 20 items per page and page 0. Match each endpoint's spec. Generated DTO fields can be snake_case (e.g. `page_size`, `card_name`); use the generated names.
+- Cards and sets are **read-only** over HTTP. `POST/PUT/DELETE` for `/cards` and `/sets` and the global `/card_tag` resource are gone (D-039); card tags live at `/cards/{id}/tags` with `CardTagRequest` on create and `CardTagUpdate` on update. Do not reintroduce a write route for imported data — the importer owns it.
+- `GET /decks` accepts optional `user_id`, `format` and `status` (`draft`|`published`) filters (D-042). `user_id` is a filter, not authorization: there is no auth yet.
+- `Format` exposes the real rules (`min_deck_size`, `max_deck_size`, `max_sideboard_size`, `max_copies`, `singleton`, `requires_commander`, `tracks_legality`, `description`); `deck_size` is a read-only derived summary (D-041). On `POST`, omitted rules take the entity defaults; on `PUT`, omitted rules keep the stored value.
+- `ContractConformanceTest` scans the generated `*Api` interfaces and the `@RestController`s and fails when an operation has no explicit override (otherwise the generated `default` answers 501) or an API has no controller (D-040).
 - `include_obsolete=true` is the escape hatch on `/cards` and `/cards/search`; obsolete cards (`cards.is_obsolete`) stay hidden otherwise. `/cards/random` excludes them with no override.
 
 ## Database and schema

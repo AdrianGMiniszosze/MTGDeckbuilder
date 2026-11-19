@@ -7,7 +7,9 @@ import com.deckbuilder.mtgdeckbuilder.application.FormatService;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.CardMapper;
 import com.deckbuilder.mtgdeckbuilder.contract.mapper.FormatMapper;
 import com.deckbuilder.mtgdeckbuilder.infrastructure.exception.FormatNotFoundException;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,14 +37,14 @@ public class FormatController implements FormatsApi {
 	}
 
 	@Override
-	public ResponseEntity<FormatDTO> createFormat(FormatDTO formatDTO) {
+	public ResponseEntity<FormatDTO> createFormat(@Valid FormatDTO formatDTO) {
 		final var format = this.formatMapper.toModel(formatDTO);
 		final var created = this.formatService.create(format);
-		return ResponseEntity.status(201).body(this.formatMapper.toDto(created));
+		return ResponseEntity.status(HttpStatus.CREATED).body(this.formatMapper.toDto(created));
 	}
 
 	@Override
-	public ResponseEntity<FormatDTO> updateFormat(Integer id, FormatDTO formatDTO) {
+	public ResponseEntity<FormatDTO> updateFormat(Integer id, @Valid FormatDTO formatDTO) {
 		final var format = this.formatMapper.toModel(formatDTO);
 		final var updated = this.formatService.update(id.longValue(), format);
 		return ResponseEntity.ok(this.formatMapper.toDto(updated));

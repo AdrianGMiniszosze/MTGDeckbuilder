@@ -182,7 +182,6 @@ class FormatServiceImplTest {
 		// Given
 		final Format updatedFormat = this.testFormat.toBuilder().description("Updated description").build();
 		when(this.formatRepository.findById(1L)).thenReturn(Optional.of(this.testFormatEntity));
-		when(this.formatEntityMapper.toEntity(any(Format.class))).thenReturn(this.testFormatEntity);
 		when(this.formatRepository.save(any(FormatEntity.class))).thenReturn(this.testFormatEntity);
 		when(this.formatEntityMapper.toModel(this.testFormatEntity)).thenReturn(updatedFormat);
 
@@ -193,7 +192,8 @@ class FormatServiceImplTest {
 		assertThat(result).isNotNull();
 		assertThat(result.getDescription()).isEqualTo("Updated description");
 		verify(this.formatRepository).findById(1L);
-		verify(this.formatRepository).save(any(FormatEntity.class));
+		verify(this.formatEntityMapper).updateEntity(updatedFormat, this.testFormatEntity);
+		verify(this.formatRepository).save(this.testFormatEntity);
 	}
 
 	@Test

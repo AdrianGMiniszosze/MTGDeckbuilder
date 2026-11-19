@@ -512,6 +512,36 @@ class DeckValidationIntegrationTest extends PostgresIntegrationTest {
         }
 
         @Test
+        @DisplayName("Should filter the deck list by owner, format and status")
+        void shouldFilterDeckList() throws Exception {
+            // Given - testDeck belongs to testUser, uses standardFormat and is a draft
+            mockMvc.perform(get("/decks").param("user_id", testUser.getId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(testDeck.getId().intValue()));
+
+            mockMvc.perform(get("/decks").param("format", standardFormat.getId().toString())
+                    .param("status", "draft"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(testDeck.getId().intValue()));
+
+            mockMvc.perform(get("/decks").param("status", "published"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+
+            mockMvc.perform(get("/decks").param("format", commanderFormat.getId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
+        }
+
+        @Test
+        @DisplayName("Should reject an unknown status filter with 400")
+        void shouldRejectUnknownStatusFilter() throws Exception {
+            mockMvc.perform(get("/decks").param("status", "archived"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_DECK_COMPOSITION"));
+        }
+
+        @Test
         @DisplayName("Should save an illegal deck with 201 and its diagnosis")
         void shouldSaveIllegalDeck() throws Exception {
             // Given - an empty Standard deck is illegal but saving is free

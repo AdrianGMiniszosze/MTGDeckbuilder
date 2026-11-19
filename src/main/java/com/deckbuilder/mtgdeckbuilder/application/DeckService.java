@@ -1,13 +1,18 @@
 package com.deckbuilder.mtgdeckbuilder.application;
 
 import com.deckbuilder.mtgdeckbuilder.model.Deck;
+import com.deckbuilder.mtgdeckbuilder.model.DeckStatus;
 import com.deckbuilder.mtgdeckbuilder.model.DeckValidationResult;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface DeckService {
-	List<Deck> getAll(int pageSize, int pageNumber);
+	default List<Deck> getAll(int pageSize, int pageNumber) {
+		return getAll(pageSize, pageNumber, null, null, null);
+	}
+
+	List<Deck> getAll(int pageSize, int pageNumber, Long userId, Long formatId, DeckStatus status);
 	Optional<Deck> findById(Long id);
 	List<Deck> findByUserId(Long userId, int pageSize, int pageNumber);
 	List<Deck> findByFormat(Long formatId);

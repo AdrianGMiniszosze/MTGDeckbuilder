@@ -113,6 +113,27 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("Should map a missing card tag to 404")
+    void shouldMapCardTagNotFound() {
+        assertMapped(handler.handleCardTagNotFound(new CardTagNotFoundException(7L, 9L), request()),
+                HttpStatus.NOT_FOUND, "CARD_TAG_NOT_FOUND");
+    }
+
+    @Test
+    @DisplayName("Should map a duplicate card tag to 409")
+    void shouldMapDuplicateCardTag() {
+        assertMapped(handler.handleDuplicateCardTag(new DuplicateCardTagException(7L, 9L), request()),
+                HttpStatus.CONFLICT, "CARD_TAG_EXISTS");
+    }
+
+    @Test
+    @DisplayName("Should map an invalid card tag to 400")
+    void shouldMapInvalidCardTag() {
+        assertMapped(handler.handleInvalidCardTag(new InvalidCardTagException("confidence must be between 0 and 1"),
+                request()), HttpStatus.BAD_REQUEST, "INVALID_CARD_TAG");
+    }
+
+    @Test
     @DisplayName("Should map set not found to 404")
     void shouldMapSetNotFound() {
         assertMapped(handler.handleSetNotFound(new SetNotFoundException(7L), request()), HttpStatus.NOT_FOUND,

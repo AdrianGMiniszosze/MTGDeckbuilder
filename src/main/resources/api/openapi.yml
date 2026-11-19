@@ -40,24 +40,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Set'
-    post:
-      summary: Create a new set
-      operationId: createSet
-      tags:
-        - Sets
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Set'
-      responses:
-        '201':
-          description: Set created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Set'
   /sets/{id}:
     get:
       summary: Get a set by ID
@@ -78,50 +60,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Set'
-        '404':
-          description: Set not found
-    put:
-      summary: Update a set
-      operationId: updateSet
-      tags:
-        - Sets
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            minimum: 1
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Set'
-      responses:
-        '200':
-          description: Set updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Set'
-        '404':
-          description: Set not found
-    delete:
-      summary: Delete a set
-      operationId: deleteSet
-      tags:
-        - Sets
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            minimum: 1
-      responses:
-        '204':
-          description: Set deleted
         '404':
           description: Set not found
 
@@ -165,26 +103,6 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Card'
-    post:
-      summary: Create a new card
-      operationId: createCard
-      tags:
-        - Cards
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Card'
-      responses:
-        '201':
-          description: Card created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Card'
-        '400':
-          description: Invalid input
   /cards/{id}:
     get:
       summary: Get a card by ID
@@ -205,50 +123,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Card'
-        '404':
-          description: Card not found
-    put:
-      summary: Update a card
-      operationId: updateCard
-      tags:
-        - Cards
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            minimum: 1
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Card'
-      responses:
-        '200':
-          description: Card updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Card'
-        '404':
-          description: Card not found
-    delete:
-      summary: Delete a card
-      operationId: deleteCard
-      tags:
-        - Cards
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-            minimum: 1
-      responses:
-        '204':
-          description: Card deleted
         '404':
           description: Card not found
 
@@ -532,6 +406,27 @@ paths:
             type: integer
             minimum: 0
             default: 0
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Only return decks owned by this user
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+          description: Only return decks for this format
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [draft, published]
+          description: Only return decks in this lifecycle state
       responses:
         '200':
           description: List of complete decks with sideboard and maybeboard
@@ -898,56 +793,6 @@ paths:
         '204':
           description: Tag deleted
 
-  /card_tag:
-    get:
-      summary: List all card tag entries
-      operationId: listCardTags
-      tags:
-        - CardTags
-      parameters:
-        - name: pagesize
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-        - name: pagenumber
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-      responses:
-        '200':
-          description: List of card tag entries
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/CardTag'
-    post:
-      summary: Create a new card tag entry
-      operationId: createCardTag
-      tags:
-        - CardTags
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CardTag'
-      responses:
-        '201':
-          description: Card tag entry created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CardTag'
-
   /cards/{id}/tags:
     get:
       summary: List all tags for a card
@@ -970,6 +815,39 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CardTag'
+        '404':
+          description: Card not found
+    post:
+      summary: Assign a tag to a card
+      operationId: createCardTag
+      tags:
+        - Cards
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardTagRequest'
+      responses:
+        '201':
+          description: Tag assigned to the card
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardTag'
+        '400':
+          description: Invalid weight, confidence or tag id
+        '404':
+          description: Card or tag not found
+        '409':
+          description: The card already has that tag
 
   /cards/{id}/tags/{tag_id}:
     put:
@@ -995,7 +873,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CardTag'
+              $ref: '#/components/schemas/CardTagUpdate'
       responses:
         '200':
           description: Card tag entry updated
@@ -1003,6 +881,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CardTag'
+        '400':
+          description: Invalid weight or confidence
+        '404':
+          description: Card tag not found
     delete:
       summary: Delete card tag entry
       operationId: deleteCardTag
@@ -1326,20 +1208,6 @@ components:
           maxLength: 100
           example: "Dominaria United"
 
-    Keyword:
-      type: object
-      required:
-        - name
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          minLength: 1
-          maxLength: 50
-          example: "Flying"
-
     Card:
       type: object
       required:
@@ -1404,7 +1272,7 @@ components:
           example: "uncommon"
         card_text:
           type: string
-          maxLength: 500
+          description: Rules text. Stored as TEXT; no artificial cap because real cards exceed 1,500 characters.
           example: "Lightning Bolt deals 3 damage to any target."
         flavor_text:
           type: string
@@ -1518,7 +1386,6 @@ components:
       type: object
       required:
         - format_name
-        - deck_size
       properties:
         id:
           type: integer
@@ -1528,10 +1395,45 @@ components:
           minLength: 1
           maxLength: 50
           example: "Standard"
-        deck_size:
+        description:
+          type: string
+          nullable: true
+          description: Free-form format description.
+        min_deck_size:
+          type: integer
+          minimum: 0
+          description: Minimum main-deck size. Defaults to 60 on creation; omit on update to keep it.
+          example: 60
+        max_deck_size:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Maximum main-deck size; null means no upper bound.
+          example: 100
+        max_sideboard_size:
+          type: integer
+          nullable: true
+          minimum: 0
+          description: Maximum sideboard size; null means unchecked.
+          example: 15
+        max_copies:
           type: integer
           minimum: 1
-          maximum: 250
+          description: Default copy cap per card. Defaults to 4 on creation; omit on update to keep it.
+          example: 4
+        singleton:
+          type: boolean
+          description: Only one copy of each card is allowed. Defaults to false on creation.
+        requires_commander:
+          type: boolean
+          description: The deck must declare a commander. Defaults to false on creation.
+        tracks_legality:
+          type: boolean
+          description: Card legality is checked against card_legality. Defaults to true on creation.
+        deck_size:
+          type: integer
+          readOnly: true
+          description: Derived summary; max_deck_size when set, otherwise min_deck_size.
           example: 60
 
     Deck:
@@ -1602,6 +1504,7 @@ components:
           description: Lifecycle state; editing a published deck returns it to draft
         validation_status:
           type: string
+          nullable: true
           enum: [legal, illegal, unknown]
           readOnly: true
           description: Calculated diagnosis; null on list responses
@@ -1609,6 +1512,7 @@ components:
           $ref: '#/components/schemas/IssueCount'
         issues:
           type: array
+          nullable: true
           readOnly: true
           items:
             $ref: '#/components/schemas/DeckIssue'
@@ -1692,12 +1596,14 @@ components:
           readOnly: true
         validation_status:
           type: string
+          nullable: true
           enum: [legal, illegal, unknown]
           readOnly: true
         issue_count:
           $ref: '#/components/schemas/IssueCount'
         issues:
           type: array
+          nullable: true
           readOnly: true
           items:
             $ref: '#/components/schemas/DeckIssue'
@@ -1716,37 +1622,23 @@ components:
           maxLength: 50
           example: "Mill"
 
-    CardLegality:
-      type: object
-      required:
-        - card_id
-        - format_id
-        - legality_status
-      properties:
-        card_id:
-          type: integer
-          minimum: 1
-        format_id:
-          type: integer
-          minimum: 1
-        legality_status:
-          type: string
-          enum: [legal, banned, restricted, not_legal]
-          example: "legal"
-
     CardDeck:
       type: object
       required:
         - card_id
-        - deck_id
         - quantity
       properties:
+        id:
+          type: integer
+          readOnly: true
+          description: Identifier of the deck row, used by DeckIssue.deck_content_id
         card_id:
           type: integer
           minimum: 1
         deck_id:
           type: integer
           minimum: 1
+          description: Set by the server; ignored on input because the deck is in the path
         quantity:
           type: integer
           minimum: 1
@@ -1872,6 +1764,44 @@ components:
           default: main
           example: "main"
 
+    CardTagRequest:
+      type: object
+      required:
+        - tag_id
+      properties:
+        tag_id:
+          type: integer
+          minimum: 1
+        weight:
+          type: number
+          format: float
+          minimum: 0.0
+          description: Tag relevance. Defaults to 1.0.
+          example: 1.0
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          description: Model or human confidence. Defaults to 1.0.
+          example: 0.95
+
+    CardTagUpdate:
+      type: object
+      description: Omit a field to keep its current value. At least one field is required.
+      properties:
+        weight:
+          type: number
+          format: float
+          minimum: 0.0
+          example: 1.0
+        confidence:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.95
+
     CardTag:
       type: object
       required:
@@ -1891,7 +1821,6 @@ components:
           type: number
           format: float
           minimum: 0.0
-          maximum: 10.0
           example: 1.0
         confidence:
           type: number
@@ -1911,19 +1840,6 @@ components:
           type: string
           format: date-time
           readOnly: true
-
-    CardKeyword:
-      type: object
-      required:
-        - card_id
-        - keyword_id
-      properties:
-        card_id:
-          type: integer
-          minimum: 1
-        keyword_id:
-          type: integer
-          minimum: 1
 
     CardSearchResponse:
       type: object
@@ -2023,5 +1939,3 @@ tags:
     description: "Operations related to decks"
   - name: Tags
     description: "Operations related to tags"
-  - name: CardTags
-    description: "Operations related to card-tag relationships"

@@ -109,54 +109,6 @@ class SetControllerTest {
 	}
 
 	@Test
-	@DisplayName("Should create new set")
-	void shouldCreateSet() {
-		// Given
-		when(this.setMapper.toSet(this.testSetDTO)).thenReturn(this.testSet);
-		when(this.setService.create(this.testSet)).thenReturn(this.testSet);
-		when(this.setMapper.toSetDTO(this.testSet)).thenReturn(this.testSetDTO);
-
-		// When
-		final ResponseEntity<SetDTO> response = this.setController.createSet(this.testSetDTO);
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-		assertThat(response.getBody()).isNotNull();
-		assertThat(response.getBody().getName()).isEqualTo("Core Set 2021");
-		verify(this.setService).create(this.testSet);
-	}
-
-	@Test
-	@DisplayName("Should update existing set")
-	void shouldUpdateSet() {
-		// Given
-		when(this.setMapper.toSet(this.testSetDTO)).thenReturn(this.testSet);
-		when(this.setService.update(1L, this.testSet)).thenReturn(this.testSet);
-		when(this.setMapper.toSetDTO(this.testSet)).thenReturn(this.testSetDTO);
-
-		// When
-		final ResponseEntity<SetDTO> response = this.setController.updateSet(1, this.testSetDTO);
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-		assertThat(response.getBody()).isNotNull();
-		assertThat(response.getBody().getName()).isEqualTo("Core Set 2021");
-		verify(this.setService).update(1L, this.testSet);
-	}
-
-	@Test
-	@DisplayName("Should delete set by ID")
-	void shouldDeleteSet() {
-		// When
-		final ResponseEntity<Void> response = this.setController.deleteSet(1);
-
-		// Then
-		assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
-		assertThat(response.getBody()).isNull();
-		verify(this.setService).deleteById(1L);
-	}
-
-	@Test
 	@DisplayName("Should use default pagination when parameters are null")
 	void shouldUseDefaultPagination_WhenParametersAreNull() {
 		// Given
